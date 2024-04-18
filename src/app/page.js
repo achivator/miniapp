@@ -7,7 +7,9 @@ export default function Home() {
     <>
       <script
         async
-        onLoad={console.log(window?.Telegram?.WebApp)}
+        onLoad={() => {
+          if (window) console.log(window?.Telegram?.WebApp);
+        }}
         src="https://telegram.org/js/telegram-web-app.js"
       ></script>
 
