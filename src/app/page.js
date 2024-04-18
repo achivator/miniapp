@@ -1,27 +1,25 @@
 "use client";
 
-import Image from "next/image";
+import { useInitData } from "@tma.js/sdk-react";
 import { useState } from "react";
 
-async function loadAchievements(setAchievements) {
+async function loadAchievements(userId, setAchievements) {
   return async () => {
-    if (!window) return;
-
-    const { user } = window.Telegram.WebApp.initData;
-    const achievements = await fetch(`/api/achievements?id=${user.id}`).then((res) => res.json());
+    const achievements = await fetch(`/api/achievements?id=${userId}`).then((res) => res.json());
 
     setAchievements(achievements);
   };
 }
 
 export default function Home() {
+  const initData = useInitData();
   const [achievements, setAchievements] = useState([]);
 
   return (
     <>
       <script
         async
-        onLoad={loadAchievements(setAchievements)}
+        onLoad={loadAchievements(initData.user.id, setAchievements)}
         src="https://telegram.org/js/telegram-web-app.js"
       ></script>
 
