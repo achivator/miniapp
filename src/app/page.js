@@ -17,12 +17,12 @@ function Achievements({ achievements }) {
   return (
     <div className="flex flex-col items-center space-y-4">
       <h1 className="text-3xl font-bold">Achievements</h1>
-      {achievements.map((chats) => (
-        <div key={chats.chat_id} className="flex items-center space-x-4">
-          <h2>{chats.chat_id}</h2>
+      {achievements.map((chat) => (
+        <div key={chat.chat_id} className="flex items-center space-x-4">
+          <h2>{chat.chat_id}</h2>
           <ul className="flex flex-col items-center space-y-4">
             {chat.achievements?.map((achievement, i) => (
-              <li key={`${chats.chat_id}-${i}`} className="flex items-center space-x-4">
+              <li key={`${chat.chat_id}-${i}`} className="flex items-center space-x-4">
                 <span>{achievement.type}</span>
               </li>
             ))}
