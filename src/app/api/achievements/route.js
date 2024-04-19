@@ -13,8 +13,8 @@ export async function GET(request) {
   const collection = db.collection("achievements");
 
   // Get my achievements grouped by chat id
-  const achivements = await collection.find({ user_id }).toArray();
+  const achievements = await collection.find({ user_id }).toArray();
   mongo.close();
 
-  return Response.json({ achivements });
+  return Response.json({ achievements });
 }
