@@ -5,7 +5,7 @@ import { useInitData } from "@tma.js/sdk-react";
 import { useEffect, useState } from "react";
 
 async function loadAchievements(userId, setAchievements) {
-  const achievements = await fetch(`/api/achievements?id=${userId}`).then((res) => res.json());
+  const achievements = await fetch(`/api/achievements?user_id=${userId}`).then((res) => res.json());
 
   console.log(achievements);
   setAchievements(achievements);
