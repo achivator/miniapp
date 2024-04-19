@@ -9,7 +9,7 @@ export async function GET(request) {
   const mongo = new MongoClient(process.env.MONGODB_URI);
   await mongo.connect();
 
-  const db = mongo.db("achivator_bot");
+  const db = mongo.db(process.env.NODE_ENV === "development" ? "achivator_test" : "achivator_bot");
   const collection = db.collection("achievements");
 
   // Get my achievements grouped by chat id
