@@ -1,8 +1,8 @@
 "use client";
 
-import { SDKProvider } from "@tma.js/sdk-react";
+import { SDKProvider, useSDKContext } from "@tma.js/sdk-react";
 import { useInitData } from "@tma.js/sdk-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 async function loadAchievements(userId, setAchievements) {
   if (!window) return;
@@ -34,12 +34,12 @@ function Achievements({ achievements }) {
   );
 }
 
-function Page() {
+function AchievementsList() {
   const initData = useInitData();
   const [achievements, setAchievements] = useState([]);
 
   return (
-    <SDKProvider>
+    <>
       <script
         async
         onLoad={loadAchievements(initData.user.id, setAchievements)}
@@ -49,14 +49,21 @@ function Page() {
       <main className="flex min-h-screen flex-col items-center justify-between p-24">
         <Achievements achievements={achievements} />
       </main>
-    </SDKProvider>
+    </>
   );
+}
+
+function LoadingContext() {
+  const { initResult } = useSDKContext();
+  if (!initResult) return <p>Loading SDK...</p>;
+
+  return <AchievementsList />;
 }
 
 export default function Home() {
   return (
     <SDKProvider>
-      <Page />
+      <LoadingContext />
     </SDKProvider>
   );
 }
