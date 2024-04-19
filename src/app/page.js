@@ -15,14 +15,15 @@ async function loadAchievements(userId, setAchievements) {
 
 function Achievements({ achievements }) {
   return (
-    <div className="flex flex-col items-center space-y-4">
+    <div className="flex flex-col space-y-4">
       <h1 className="text-3xl font-bold">Achievements</h1>
       {achievements.map((chat) => (
-        <div key={chat.chat_id} className="flex items-center space-x-4">
+        <div key={chat.chat_id} className="flex space-x-4">
           <h2>{chat.chat_id}</h2>
-          <ul className="flex flex-col items-center space-y-4">
+          {chat.achievements.length === 0 && <p>No achievements in this chat yet</p>}
+          <ul className="flex flex-col space-y-4">
             {chat.achievements?.map((achievement, i) => (
-              <li key={`${chat.chat_id}-${i}`} className="flex items-center space-x-4">
+              <li key={`${chat.chat_id}-${i}`} className="flex space-x-4">
                 <span>{achievement.type}</span>
               </li>
             ))}
@@ -42,7 +43,7 @@ function AchievementsList() {
 
   return (
     <>
-      <main className="flex min-h-screen flex-col items-center justify-between p-24">
+      <main className="flex min-h-screen flex-col items-center justify-between p-8">
         <Achievements achievements={achievements} />
       </main>
     </>
