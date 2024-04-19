@@ -5,13 +5,10 @@ import { useInitData } from "@tma.js/sdk-react";
 import { useEffect, useState } from "react";
 
 async function loadAchievements(userId, setAchievements) {
-  if (!window) return;
+  const achievements = await fetch(`/api/achievements?id=${userId}`).then((res) => res.json());
 
-  return async () => {
-    const achievements = await fetch(`/api/achievements?id=${userId}`).then((res) => res.json());
-
-    setAchievements(achievements);
-  };
+  console.log(achievements);
+  setAchievements(achievements);
 }
 
 function Achievements({ achievements }) {
@@ -38,7 +35,7 @@ function AchievementsList() {
   const initData = useInitData();
   const [achievements, setAchievements] = useState([]);
   useEffect(() => {
-    if (initData) loadAchievements(initData.user.id, setAchievements)();
+    if (initData) loadAchievements(initData.user.id, setAchievements);
   }, [initData]);
 
   return (
