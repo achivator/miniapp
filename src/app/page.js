@@ -18,12 +18,12 @@ function Achievements({ achievements }) {
     <div className="flex flex-col space-y-4">
       <h1 className="text-3xl font-bold">Achievements</h1>
       {achievements.map((chat) => (
-        <div key={chat.chat_id} className="flex space-x-4">
-          <h2>{chat.chat_id}</h2>
+        <div key={chat.chat?.id} className="flex space-x-4">
+          <h2>{chat.chat?.title}</h2>
           {chat.achievements.length === 0 && <p>No achievements in this chat yet</p>}
           <ul className="flex flex-col space-y-4">
             {chat.achievements?.map((achievement, i) => (
-              <li key={`${chat.chat_id}-${i}`} className="flex space-x-4">
+              <li key={`${chat.chat?.id}-${i}`} className="flex space-x-4">
                 <span>{achievement.type}</span>
               </li>
             ))}
