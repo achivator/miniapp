@@ -15,11 +15,8 @@ async function loadAchievements(userId, setAchievements) {
 }
 
 function Achievements({ achievements }) {
-  const wallet = useTonWallet();
-
   return (
     <div className="flex flex-col space-y-4">
-      <h1 className="text-3xl font-bold">Achievements</h1>
       {achievements.map((chat) => (
         <div key={chat.chat?.id} className="flex flex-col">
           <h2 className="text-2xl font-bold flex">{chat.chat?.title}</h2>
@@ -33,22 +30,30 @@ function Achievements({ achievements }) {
           </ul>
         </div>
       ))}
-      {wallet && <p>Wallet address: {wallet.address}</p>}
-      <TonConnectButton />
     </div>
   );
 }
 
 function AchievementsList() {
   const initData = useInitData();
+  const wallet = useTonWallet();
+
   const [achievements, setAchievements] = useState([]);
+
   useEffect(() => {
-    if (initData) loadAchievements(initData.user.id, setAchievements);
-  }, [initData]);
+    loadAchievements(initData.user.id, setAchievements);
+  }, [initData.user.id]);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-8">
+    <main className="flex min-h-screen flex-col space-y-4 p-4">
+      <header className="flex flex-row w-full justify-between">
+        <div className="flex text-2xl font-bold">Achivator</div>
+        <div className="flex">
+          <TonConnectButton />
+        </div>
+      </header>
       <Achievements achievements={achievements} />
+      <div>{wallet && <p>Wallet address: {wallet.address}</p>}</div>
     </main>
   );
 }
@@ -63,6 +68,14 @@ function Page() {
 }
 
 export default function Home() {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient) return null; // Disable rendering on the server
+
   return (
     <SDKProvider>
       <TonConnectUIProvider manifestUrl="https://achivator.seniorsoftwarevlogger.com/ton-connect.json">
