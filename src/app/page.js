@@ -49,7 +49,7 @@ function AchievementsList() {
   );
 }
 
-function LoadingContext() {
+function Page() {
   const { initResult } = useSDKContext();
   if (!initResult) return <p>Loading SDK...</p>;
 
@@ -61,7 +61,7 @@ function LoadingContext() {
 export default function Home() {
   return (
     <SDKProvider>
-      <LoadingContext />
+      <Page />
     </SDKProvider>
   );
 }
