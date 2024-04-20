@@ -4,6 +4,7 @@ import { SDKProvider, useSDKContext } from "@tma.js/sdk-react";
 import { useInitData } from "@tma.js/sdk-react";
 import { useEffect, useState } from "react";
 import { TonConnectUIProvider, TonConnectButton, useTonWallet } from "@tonconnect/ui-react";
+import Image from "next/image";
 
 async function loadAchievements(userId, setAchievements) {
   try {
@@ -24,7 +25,14 @@ function Achievements({ achievements }) {
           <ul className="flex flex-col space-y-4">
             {chat.achievements?.map((achievement, i) => (
               <li key={`${chat.chat?.id}-${i}`} className="flex">
-                {achievement.type} ({new Date(achievement.date).toLocaleString()})
+                <Image
+                  width={50}
+                  height={50}
+                  alt={achievement.type}
+                  src={`https://achivator.seniorsoftwarevlogger.com/achievements/${achievement.collection || "v1"}/${
+                    achievement.type
+                  }.webp`}
+                />
               </li>
             ))}
           </ul>
@@ -60,7 +68,12 @@ function AchievementsList() {
 
 function Page() {
   const { initResult } = useSDKContext();
-  if (!initResult) return <p>Loading SDK...</p>;
+  if (!initResult)
+    return (
+      <main className="flex min-h-screen flex-col space-y-4 p-4">
+        <p>Loading SDK...</p>
+      </main>
+    );
 
   console.log(initResult);
 
