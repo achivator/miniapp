@@ -20,14 +20,14 @@ function Achievements({ achievements }) {
     <div className="flex flex-col space-y-4">
       {achievements.map((chat) => (
         <div key={chat.chat?.id} className="flex flex-col">
-          <h2 className="text-2xl font-bold flex">{chat.chat?.title}</h2>
+          <h2 className="text-1xl font-bold flex">{chat.chat?.title}</h2>
           {(!chat.achievements || chat.achievements.length === 0) && <p>No achievements in this chat yet</p>}
-          <ul className="flex flex-col space-y-4">
+          <ul className="flex flex-row flex-wrap">
             {chat.achievements?.map((achievement, i) => (
-              <li key={`${chat.chat?.id}-${i}`} className="flex">
+              <li key={`${chat.chat?.id}-${i}`} className="flex m-1">
                 <Image
-                  width={50}
-                  height={50}
+                  width={75}
+                  height={75}
                   alt={achievement.type}
                   src={`https://achivator.seniorsoftwarevlogger.com/achievements/${achievement.collection || "v1"}/${
                     achievement.type
