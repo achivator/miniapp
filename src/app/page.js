@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { TonConnectUIProvider, TonConnectButton, useTonWallet } from "@tonconnect/ui-react";
 import Image from "next/image";
 
+import { useTonConnectUI } from "@tonconnect/ui-react";
+
 async function loadAchievements(userId, setAchievements) {
   try {
     const result = await fetch(`/api/achievements?user_id=${userId}`).then((res) => res.json());
@@ -16,6 +18,17 @@ async function loadAchievements(userId, setAchievements) {
 }
 
 function Achievements({ achievements }) {
+  const [tonConnectUI] = useTonConnectUI();
+
+  const transaction = {
+    messages: [
+      {
+        address: "UQDNkgTK6NV_Q3otfiYcpJOxrYoeUw8rqgUFeMd7mCEiePCX", // destination address
+        amount: "00000001", //Toncoin in nanotons
+      },
+    ],
+  };
+
   return (
     <div className="flex flex-col space-y-4">
       {achievements.map((chat) => (
@@ -32,6 +45,7 @@ function Achievements({ achievements }) {
                   src={`https://achivator.seniorsoftwarevlogger.com/achievements/${achievement.collection || "v1"}/${
                     achievement.type
                   }.webp`}
+                  onClick={() => tonConnectUI.sendTransaction(transaction)}
                 />
               </li>
             ))}
