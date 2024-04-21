@@ -10,7 +10,7 @@ import Link from "next/link";
 async function loadAchievements(userId, setAchievements) {
   try {
     const result = await fetch(`/api/achievements?user_id=${userId}`).then((res) => res.json());
-    setAchievements(result.achievements);
+    setAchievements(result);
   } catch (e) {
     console.error(e);
   }
@@ -20,12 +20,12 @@ function Achievements({ data }) {
   return (
     <div className="flex flex-col space-y-4">
       {data?.map(({ chat, achievements }) => (
-        <div key={chat.chat_id} className="flex flex-col">
+        <div key={chat._id} className="flex flex-col">
           <h2 className="text-1xl font-bold flex">{chat.title}</h2>
           {(!achievements || achievements.length === 0) && <p>No achievements in this chat yet, try header.</p>}
           <ul className="flex flex-row flex-wrap">
             {achievements?.map((achievement, i) => (
-              <li key={`${chat.id}-${i}`} className="flex m-1">
+              <li key={`${achievement._id}`} className="flex m-1">
                 <Link href={`/achievement/${achievement._id}`}>
                   <Image
                     width={75}
