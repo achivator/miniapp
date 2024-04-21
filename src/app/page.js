@@ -47,7 +47,6 @@ function Achievements({ data }) {
 
 function AchievementsList() {
   const initData = useInitData();
-  const wallet = useTonWallet();
 
   const [achievements, setAchievements] = useState([]);
 

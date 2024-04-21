@@ -3,7 +3,7 @@
 import { SDKProvider } from "@tma.js/sdk-react";
 import { useInitData } from "@tma.js/sdk-react";
 import { useEffect, useState } from "react";
-import { TonConnectUIProvider, TonConnectButton, useTonWallet } from "@tonconnect/ui-react";
+import { TonConnectUIProvider, TonConnectButton } from "@tonconnect/ui-react";
 import Image from "next/image";
 import { useTonConnectUI } from "@tonconnect/ui-react";
 
