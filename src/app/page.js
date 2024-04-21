@@ -3,7 +3,7 @@
 import { SDKProvider, useSDKContext } from "@tma.js/sdk-react";
 import { useInitData } from "@tma.js/sdk-react";
 import { useEffect, useState } from "react";
-import { TonConnectUIProvider, TonConnectButton, useTonWallet } from "@tonconnect/ui-react";
+import { TonConnectUIProvider, TonConnectButton } from "@tonconnect/ui-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -64,7 +64,6 @@ function AchievementsList() {
         </div>
       </header>
       <Achievements data={achievements} />
-      <div>{wallet && <p>Wallet address: {wallet.address}</p>}</div>
     </main>
   );
 }

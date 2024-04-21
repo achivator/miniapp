@@ -1,23 +1,22 @@
 "use client";
 
-import { SDKProvider, useSDKContext } from "@tma.js/sdk-react";
+import { SDKProvider } from "@tma.js/sdk-react";
 import { useInitData } from "@tma.js/sdk-react";
 import { useEffect, useState } from "react";
 import { TonConnectUIProvider, TonConnectButton, useTonWallet } from "@tonconnect/ui-react";
 import Image from "next/image";
 import { useTonConnectUI } from "@tonconnect/ui-react";
 
-function Achievement({ user_id, chatId, collection, achievement_type }) {
+function Achievement({ _id }) {
+  const initData = useInitData();
   const [tonConnectUI] = useTonConnectUI();
   const [achievement, setAchievement] = useState({});
 
   useEffect(() => {
-    fetch(
-      `/api/achievement?user_id=${user_id}&chat_id=${chatId}&collection=${collection}&achievement_type=${achievement_type}`
-    )
+    fetch(`/api/achievement?_id=${user_id}&user_id=${initData.user.id}`)
       .then((res) => res.json())
       .then(setAchievement);
-  }, [chatId, collection, achievement_type]);
+  }, [_id, initData.user.id]);
 
   const transaction = {
     messages: [
@@ -29,17 +28,27 @@ function Achievement({ user_id, chatId, collection, achievement_type }) {
   };
 
   return (
-    <div className="flex flex-col space-y-4">
-      <Image
-        width={200}
-        height={200}
-        alt={achievement.type}
-        src={`https://achivator.seniorsoftwarevlogger.com/achievements/${achievement.collection || "v1"}/${
-          achievement.type
-        }.webp`}
-      />
-      <button onClick={() => tonConnectUI.sendTransaction(transaction).then(console.log)}>Buy as NFT</button>
-    </div>
+    <main className="flex min-h-screen flex-col space-y-4 p-4">
+      <header className="flex flex-row w-full justify-between">
+        <div className="flex text-2xl font-bold">Achivator</div>
+        <div className="flex">
+          <TonConnectButton />
+        </div>
+      </header>
+      <div className="flex flex-col space-y-4">
+        <Image
+          width={200}
+          height={200}
+          alt={achievement.type}
+          src={`https://achivator.seniorsoftwarevlogger.com/achievements/${achievement.collection || "v1"}/${
+            achievement.type
+          }.webp`}
+        />
+        <h2 className="text-1xl font-bold flex">{achievement.type}</h2>
+
+        <button onClick={() => tonConnectUI.sendTransaction(transaction).then(console.log)}>Buy as NFT</button>
+      </div>
+    </main>
   );
 }
 
@@ -57,11 +66,7 @@ export default function AchievementContainer({ params }) {
   return (
     <SDKProvider>
       <TonConnectUIProvider manifestUrl="https://achivator.seniorsoftwarevlogger.com/ton-connect.json">
-        <Achievement
-          chatId={params.chat_id}
-          collection={params.collection}
-          achievement_type={params.achievement_type}
-        />
+        <Achievement _id={params._id} />
       </TonConnectUIProvider>
     </SDKProvider>
   );
