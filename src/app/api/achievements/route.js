@@ -23,7 +23,7 @@ export async function GET(request) {
     }
     chatAchievements[achievement.chat_id].push(achievement);
   }
-  const chatIds = Object.keys(chatAchievements);
+  const chatIds = Object.keys(chatAchievements).map((id) => parseInt(id));
 
   // Get chat titles
   const chatCollection = db.collection("chats");
