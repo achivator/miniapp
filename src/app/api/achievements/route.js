@@ -16,7 +16,7 @@ export async function GET(request) {
   const achievements = await collection.find({ user_id }).toArray();
 
   const chatAchievements = Object.groupBy(achievements, (achievement) => achievement.chat_id);
-  const chatIds = Object.keys(chats);
+  const chatIds = Object.keys(chatAchievements);
 
   // Get chat titles
   const chatCollection = db.collection("chats");
