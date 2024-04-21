@@ -14,9 +14,7 @@ function Achievement({ _id }) {
   const backButton = useBackButton();
 
   backButton.show();
-  backButton.onClick(() => {
-    window.history.back();
-  });
+  backButton.on("click", () => window.history.back());
 
   useEffect(() => {
     fetch(`/api/achievement?_id=${_id}&user_id=${initData.user.id}`)
