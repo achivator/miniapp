@@ -19,7 +19,7 @@ async function loadAchievements(userId, setAchievements) {
 function Achievements({ data }) {
   return (
     <div className="flex flex-col space-y-4">
-      {data.map(({ chat, achievements }) => (
+      {data?.map(({ chat, achievements }) => (
         <div key={chat.chat_id} className="flex flex-col">
           <h2 className="text-1xl font-bold flex">{chat.title}</h2>
           {(!achievements || achievements.length === 0) && <p>No achievements in this chat yet, try header.</p>}
@@ -63,7 +63,7 @@ function AchievementsList() {
           <TonConnectButton />
         </div>
       </header>
-      <Achievements achievements={achievements} />
+      <Achievements data={achievements} />
       <div>{wallet && <p>Wallet address: {wallet.address}</p>}</div>
     </main>
   );
