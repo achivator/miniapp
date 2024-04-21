@@ -5,8 +5,7 @@ import { useInitData } from "@tma.js/sdk-react";
 import { useEffect, useState } from "react";
 import { TonConnectUIProvider, TonConnectButton, useTonWallet } from "@tonconnect/ui-react";
 import Image from "next/image";
-
-import { useTonConnectUI } from "@tonconnect/ui-react";
+import Link from "next/link";
 
 async function loadAchievements(userId, setAchievements) {
   try {
@@ -17,36 +16,26 @@ async function loadAchievements(userId, setAchievements) {
   }
 }
 
-function Achievements({ achievements }) {
-  const [tonConnectUI] = useTonConnectUI();
-
-  const transaction = {
-    messages: [
-      {
-        address: "UQDNkgTK6NV_Q3otfiYcpJOxrYoeUw8rqgUFeMd7mCEiePCX", // destination address
-        amount: "00000001", //Toncoin in nanotons
-      },
-    ],
-  };
-
+function Achievements({ data }) {
   return (
     <div className="flex flex-col space-y-4">
-      {achievements.map((chat) => (
-        <div key={chat.chat?.id} className="flex flex-col">
-          <h2 className="text-1xl font-bold flex">{chat.chat?.title}</h2>
-          {(!chat.achievements || chat.achievements.length === 0) && <p>No achievements in this chat yet</p>}
+      {data.map(({ chat, achievements }) => (
+        <div key={chat.chat_id} className="flex flex-col">
+          <h2 className="text-1xl font-bold flex">{chat.title}</h2>
+          {(!achievements || achievements.length === 0) && <p>No achievements in this chat yet, try header.</p>}
           <ul className="flex flex-row flex-wrap">
-            {chat.achievements?.map((achievement, i) => (
-              <li key={`${chat.chat?.id}-${i}`} className="flex m-1">
-                <Image
-                  width={75}
-                  height={75}
-                  alt={achievement.type}
-                  src={`https://achivator.seniorsoftwarevlogger.com/achievements/${achievement.collection || "v1"}/${
-                    achievement.type
-                  }.webp`}
-                  onClick={() => tonConnectUI.sendTransaction(transaction)}
-                />
+            {achievements?.map((achievement, i) => (
+              <li key={`${chat.id}-${i}`} className="flex m-1">
+                <Link href={`/achievement/${achievement._id}`}>
+                  <Image
+                    width={75}
+                    height={75}
+                    alt={achievement.type}
+                    src={`https://achivator.seniorsoftwarevlogger.com/achievements/${achievement.collection || "v1"}/${
+                      achievement.type
+                    }.webp`}
+                  />
+                </Link>
               </li>
             ))}
           </ul>

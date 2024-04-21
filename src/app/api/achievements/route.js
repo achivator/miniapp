@@ -14,7 +14,21 @@ export async function GET(request) {
 
   // Get my achievements grouped by chat id
   const achievements = await collection.find({ user_id }).toArray();
+
+  const chatAchievements = Object.groupBy(achievements, (achievement) => achievement.chat_id);
+  const chatIds = Object.keys(chats);
+
+  // Get chat titles
+  const chatCollection = db.collection("chats");
+  const chatTitles = await chatCollection.find({ id: { $in: chatIds } }).toArray();
+  const data = chatTitles.map((chat) => {
+    return {
+      chat: chat,
+      achievements: chatAchievements[chat.id],
+    };
+  });
+
   mongo.close();
 
-  return Response.json({ achievements });
+  return Response.json(data);
 }
