@@ -15,7 +15,14 @@ export async function GET(request) {
   // Get my achievements grouped by chat id
   const achievements = await collection.find({ user_id }).toArray();
 
-  const chatAchievements = Object.groupBy(achievements, (achievement) => achievement.chat_id);
+  // Group by chat id
+  const chatAchievements = {};
+  for (const achievement of achievements) {
+    if (!chatAchievements[achievement.chat_id]) {
+      chatAchievements[achievement.chat_id] = [];
+    }
+    chatAchievements[achievement.chat_id].push(achievement);
+  }
   const chatIds = Object.keys(chatAchievements);
 
   // Get chat titles
