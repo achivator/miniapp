@@ -13,7 +13,7 @@ function Achievement({ _id }) {
   const [achievement, setAchievement] = useState({});
 
   useEffect(() => {
-    fetch(`/api/achievement?_id=${user_id}&user_id=${initData.user.id}`)
+    fetch(`/api/achievement?_id=${_id}&user_id=${initData.user.id}`)
       .then((res) => res.json())
       .then(setAchievement);
   }, [_id, initData.user.id]);
