@@ -37,8 +37,8 @@ function Achievement({ _id }) {
       </header>
       <div className="flex flex-col space-y-4">
         <Image
-          width={200}
-          height={200}
+          width={348}
+          height={348}
           alt={achievement.type}
           src={`https://achivator.seniorsoftwarevlogger.com/achievements/${achievement.collection || "v1"}/${
             achievement.type
