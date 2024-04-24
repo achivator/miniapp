@@ -25,7 +25,10 @@ function Achievement({ _id }) {
   const transaction = {
     messages: [
       {
-        address: "UQDNkgTK6NV_Q3otfiYcpJOxrYoeUw8rqgUFeMd7mCEiePCX", // destination address
+        address:
+          process.env.NODE_ENV === "development"
+            ? "0QADO647RkbBgmyIog5Lu3l9I9AyTS1cO9h-mK-oVD9DSSCh"
+            : "UQDNkgTK6NV_Q3otfiYcpJOxrYoeUw8rqgUFeMd7mCEiePCX", // destination address
         amount: "1000000000", //Toncoin in nanotons
       },
     ],
@@ -54,7 +57,14 @@ function Achievement({ _id }) {
           <h2 className="text-1xl font-bold flex">{achievement.type}</h2>
 
           {wallet ? (
-            <button className="" onClick={() => tonConnectUI.sendTransaction(transaction).then(console.log)}>
+            <button
+              className=""
+              onClick={() =>
+                tonConnectUI.sendTransaction(transaction).then((response) => {
+                  console.log(response);
+                })
+              }
+            >
               Buy as NFT
             </button>
           ) : (
