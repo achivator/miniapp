@@ -1,6 +1,6 @@
 "use client";
 
-import { SDKProvider, useSDKContext } from "@tma.js/sdk-react";
+import { SDKProvider, useSDKContext, useBackButton } from "@tma.js/sdk-react";
 import { useInitData } from "@tma.js/sdk-react";
 import { useEffect, useState } from "react";
 import { TonConnectUIProvider, TonConnectButton } from "@tonconnect/ui-react";
@@ -69,6 +69,9 @@ function AchievementsList() {
 
 function Page() {
   const { initResult } = useSDKContext();
+  const backButton = useBackButton();
+  backButton.hide();
+
   if (!initResult)
     return (
       <main className="flex min-h-screen flex-col space-y-4 p-4">
