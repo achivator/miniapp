@@ -1,0 +1,6 @@
+{
+    "name": "Clown",
+    "description": "You got 100 clown emojis in a chat. You are now a clown.",
+    "attributes": [{ "trait_type": "Achievement", "value": "Clown" }, { "trait_type": "Version", "value": "V1" }],
+    "image": "https://achivator.seniorsoftwarevlogger.com/achievements/v1/clown.webp"
+}
