@@ -1,6 +1,7 @@
 "use client";
 
 import { SDKProvider, useInitData, useBackButton } from "@tma.js/sdk-react";
+import { Builder } from "@ton/core";
 import { useEffect, useState } from "react";
 import { TonConnectUIProvider, TonConnectButton, useTonWallet } from "@tonconnect/ui-react";
 import Image from "next/image";
@@ -47,7 +48,12 @@ function Achievement({ _id }) {
           {wallet ? (
             <button
               className="shadow-md bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-              onClick={() =>
+              onClick={() => {
+                let builder = new Builder();
+                builder.storeUint(3137207270, 32); // Mint
+                builder.storeUint(0, 64); // query_id
+                builder.storeStringRefTail(`${achievement.collection}/${achievement.type}`); // item_template
+
                 tonConnectUI
                   .sendTransaction({
                     validUntil: Math.floor(Date.now() / 1000) + 600, // 60 sec
@@ -55,17 +61,17 @@ function Achievement({ _id }) {
                       {
                         address:
                           process.env.NODE_ENV === "development"
-                            ? "0QADO647RkbBgmyIog5Lu3l9I9AyTS1cO9h-mK-oVD9DSSCh"
+                            ? "EQCE3SuQEOpb1ouP9Fa17ec3gyv0M13v-Tk_t_NobhXEctrZ"
                             : "UQCOzy4iPwPulDxnPFlEpEB4jFf9_5jnzwE25EGnv6CooRlA", // destination address
                         amount: "1000000000", //Toncoin in nanotons
-                        payload: `${achievement.collection || "v1"}:${achievement.type}`,
+                        payload: builder.asCell().toBoc().toString("base64"),
                       },
                     ],
                   })
                   .then((response) => {
                     console.log(response);
-                  })
-              }
+                  });
+              }}
             >
               Buy as NFT
             </button>
