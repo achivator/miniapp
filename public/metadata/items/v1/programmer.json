@@ -1,0 +1,6 @@
+{
+    "name": "Programmer",
+    "description": "You share a code snippet, good job!",
+    "attributes": [{ "trait_type": "Achievement", "value": "Programmer" }, { "trait_type": "Version", "value": "V1" }],
+    "image": "https://achivator.seniorsoftwarevlogger.com/achievements/v1/programmer.webp"
+}
