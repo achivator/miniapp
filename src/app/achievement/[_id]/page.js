@@ -50,6 +50,7 @@ function Achievement({ _id }) {
               onClick={() =>
                 tonConnectUI
                   .sendTransaction({
+                    validUntil: Math.floor(Date.now() / 1000) + 600, // 60 sec
                     messages: [
                       {
                         address:
@@ -57,7 +58,7 @@ function Achievement({ _id }) {
                             ? "0QADO647RkbBgmyIog5Lu3l9I9AyTS1cO9h-mK-oVD9DSSCh"
                             : "UQCOzy4iPwPulDxnPFlEpEB4jFf9_5jnzwE25EGnv6CooRlA", // destination address
                         amount: "1000000000", //Toncoin in nanotons
-                        // payload: `${achievement.collection || "v1"}:${achievement.type}`,
+                        payload: `${achievement.collection || "v1"}:${achievement.type}`,
                       },
                     ],
                   })
