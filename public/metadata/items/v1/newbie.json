@@ -1,0 +1,6 @@
+{
+    "name": "Newbie",
+    "description": "First message! Keep it up!",
+    "attributes": [{ "trait_type": "Achievement", "value": "Newbie" }, { "trait_type": "Version", "value": "V1" }],
+    "image": "https://achivator.seniorsoftwarevlogger.com/achievements/v1/newbie.webp"
+}
