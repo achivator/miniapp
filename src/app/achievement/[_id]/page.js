@@ -55,7 +55,7 @@ function Achievement({ _id }) {
                         address:
                           process.env.NODE_ENV === "development"
                             ? "0QADO647RkbBgmyIog5Lu3l9I9AyTS1cO9h-mK-oVD9DSSCh"
-                            : "UQDNkgTK6NV_Q3otfiYcpJOxrYoeUw8rqgUFeMd7mCEiePCX", // destination address
+                            : "UQCOzy4iPwPulDxnPFlEpEB4jFf9_5jnzwE25EGnv6CooRlA", // destination address
                         amount: "1000000000", //Toncoin in nanotons
                         payload: `${achievement.collection || "v1"}:${achievement.type}`,
                       },
