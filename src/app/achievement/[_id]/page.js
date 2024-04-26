@@ -22,18 +22,6 @@ function Achievement({ _id }) {
       .then(setAchievement);
   }, [_id, initData.user.id]);
 
-  const transaction = {
-    messages: [
-      {
-        address:
-          process.env.NODE_ENV === "development"
-            ? "0QADO647RkbBgmyIog5Lu3l9I9AyTS1cO9h-mK-oVD9DSSCh"
-            : "UQDNkgTK6NV_Q3otfiYcpJOxrYoeUw8rqgUFeMd7mCEiePCX", // destination address
-        amount: "1000000000", //Toncoin in nanotons
-      },
-    ],
-  };
-
   return (
     <main className="flex min-h-screen flex-col space-y-4 p-4">
       <header className="flex flex-row w-full justify-between">
@@ -58,11 +46,24 @@ function Achievement({ _id }) {
 
           {wallet ? (
             <button
-              className=""
+              className="shadow-md bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
               onClick={() =>
-                tonConnectUI.sendTransaction(transaction).then((response) => {
-                  console.log(response);
-                })
+                tonConnectUI
+                  .sendTransaction({
+                    messages: [
+                      {
+                        address:
+                          process.env.NODE_ENV === "development"
+                            ? "0QADO647RkbBgmyIog5Lu3l9I9AyTS1cO9h-mK-oVD9DSSCh"
+                            : "UQDNkgTK6NV_Q3otfiYcpJOxrYoeUw8rqgUFeMd7mCEiePCX", // destination address
+                        amount: "1000000000", //Toncoin in nanotons
+                        payload: `${achievement.collection || "v1"}:${achievement.type}`,
+                      },
+                    ],
+                  })
+                  .then((response) => {
+                    console.log(response);
+                  })
               }
             >
               Buy as NFT
