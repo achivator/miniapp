@@ -47,6 +47,9 @@ function Achievements({ data }) {
 
 function AchievementsList() {
   const initData = useInitData();
+  const backButton = useBackButton();
+
+  backButton.hide();
 
   const [achievements, setAchievements] = useState([]);
 
@@ -69,17 +72,21 @@ function AchievementsList() {
 
 function Page() {
   const { initResult } = useSDKContext();
-  const backButton = useBackButton();
-  backButton.hide();
 
   if (!initResult)
     return (
-      <main className="flex min-h-screen flex-col space-y-4 p-4">
-        <p>Loading SDK...</p>
+      <main className="prose max-w-full text-center flex min-h-screen flex-col space-y-4 p-4">
+        <p>
+          <Image className="rounded-full inline" width={180} height={180} src="/ton-logo.png" alt="logo" />
+        </p>
+        <p>
+          This is a Telegram Mini App, please <a href="https://t.me/achivator_bot/app">open it from Telegram</a>.
+        </p>
+        <p>
+          <em>Loading SDK...</em>
+        </p>
       </main>
     );
-
-  console.log(initResult);
 
   return <AchievementsList />;
 }
