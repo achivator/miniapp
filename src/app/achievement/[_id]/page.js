@@ -3,7 +3,11 @@
 import { SDKProvider, useInitData, useBackButton } from "@tma.js/sdk-react";
 import { Builder } from "@ton/core";
 import { useEffect, useState } from "react";
-import { TonConnectUIProvider, TonConnectButton, useTonWallet } from "@tonconnect/ui-react";
+import {
+  TonConnectUIProvider,
+  TonConnectButton,
+  useTonWallet,
+} from "@tonconnect/ui-react";
 import Image from "next/image";
 import { useTonConnectUI } from "@tonconnect/ui-react";
 
@@ -39,9 +43,9 @@ function Achievement({ _id }) {
             width={348}
             height={348}
             alt={achievement.type}
-            src={`https://achivator.seniorsoftwarevlogger.com/achievements/${achievement.collection || "v1"}/${
-              achievement.type
-            }.webp`}
+            src={`https://achivator.cc/achievements/${
+              achievement.collection || "v1"
+            }/${achievement.type}.webp`}
           />
           <h2 className="text-1xl font-bold flex">{achievement.type}</h2>
 
@@ -52,7 +56,9 @@ function Achievement({ _id }) {
                 let builder = new Builder();
                 builder.storeUint(3137207270, 32); // Mint
                 builder.storeUint(0, 64); // query_id
-                builder.storeStringRefTail(`${achievement.collection}/${achievement.type}`); // item_template
+                builder.storeStringRefTail(
+                  `${achievement.collection}/${achievement.type}`
+                ); // item_template
 
                 tonConnectUI
                   .sendTransaction({
@@ -97,7 +103,7 @@ export default function AchievementContainer({ params }) {
 
   return (
     <SDKProvider>
-      <TonConnectUIProvider manifestUrl="https://achivator.seniorsoftwarevlogger.com/ton-connect.json">
+      <TonConnectUIProvider manifestUrl="https://achivator.cc/ton-connect.json">
         <Achievement _id={params._id} />
       </TonConnectUIProvider>
     </SDKProvider>

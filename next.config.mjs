@@ -4,7 +4,7 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "achivator.seniorsoftwarevlogger.com",
+        hostname: "achivator.cc",
         port: "",
         pathname: "/achievements/**",
       },

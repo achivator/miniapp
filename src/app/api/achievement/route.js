@@ -1,4 +1,5 @@
 import { MongoClient, ObjectId } from "mongodb";
+import { keyPairFromSecretKey, sign } from "@ton/crypto";
 
 export const dynamic = "force-dynamic"; // defaults to auto
 
@@ -11,10 +12,13 @@ export async function GET(request) {
   await mongo.connect();
 
   const db = mongo.db(process.env.NODE_ENV === "development" ? "achivator_test" : "achivator_bot");
-  console.log({ _id, user_id });
 
   const achievement = await db.collection("achievements").findOne({ user_id, _id });
   mongo.close();
 
-  return Response.json(achievement);
+  const keyPair = keyPairFromSecretKey(process.env.TON_SECRET_KEY);
+  const itemTemplate = `${achievement.collection}/${achievement.type}`;
+  const hash = sign(itemTemplate, keyPair.secretKey);
+
+  return Response.json({ achievement, hash });
 }
