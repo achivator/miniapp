@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const { Address, beginCell, Dictionary } = require('@ton/core');
 const { sha256_sync } = require('@ton/crypto');
 
-const { TonRpcError, resolveMetadataUrl, fetchJettonMetadata } = require('../src/lib/ton/rpc');
+const { TonRpcError, resolveMetadataUrl, fetchJettonMetadata, stackItemToAddress } = require('../src/lib/ton/rpc');
 
 const originalFetch = globalThis.fetch;
 
@@ -197,4 +197,13 @@ test('unreachable metadata host leaves decimals null (no guessing on error)', as
     });
     const meta = await fetchJettonMetadata(master);
     assert.equal(meta.decimals, null);
+});
+
+test('stackItemToAddress reads a null Address? returned as an empty toncenter list', () => {
+    assert.equal(stackItemToAddress(['list', { '@type': 'tvm.list', elements: [] }]), null);
+    assert.equal(stackItemToAddress(['null', null]), null);
+    const addr = Address.parse('EQDjDOaz6YU6q1MjLlNWsLpLutDMF70Svv8Yq-Hhz2wBjvrl');
+    const boc = beginCell().storeAddress(addr).endCell().toBoc().toString('base64');
+    assert.ok(stackItemToAddress(['slice', { bytes: boc }]).equals(addr));
+    assert.throws(() => stackItemToAddress(['list', { elements: [['num', '0x1']] }]), TonRpcError);
 });
