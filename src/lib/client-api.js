@@ -43,3 +43,26 @@ export function shortenAddress(address, size = 4) {
   if (!address) return "";
   return `${address.slice(0, size + 2)}…${address.slice(-size)}`;
 }
+
+// TonConnect chain ids (CHAIN.MAINNET / CHAIN.TESTNET).
+const TON_CHAINS = { mainnet: "-239", testnet: "-3" };
+
+// Sends a transaction pinned to the backend's network. Contracts exist only
+// there, so a wallet on the other network must not send: its TON (or jettons)
+// would go to an address that has no contract on that chain.
+export async function sendTonTransaction(tonConnectUI, network, messages) {
+  const chain = TON_CHAINS[network] || TON_CHAINS.testnet;
+  const walletChain = tonConnectUI.wallet?.account?.chain;
+  if (walletChain && walletChain !== chain) {
+    throw new Error(
+      chain === TON_CHAINS.testnet
+        ? "Your wallet is on mainnet. Switch it to testnet (or connect a testnet wallet) and try again."
+        : "Your wallet is on testnet. Switch it to mainnet and try again.",
+    );
+  }
+  return tonConnectUI.sendTransaction({
+    validUntil: Math.floor(Date.now() / 1000) + 300,
+    network: chain,
+    messages,
+  });
+}

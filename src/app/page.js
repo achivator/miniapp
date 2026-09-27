@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useInitDataRaw } from "@tma.js/sdk-react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
-import { apiFetch, pollClaimStatus, shortenAddress } from "@/lib/client-api";
+import { apiFetch, pollClaimStatus, sendTonTransaction, shortenAddress } from "@/lib/client-api";
 import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
 import {
   AchievementArt,
@@ -64,7 +64,7 @@ function Hero({ dashboard, achievementsCount }) {
   );
 }
 
-function RewardCard({ reward, initDataRaw, onRefresh }) {
+function RewardCard({ reward, network, initDataRaw, onRefresh }) {
   const wallet = useTonAddress();
   const [tonConnectUI] = useTonConnectUI();
   const haptic = useHaptic();
@@ -90,10 +90,9 @@ function RewardCard({ reward, initDataRaw, onRefresh }) {
         body: { chatId: reward.chat_id, wallet },
       });
       setNotice({ kind: "info", text: "Confirm the transaction in your wallet." });
-      await tonConnectUI.sendTransaction({
-        validUntil: Math.floor(Date.now() / 1000) + 300,
-        messages: [{ address: voucher.to, amount: voucher.amount, payload: voucher.payload_b64 }],
-      });
+      await sendTonTransaction(tonConnectUI, network, [
+        { address: voucher.to, amount: voucher.amount, payload: voucher.payload_b64 },
+      ]);
       setNotice({ kind: "info", text: "Sent — waiting for the pool to pay out…" });
       const status = await pollClaimStatus(reward.chat_id, voucher.nonce, initDataRaw);
       if (status?.status === "claimed") {
@@ -303,7 +302,13 @@ function Dashboard() {
           </>
         ) : dashboard.rewards?.length ? (
           dashboard.rewards.map((reward) => (
-            <RewardCard key={reward.chat_id} reward={reward} initDataRaw={initDataRaw} onRefresh={loadDashboard} />
+            <RewardCard
+              key={reward.chat_id}
+              reward={reward}
+              network={dashboard.config?.network}
+              initDataRaw={initDataRaw}
+              onRefresh={loadDashboard}
+            />
           ))
         ) : (
           <EmptyState icon={<Coins className="h-6 w-6" />} title="No rewards yet">
