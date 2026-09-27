@@ -1,0 +1,15 @@
+{
+  "name": "Liked",
+  "description": "100 thumbs-up on your messages. People like what you say.",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "Liked"
+    },
+    {
+      "trait_type": "Version",
+      "value": "V1"
+    }
+  ],
+  "image": "https://achivator.cc/achievements/v1/liked.webp"
+}

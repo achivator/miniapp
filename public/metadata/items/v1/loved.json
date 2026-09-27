@@ -1,0 +1,15 @@
+{
+  "name": "Loved",
+  "description": "100 hearts on your messages. The chat loves you.",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "Loved"
+    },
+    {
+      "trait_type": "Version",
+      "value": "V1"
+    }
+  ],
+  "image": "https://achivator.cc/achievements/v1/loved.webp"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Spread The Love",
+  "description": "You gave 100 hearts. Spreading the love.",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "Spread The Love"
+    },
+    {
+      "trait_type": "Version",
+      "value": "V1"
+    }
+  ],
+  "image": "https://achivator.cc/achievements/v1/spread%20the%20love.webp"
+}

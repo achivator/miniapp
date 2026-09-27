@@ -1,0 +1,15 @@
+{
+  "name": "Sticker",
+  "description": "You sent a sticker. Words are overrated.",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "Sticker"
+    },
+    {
+      "trait_type": "Version",
+      "value": "V1"
+    }
+  ],
+  "image": "https://achivator.cc/achievements/v1/sticker.webp"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Night Owl",
+  "description": "You posted exactly at midnight. Do you ever sleep?",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "Night Owl"
+    },
+    {
+      "trait_type": "Version",
+      "value": "V1"
+    }
+  ],
+  "image": "https://achivator.cc/achievements/v1/night%20owl.webp"
+}

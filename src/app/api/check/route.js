@@ -1,12 +1,12 @@
-import { validate } from "@tma.js/init-data-node";
+import { authenticate } from "@/lib/auth";
 
-export const dynamic = "force-dynamic"; // defaults to auto
+export const dynamic = "force-dynamic";
+
 export async function GET(request) {
-  const { searchParams } = new URL(request.url);
   try {
-    validate(searchParams, process.env.TELEGRAM_BOT_TOKEN);
-    return Response.json({ success: true });
+    const { user, dev } = authenticate(request);
+    return Response.json({ success: true, user: { id: user.id, username: user.username || null }, dev });
   } catch (e) {
-    return Response.error(e);
+    return Response.json({ error: e.message }, { status: e.status || 401 });
   }
 }

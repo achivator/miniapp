@@ -1,0 +1,15 @@
+{
+  "name": "Santa",
+  "description": "You posted on Christmas Eve. Ho-ho-ho!",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "Santa"
+    },
+    {
+      "trait_type": "Version",
+      "value": "V1"
+    }
+  ],
+  "image": "https://achivator.cc/achievements/v1/santa.webp"
+}

@@ -1,41 +1,43 @@
-import { MongoClient } from "mongodb";
+import { authenticate } from "@/lib/auth";
+import { getCollection } from "@/lib/mongo";
 
-export const dynamic = "force-dynamic"; // defaults to auto
+export const dynamic = "force-dynamic";
 
+// The caller's own achievements, grouped by chat. The user id comes from the
+// validated Telegram init data, never from the query string.
 export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const user_id = parseInt(searchParams.get("user_id"));
-
-  const mongo = new MongoClient(process.env.MONGODB_URI);
-  await mongo.connect();
-
-  const db = mongo.db(process.env.NODE_ENV === "development" ? "achivator_test" : "achivator_bot");
-  const collection = db.collection("achievements");
-
-  // Get my achievements grouped by chat id
-  const achievements = await collection.find({ user_id }).toArray();
-
-  // Group by chat id
-  const chatAchievements = {};
-  for (const achievement of achievements) {
-    if (!chatAchievements[achievement.chat_id]) {
-      chatAchievements[achievement.chat_id] = [];
-    }
-    chatAchievements[achievement.chat_id].push(achievement);
+  let auth;
+  try {
+    auth = authenticate(request);
+  } catch (e) {
+    return Response.json({ error: e.message }, { status: e.status || 401 });
   }
-  const chatIds = Object.keys(chatAchievements).map((id) => parseInt(id));
 
-  // Get chat titles
-  const chatCollection = db.collection("chats");
-  const chatTitles = await chatCollection.find({ id: { $in: chatIds } }).toArray();
-  const data = chatTitles.map((chat) => {
-    return {
-      chat: chat,
-      achievements: chatAchievements[chat.id],
-    };
-  });
+  const achievements = await (await getCollection("achievements"))
+    .find({ user_id: auth.user.id })
+    .sort({ date: -1 })
+    .toArray();
 
-  mongo.close();
+  const byChat = new Map();
+  for (const achievement of achievements) {
+    const list = byChat.get(achievement.chat_id) || [];
+    list.push(achievement);
+    byChat.set(achievement.chat_id, list);
+  }
+  const chats = byChat.size
+    ? await (await getCollection("chats")).find({ id: { $in: [...byChat.keys()] } }).toArray()
+    : [];
+  const titles = new Map(chats.map((chat) => [chat.id, chat.title || null]));
 
-  return Response.json(data);
+  return Response.json(
+    [...byChat.entries()].map(([chatId, list]) => ({
+      chat: { id: chatId, title: titles.get(chatId) ?? null },
+      achievements: list.map((a) => ({
+        _id: String(a._id),
+        type: a.type,
+        collection: a.collection || "v1",
+        date: a.date,
+      })),
+    })),
+  );
 }

@@ -1,0 +1,15 @@
+{
+  "name": "Sad Clown",
+  "description": "You gave 100 clown reactions. Somebody had to.",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "Sad Clown"
+    },
+    {
+      "trait_type": "Version",
+      "value": "V1"
+    }
+  ],
+  "image": "https://achivator.cc/achievements/v1/sad%20clown.webp"
+}
