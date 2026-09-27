@@ -1,0 +1,15 @@
+{
+  "name": "Poop",
+  "description": "100 poop reactions on your messages. Tough crowd.",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "Poop"
+    },
+    {
+      "trait_type": "Version",
+      "value": "V1"
+    }
+  ],
+  "image": "https://achivator.cc/achievements/v1/poop.webp"
+}

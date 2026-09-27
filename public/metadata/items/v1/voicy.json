@@ -1,0 +1,15 @@
+{
+  "name": "Voicy",
+  "description": "You sent a voice message. Nice voice!",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "Voicy"
+    },
+    {
+      "trait_type": "Version",
+      "value": "V1"
+    }
+  ],
+  "image": "https://achivator.cc/achievements/v1/voicy.webp"
+}

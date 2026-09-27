@@ -1,0 +1,15 @@
+{
+  "name": "Telescope",
+  "description": "You recorded a video message. Say cheese!",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "Telescope"
+    },
+    {
+      "trait_type": "Version",
+      "value": "V1"
+    }
+  ],
+  "image": "https://achivator.cc/achievements/v1/telescope.webp"
+}

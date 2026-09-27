@@ -1,0 +1,15 @@
+{
+  "name": "Talkative",
+  "description": "100 messages in one chat. You have a lot to say.",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "Talkative"
+    },
+    {
+      "trait_type": "Version",
+      "value": "V1"
+    }
+  ],
+  "image": "https://achivator.cc/achievements/v1/talkative.webp"
+}

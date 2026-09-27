@@ -1,0 +1,15 @@
+{
+  "name": "Poop Master",
+  "description": "You handed out 100 poop reactions. A true critic.",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "Poop Master"
+    },
+    {
+      "trait_type": "Version",
+      "value": "V1"
+    }
+  ],
+  "image": "https://achivator.cc/achievements/v1/poop%20master.webp"
+}

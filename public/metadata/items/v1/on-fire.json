@@ -1,0 +1,15 @@
+{
+  "name": "On Fire",
+  "description": "100 fire reactions on your messages. You are on fire!",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "On Fire"
+    },
+    {
+      "trait_type": "Version",
+      "value": "V1"
+    }
+  ],
+  "image": "https://achivator.cc/achievements/v1/on%20fire.webp"
+}
