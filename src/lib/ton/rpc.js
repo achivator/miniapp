@@ -71,6 +71,11 @@ function stackItemToAddress(item) {
         return cell.beginParse().loadAddress();
     }
     if (type === 'null' || type === 'nan' || value === null) return null;
+    // A null Address? from a Tact getter reaches toncenter v2 as an empty
+    // tuple: ["list", {"@type": "tvm.list", "elements": []}].
+    if ((type === 'list' || type === 'tuple') && Array.isArray(value?.elements) && value.elements.length === 0) {
+        return null;
+    }
     throw new TonRpcError(`unexpected stack item type: ${type}`);
 }
 
