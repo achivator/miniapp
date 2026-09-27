@@ -52,4 +52,28 @@ async function getChatMemberStatus(chatId, userId) {
     }
 }
 
-module.exports = { botApi, getChatMemberCount, getChat, getChatMemberStatus };
+const memberCache = new Map(); // `${chatId}:${userId}` -> { value, expiresAt }
+const MEMBER_TTL_MS = 30 * 60 * 1000;
+
+// A chat member as Telegram knows them ({ status, user }), or null when the
+// bot cannot see them. The database keeps only user ids, so this is where
+// the pool admin's member list gets its names from; cached to keep a page of
+// members from costing a Bot API call per row on every load.
+async function getChatMember(chatId, userId) {
+    if (!process.env.TELEGRAM_BOT_TOKEN) return null;
+    const key = `${chatId}:${userId}`;
+    const cached = memberCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    let value = null;
+    try {
+        const member = await botApi('getChatMember', { chat_id: chatId, user_id: userId });
+        value = member?.user ? { status: member.status || null, user: member.user } : null;
+    } catch {
+        value = null;
+    }
+    if (memberCache.size >= 5000) memberCache.clear(); // bound memory, it is only a cache
+    memberCache.set(key, { value, expiresAt: Date.now() + MEMBER_TTL_MS });
+    return value;
+}
+
+module.exports = { botApi, getChatMemberCount, getChat, getChatMemberStatus, getChatMember };

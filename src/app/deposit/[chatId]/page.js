@@ -1,32 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Address } from "@ton/core";
 import { useInitDataRaw } from "@tma.js/sdk-react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { apiFetch, sendTonTransaction, shortenAddress, sleep } from "@/lib/client-api";
+import { formatExact, formatUnits } from "@/lib/format";
 import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
 import { Button, Card, ChatAvatar, Chip, Notice, Row, SectionHeader, Skeleton } from "@/components/ui";
-import { ArrowDown, ArrowUp, Check, Refresh, Shield } from "@/components/icons";
+import { ArrowDown, ArrowUp, Check, ChevronRight, Refresh, Shield, Users } from "@/components/icons";
 import { ClaimRules } from "@/components/ClaimRules";
-
-function formatUnits(raw, decimals) {
-  if (raw === null || raw === undefined || decimals === null || decimals === undefined) return "—";
-  const value = BigInt(raw);
-  const base = 10n ** BigInt(decimals);
-  const whole = value / base;
-  const frac = (value % base).toString().padStart(decimals, "0").replace(/0+$/, "").slice(0, 4);
-  return `${whole.toLocaleString("en-US")}${frac ? `.${frac}` : ""}`;
-}
-
-// Full precision, no grouping: for pre-filling inputs.
-function formatExact(raw, decimals) {
-  if (raw === null || raw === undefined || decimals === null) return "";
-  const value = BigInt(raw);
-  const base = 10n ** BigInt(decimals);
-  const frac = (value % base).toString().padStart(decimals, "0").replace(/0+$/, "");
-  return `${value / base}${frac ? `.${frac}` : ""}`;
-}
 
 function formatTon(nanotons) {
   return formatUnits(nanotons, 9);
@@ -274,6 +258,21 @@ function PoolManager({ chatId }) {
           )}
         </div>
       </Card>
+
+      {info.is_creator && (
+        <Link href={`/deposit/${chatId}/members`} className="block">
+          <Card className="flex items-center gap-3 active:opacity-80">
+            <div className="tint-accent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-accent">
+              <Users className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">Member accounts</p>
+              <p className="text-[13px] text-hint">Who earned what, what is owed, payout history</p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-hint" />
+          </Card>
+        </Link>
+      )}
 
       {!info.jetton_master && (
         <Notice notice={{ kind: "info", text: "Set the reward jetton first: send /jetton <master address> in the chat." }} />
