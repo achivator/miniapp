@@ -106,3 +106,9 @@ export const Search = (p) => (
     <path d="m20 20-4.4-4.4" />
   </Svg>
 );
+export const Question = (p) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.6 9.3a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2.2-2.4 3.7M12 17v.01" />
+  </Svg>
+);

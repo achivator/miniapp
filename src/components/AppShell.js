@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { SDKProvider, useBackButton, useHapticFeedback, useSDKContext, useThemeParams } from "@tma.js/sdk-react";
+import { SDKProvider, useBackButton, useHapticFeedback, useSDKContext, useSettingsButton, useThemeParams } from "@tma.js/sdk-react";
 import { TonConnectButton, TonConnectUIProvider } from "@tonconnect/ui-react";
 import Link from "next/link";
-import { Medal } from "./icons";
+import { useRouter } from "next/navigation";
+import { Medal, Question } from "./icons";
 import { Spinner } from "./ui";
 
 const MANIFEST_URL = "https://achivator.cc/ton-connect.json";
@@ -28,6 +29,9 @@ function OpenInTelegram() {
       >
         Open in Telegram
       </a>
+      <Link href="/help" className="text-[15px] font-medium text-link">
+        Как подключить свой чат →
+      </Link>
     </main>
   );
 }
@@ -42,12 +46,30 @@ function ThemeSync() {
   return null;
 }
 
+// "Settings" item of Telegram's mini app menu (⋯), opening the setup guide.
+// Same copy-per-change caveat as useTelegramBack: keep the latest in a ref.
+function HelpMenuItem() {
+  const settingsButton = useSettingsButton();
+  const ref = useRef(settingsButton);
+  ref.current = settingsButton;
+  const router = useRouter();
+  useEffect(() => {
+    const button = ref.current;
+    const onClick = () => router.push("/help");
+    safely(() => button.show());
+    button.on("click", onClick);
+    return () => button.off("click", onClick);
+  }, [router]);
+  return null;
+}
+
 function Gate({ children }) {
   const { initResult, error, loading } = useSDKContext();
   if (initResult) {
     return (
       <>
         <ThemeSync />
+        <HelpMenuItem />
         {children}
       </>
     );
@@ -127,7 +149,16 @@ export function TopBar() {
         </span>
         <span className="text-[17px] font-bold tracking-tight">Achivator</span>
       </Link>
-      <TonConnectButton />
+      <div className="flex items-center gap-2">
+        <Link
+          href="/help"
+          className="tint-accent flex h-9 w-9 items-center justify-center rounded-full text-accent active:opacity-80"
+          aria-label="Setup guide"
+        >
+          <Question className="h-5 w-5" />
+        </Link>
+        <TonConnectButton />
+      </div>
     </header>
   );
 }
