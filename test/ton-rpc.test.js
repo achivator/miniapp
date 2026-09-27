@@ -207,3 +207,17 @@ test('stackItemToAddress reads a null Address? returned as an empty toncenter li
     assert.ok(stackItemToAddress(['slice', { bytes: boc }]).equals(addr));
     assert.throws(() => stackItemToAddress(['list', { elements: [['num', '0x1']] }]), TonRpcError);
 });
+
+// Tact getters return Bool true as -1 (toncenter: "-0x1"). Reading it as
+// "=== 1" once made every confirmed claim look unsent, so expiry released
+// the points again and allowed a second payout.
+test('isNonceUsedOnChain reads Tact true (-1) as used and false (0) as unused', async () => {
+    const { isNonceUsedOnChain } = require('../src/lib/rewards');
+    const pool = freshMaster();
+    for (const [value, expected] of [['-0x1', true], ['0x0', false]]) {
+        stubFetch(async () =>
+            jsonResponse({ ok: true, result: { exit_code: 0, stack: [['num', value]] } }),
+        );
+        assert.equal(await isNonceUsedOnChain(pool, 1), expected);
+    }
+});

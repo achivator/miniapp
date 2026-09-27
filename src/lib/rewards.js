@@ -8,7 +8,7 @@ function nowSeconds() {
 
 async function isNonceUsedOnChain(poolAddress, nonce) {
     const stack = await runGetMethod(poolAddress, 'isNonceUsed', [['num', '0x' + BigInt(nonce).toString(16)]]);
-    return stackItemToBigInt(stack[0]) === 1n;
+    return stackItemToBigInt(stack[0]) !== 0n; // Tact encodes true as -1
 }
 
 // Expired vouchers either got confirmed on-chain before expiry (nonce used ->
