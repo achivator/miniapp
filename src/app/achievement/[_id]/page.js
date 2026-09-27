@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useInitDataRaw } from "@tma.js/sdk-react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
-import { apiFetch, sleep } from "@/lib/client-api";
+import { apiFetch, sendTonTransaction, sleep } from "@/lib/client-api";
 import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
 import { AchievementArt, Button, Card, ChatAvatar, Chip, Notice, Skeleton, titleCase } from "@/components/ui";
 import { Check, Medal, Sparkles } from "@/components/icons";
@@ -69,10 +69,9 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
         body: { achievementId: achievement._id, wallet },
       });
       setNotice({ kind: "info", text: "Confirm in your wallet." });
-      await tonConnectUI.sendTransaction({
-        validUntil: Math.floor(Date.now() / 1000) + 300,
-        messages: [{ address: tx.to, amount: tx.amount, payload: tx.payload_b64 }],
-      });
+      await sendTonTransaction(tonConnectUI, nft.network, [
+        { address: tx.to, amount: tx.amount, payload: tx.payload_b64 },
+      ]);
       setNotice({ kind: "info", text: "Minting on-chain…" });
       for (let i = 0; i < 24; i++) {
         await sleep(5000);

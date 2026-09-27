@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Address } from "@ton/core";
 import { useInitDataRaw } from "@tma.js/sdk-react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
-import { apiFetch, shortenAddress, sleep } from "@/lib/client-api";
+import { apiFetch, sendTonTransaction, shortenAddress, sleep } from "@/lib/client-api";
 import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
 import { Button, Card, ChatAvatar, Chip, Notice, Row, SectionHeader, Skeleton } from "@/components/ui";
 import { ArrowDown, ArrowUp, Check, Refresh, Shield } from "@/components/icons";
@@ -110,10 +110,9 @@ function PoolManager({ chatId }) {
   }
 
   async function send(tx) {
-    await tonConnectUI.sendTransaction({
-      validUntil: Math.floor(Date.now() / 1000) + 300,
-      messages: [{ address: tx.to, amount: tx.amount, payload: tx.payload_b64 }],
-    });
+    await sendTonTransaction(tonConnectUI, info.network, [
+      { address: tx.to, amount: tx.amount, payload: tx.payload_b64 },
+    ]);
   }
 
   // Polls pool-status until `done(status)` holds, for up to ~2 minutes.
