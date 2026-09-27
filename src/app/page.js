@@ -18,7 +18,7 @@ import {
   Skeleton,
   titleCase,
 } from "@/components/ui";
-import { ChevronRight, Clock, Coins, Medal, Pool, Sparkles } from "@/components/icons";
+import { ChevronRight, Clock, Coins, Medal, Pool, Question, Sparkles } from "@/components/icons";
 
 const numberFormat = new Intl.NumberFormat("en-US");
 
@@ -328,6 +328,19 @@ function Dashboard() {
         <SectionHeader title="Achievements" />
         <Achievements groups={achievements} />
       </section>
+
+      <Link href="/help" className="block">
+        <Card className="flex items-center gap-3 active:opacity-80">
+          <div className="tint-accent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-accent">
+            <Question className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">Reward your own chat</p>
+            <p className="text-[13px] text-hint">Как подключить свой чат — пошаговая инструкция</p>
+          </div>
+          <ChevronRight className="h-5 w-5 text-hint" />
+        </Card>
+      </Link>
     </Screen>
   );
 }
