@@ -92,3 +92,17 @@ export const Refresh = (p) => (
     <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />
   </Svg>
 );
+export const Users = (p) => (
+  <Svg {...p}>
+    <circle cx="9" cy="8" r="3.5" />
+    <path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5" />
+    <path d="M16 4.6a3.5 3.5 0 0 1 0 6.8" />
+    <path d="M18.5 14.9c1.6.8 2.7 2.5 3 5.1" />
+  </Svg>
+);
+export const Search = (p) => (
+  <Svg {...p}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="m20 20-4.4-4.4" />
+  </Svg>
+);

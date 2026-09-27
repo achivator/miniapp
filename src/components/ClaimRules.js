@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/client-api";
-import { Button, Card, Chip, Notice, SectionHeader, cx } from "./ui";
+import { Button, Card, Chip, Notice, SectionHeader, Segmented, cx } from "./ui";
 import { useHaptic } from "./AppShell";
 
 const MATURATION_OPTIONS = [0, 1, 3, 7, 14];
@@ -16,26 +16,6 @@ const WEEKDAYS = [
   [6, "Sat"],
   [0, "Sun"],
 ];
-
-function Segmented({ options, value, onChange, format }) {
-  return (
-    <div className="flex rounded-xl bg-bg p-1">
-      {options.map((option) => (
-        <button
-          key={option}
-          type="button"
-          className={cx(
-            "h-9 flex-1 rounded-lg text-[14px] font-semibold transition",
-            value === option ? "bg-surface text-fg shadow-sm" : "text-hint",
-          )}
-          onClick={() => onChange(option)}
-        >
-          {format(option)}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function Toggle({ checked, onChange, label }) {
   return (

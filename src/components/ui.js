@@ -173,3 +173,24 @@ export function Row({ label, children }) {
 export function titleCase(text) {
   return String(text || "").replace(/(^|\s)\S/g, (c) => c.toUpperCase());
 }
+
+// iOS-style segmented control; `format` renders each option's label.
+export function Segmented({ options, value, onChange, format }) {
+  return (
+    <div className="flex rounded-xl bg-bg p-1">
+      {options.map((option) => (
+        <button
+          key={option}
+          type="button"
+          className={cx(
+            "h-9 flex-1 rounded-lg text-[14px] font-semibold transition",
+            value === option ? "bg-surface text-fg shadow-sm" : "text-hint",
+          )}
+          onClick={() => onChange(option)}
+        >
+          {format(option)}
+        </button>
+      ))}
+    </div>
+  );
+}
