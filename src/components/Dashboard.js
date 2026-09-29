@@ -34,9 +34,10 @@ function gateText(gate) {
   return `Claims open ${new Date(gate.until * 1000).toLocaleDateString(undefined, { weekday: "long", timeZone: "UTC" })}`;
 }
 
+// No "1 pt = X" here: each chat sets its own price and pays in its own
+// jetton, so the rate lives on each reward card.
 function Hero({ dashboard, achievementsCount }) {
   const totalPoints = dashboard?.rewards?.reduce((sum, r) => sum + (r.available_points || 0), 0) ?? null;
-  const rate = dashboard?.config?.jettons_per_point;
   return (
     <section className="hero-gradient relative overflow-hidden rounded-[22px] p-5 shadow-lg">
       <div className="pointer-events-none absolute -right-8 -top-10 h-40 w-40 rounded-full bg-white/10" />
@@ -59,7 +60,6 @@ function Hero({ dashboard, achievementsCount }) {
         <span className="rounded-full bg-white/20 px-2.5 py-1">
           {achievementsCount ?? "–"} {achievementsCount === 1 ? "achievement" : "achievements"}
         </span>
-        {rate && <span className="rounded-full bg-white/20 px-2.5 py-1">1 pt = {rate} jetton</span>}
       </div>
     </section>
   );
@@ -76,6 +76,7 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
   const closed = gateText(reward.claim_gate);
   const canClaim = reward.available_points > 0 && Boolean(reward.jetton_master) && !closed;
   const pending = reward.pending?.[0];
+  const priceChange = reward.point_price_change;
 
   async function claim() {
     if (!wallet) {
@@ -90,7 +91,9 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
         initDataRaw,
         body: { chatId: reward.chat_id, wallet },
       });
-      setNotice({ kind: "info", text: "Confirm the transaction in your wallet." });
+      // The amount is priced when the voucher is signed and may differ from
+      // the estimate above if the chat's rate just changed: state it here.
+      setNotice({ kind: "info", text: `Confirm in your wallet to receive ${voucher.jettons} ${symbol}.` });
       await sendTonTransaction(tonConnectUI, network, [
         { address: voucher.to, amount: voucher.amount, payload: voucher.payload_b64 },
       ]);
@@ -130,9 +133,14 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
         </Button>
       </div>
 
-      {(!reward.jetton_master || pending || closed || reward.maturing_points > 0) && (
+      {(!reward.jetton_master || pending || closed || reward.maturing_points > 0 || reward.point_price) && (
         <div className="flex flex-wrap gap-2">
           {!reward.jetton_master && <Chip tone="neutral">Rewards not enabled in this chat yet</Chip>}
+          {reward.jetton_master && reward.point_price && (
+            <Chip tone="neutral">
+              1 pt = {reward.point_price} {symbol}
+            </Chip>
+          )}
           {reward.jetton_master && closed && <Chip tone="neutral">{closed}</Chip>}
           {reward.maturing_points > 0 && (
             <Chip tone="accent" icon={<Clock className="h-3.5 w-3.5" />}>
@@ -147,6 +155,18 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
             </Chip>
           )}
         </div>
+      )}
+
+      {/* The creator can re-price points already earned: say so for a week. */}
+      {reward.jetton_master && priceChange && (
+        <Notice
+          notice={{
+            kind: "info",
+            text: `Rate changed on ${shortDate(priceChange.at)}: 1 pt = ${priceChange.old} → ${priceChange.new} ${symbol}${
+              priceChange.changes > 1 ? ` (${priceChange.changes} changes in 7 days)` : ""
+            }`,
+          }}
+        />
       )}
 
       {reward.grants?.length > 0 && (
