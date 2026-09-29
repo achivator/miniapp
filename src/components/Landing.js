@@ -445,8 +445,8 @@ export function Landing({ locale }) {
             </Benefit>
             <Benefit icon={<Coins className="h-5 w-5" />} title={L("Бюджет под контролем", "A budget you control")}>
               {L(
-                "Платите ровно столько, сколько положили в пул. Пополнять можно когда угодно, остаток — вывести обратно. Дневной лимит выплат не даст пулу опустеть за один день.",
-                "You pay out exactly what you put in the pool. Top it up any time, withdraw what is left. A daily payout limit keeps the pool from draining in a single day.",
+                "Платите ровно столько, сколько положили в пул, и сами решаете, сколько жетонов стоит балл. Пополнять можно когда угодно, остаток — вывести обратно. Дневной лимит выплат не даст пулу опустеть за один день.",
+                "You pay out exactly what you put in the pool, and you decide how many jettons a point is worth. Top it up any time, withdraw what is left. A daily payout limit keeps the pool from draining in a single day.",
               )}
             </Benefit>
             <Benefit icon={<Medal className="h-5 w-5" />} title={L("Награды вручную", "Manual rewards")}>
@@ -515,8 +515,8 @@ export function Landing({ locale }) {
               [
                 L("Выплата", "Payout"),
                 L(
-                  `Участник жмёт «Claim» в мини-приложении. Сервер выписывает одноразовый подписанный чек, контракт пула проверяет подпись и лимит и отправляет жетоны прямо в кошелёк участника. Курс: 1 балл = ${fmt(rate)} жетона.`,
-                  `The member taps “Claim” in the mini app. The server issues a single-use signed voucher; the pool contract checks the signature and the limit and sends the jettons straight to the member's wallet. Rate: 1 point = ${fmt(rate)} jetton.`,
+                  `Участник жмёт «Claim» в мини-приложении. Сервер выписывает одноразовый подписанный чек, контракт пула проверяет подпись и лимит и отправляет жетоны прямо в кошелёк участника. Курс по умолчанию: 1 балл = ${fmt(rate)} жетона — владелец чата может задать свой.`,
+                  `The member taps “Claim” in the mini app. The server issues a single-use signed voucher; the pool contract checks the signature and the limit and sends the jettons straight to the member's wallet. Default rate: 1 point = ${fmt(rate)} jetton — the chat owner can set their own.`,
                 ),
               ],
             ].map(([title, body], i) => (

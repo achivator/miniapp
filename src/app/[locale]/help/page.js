@@ -309,7 +309,8 @@ function Guide({ locale }) {
           </li>
         </Steps>
         <Done label={done}>
-          {L("бот написал в группе приветствие", "the bot posted its greeting in the group:")} {open}Hello! I&apos;m the Achivator Bot…
+          {L("бот написал в группе приветствие", "the bot posted its greeting in the group:")} {open}
+          {L("Привет! Я Achivator Bot…", "Hello! I'm the Achivator Bot…")}
           {close}.
         </Done>
       </Step>
@@ -334,7 +335,9 @@ function Guide({ locale }) {
           )}
         </p>
         <Done label={done}>
-          {L("бот ответил", "the bot replied")} {open}Thank you for granting me admin rights!…{close}.
+          {L("бот ответил", "the bot replied")} {open}
+          {L("Спасибо за права администратора!…", "Thank you for granting me admin rights!…")}
+          {close}.
         </Done>
       </Step>
 
@@ -344,15 +347,16 @@ function Guide({ locale }) {
           <div className="space-y-1">
             <Cmd>/verify@achivator_bot</Cmd>
             <p className="text-hint">
-              {L("Подтверждает, что вы создатель чата. Бот ответит", "Confirms you are the chat's creator. The bot replies")} {open}Verified. You are
-              creator.{close}
+              {L("Подтверждает, что вы создатель чата. Бот ответит", "Confirms you are the chat's creator. The bot replies")} {open}
+              {L("Подтверждено: вы создатель.", "Verified. You are creator.")}
+              {close}
             </p>
           </div>
           <div className="space-y-1">
             <Cmd>{L("/jetton EQ…адрес_жетона", "/jetton EQ…jetton_address")}</Cmd>
             <p className="text-hint">
               {L(
-                "Привязывает жетон из шага 3 как награду чата. Бот ответит «Reward jetton set: …». Команда",
+                "Привязывает жетон из шага 3 как награду чата. Бот ответит «Жетон для наград задан: …». Команда",
                 "Sets the jetton from step 3 as the chat's reward. The bot replies “Reward jetton set: …”.",
               )}{" "}
               <Cmd>/jetton</Cmd> {L("без адреса покажет текущий жетон.", "without an address shows the current jetton.")}
@@ -483,6 +487,22 @@ function Guide({ locale }) {
             {L(", чтобы не ждать.", " so you don't have to wait.")}
           </p>
           <p>
+            <b>{L("Цена балла.", "Point price.")}</b> {L("На странице пула, в блоке", "On the pool page, the")}{" "}
+            <Ui>Point price</Ui>{" "}
+            {L(
+              "задаётся, сколько жетонов стоит один балл (по умолчанию — курс платформы). Новая цена действует со следующей выплаты, в том числе для уже накопленных баллов; каждое изменение участники видят в мини-приложении в течение 7 дней.",
+              "block sets how many jettons one point is worth (the platform rate by default). A new price applies from the next claim, including to points already earned; members see every change in the mini app for 7 days.",
+            )}
+          </p>
+          <p>
+            <b>{L("Язык бота.", "Bot language.")}</b>{" "}
+            {L(
+              "Бот отвечает на языке Telegram того, кто ему пишет. Чтобы закрепить язык для всего чата, создатель или админ отправляет",
+              "The bot answers in the Telegram language of whoever writes to it. To fix one language for the whole chat, the creator or an admin sends",
+            )}{" "}
+            <Cmd>/lang ru</Cmd> {L("или", "or")} <Cmd>/lang en</Cmd>.
+          </p>
+          <p>
             <b>{L("Как участники забирают награду.", "How members claim.")}</b>{" "}
             {L("В мини-приложении, кнопкой", "In the mini app, with the")} <Ui>Claim</Ui>
             {L(
@@ -524,7 +544,7 @@ function Guide({ locale }) {
               <Cmd>/jetton@achivator_bot …</Cmd>.
             </p>
           </Faq>
-          <Faq q={L("Бот пишет «I cannot see who sent this»", "The bot says “I cannot see who sent this”")}>
+          <Faq q={L("Бот пишет «Я не вижу, кто это отправил»", "The bot says “I cannot see who sent this”")}>
             <p>
               {L(
                 "Вы пишете анонимно или от имени канала. Отключите «Анонимность» в своих правах администратора и отправьте команду от своего имени.",
@@ -532,7 +552,7 @@ function Guide({ locale }) {
               )}
             </p>
           </Faq>
-          <Faq q={`${open}Only the chat creator can…${close}`}>
+          <Faq q={L("«Задать жетон для наград может только создатель чата»", "“Only the chat creator can set the reward jetton”")}>
             <p>
               {L(
                 "Привязать жетон и управлять пулом может только создатель группы. Остальные админы могут начислять баллы командой",
