@@ -12,7 +12,6 @@ const OP = {
     SetPoolBackendKey: 3179849332,
     CreatePool: 1770470659,
     MintAchievement: 4155708920, // AchievementRegistry
-    CollectFee: 3365466947,
 };
 
 // Voucher kinds. The backend never signs a bare voucher cell: it signs
@@ -20,7 +19,7 @@ const OP = {
 // where target is the contract that verifies it. A voucher can therefore not
 // be replayed as another kind or against another pool/registry.
 const VOUCHER_TAG = {
-    Deposit: 0x44455031, // "DEP1", target = chat pool
+    Deposit: 0x44455032, // "DEP2", target = chat pool
     Claim: 0x434c4d31, // "CLM1", target = chat pool
     Admin: 0x41444d31, // "ADM1", target = chat pool
     Register: 0x52454731, // "REG1", target = achievement registry
@@ -28,15 +27,18 @@ const VOUCHER_TAG = {
 };
 
 // TON amounts attached to outbound messages (nanotons, decimal strings).
+// No platform fee anywhere: this is gas and storage, and every contract sends
+// back what it does not spend.
 const GAS = {
-    createPoolTon: '300000000', // 0.3, matches scripts/createPool.ts (contract minimum: 0.15)
-    depositTransferGas: '100000000', // 0.1, extra for the transfer processing
-    depositForwardExtra: '150000000', // 0.15, notification gas on top of the fee
-    claimTon: '150000000', // 0.15, matches scripts/claim.ts (contract minimum: 0.05)
+    createPoolTon: '300000000', // 0.3 (contract minimum: 0.15): poolReserveTon stays on the pool, the rest comes back
+    poolReserveTon: '100000000', // 0.1, PoolDeployValue: the pool's own storage reserve, not a fee
+    depositTransferGas: '100000000', // 0.1, jetton transfer gas; the jetton wallet returns the rest
+    depositForward: '150000000', // 0.15 to the pool for the notification (contract minimum: 0.02); the pool returns the rest
+    claimTon: '150000000', // 0.15, matches scripts/claim.ts (contract minimum: 0.052); the rest comes back
     withdrawTon: '150000000', // contract minimum: 0.05
-    setAdminTon: '50000000', // 0.05
+    setAdminTon: '50000000', // 0.05; the pool returns the rest
     adminControlTon: '50000000', // 0.05, pause / limit / key; the rest comes back
-    mintTon: '150000000', // 0.15: 0.01 fee + 0.05 to the NFT + gas; the registry refunds the rest
+    mintTon: '150000000', // 0.15: 0.004 storage rent + 0.05 to the NFT + gas; the registry refunds the rest
 };
 
 const SECONDS = {

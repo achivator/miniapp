@@ -9,14 +9,12 @@ function toAddress(value) {
 // DepositVoucher layout MUST match storeDepositVoucher in the compiled
 // ChatPool bindings and the manual parse in contracts/chat_pool.tact:
 // int64 chatId, address jettonMaster, address expectedJettonWallet,
-// uint16 tier, coins feeTon, uint64 expiry.
-function buildDepositVoucherCell({ chatId, jettonMaster, expectedJettonWallet, tier, feeTon, expiry }) {
+// uint64 expiry.
+function buildDepositVoucherCell({ chatId, jettonMaster, expectedJettonWallet, expiry }) {
     return beginCell()
         .storeInt(BigInt(chatId), 64)
         .storeAddress(toAddress(jettonMaster))
         .storeAddress(toAddress(expectedJettonWallet))
-        .storeUint(BigInt(tier), 16)
-        .storeCoins(BigInt(feeTon))
         .storeUint(BigInt(expiry), 64)
         .endCell();
 }

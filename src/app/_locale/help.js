@@ -232,8 +232,8 @@ function Guide({ locale }) {
         </Steps>
         <p className="text-hint">
           {L(
-            "На что уйдут TON: выпуск жетона, активация пула (0,3 TON), назначение админ-кошелька (0,05 TON) и каждое пополнение пула (около 0,35 TON: комиссия и газ). 2 TON хватит с запасом, а если закончатся — просто запросите ещё.",
-            "What the TON is for: issuing the jetton, activating the pool (0.3 TON), setting the admin wallet (0.05 TON) and each pool top-up (about 0.35 TON: fee and gas). 2 TON is plenty, and if you run out, just ask for more.",
+            "На что уйдут TON: выпуск жетона, активация пула (кошелёк отправит 0,3 TON, 0,1 TON останутся на контракте пула, остальное вернётся), назначение админ-кошелька (0,05 TON) и газ каждого пополнения пула (кошелёк отправит 0,25 TON, неизрасходованное вернётся). Комиссии Achivator в TON нет. 2 TON хватит с запасом, а если закончатся — просто запросите ещё.",
+            "What the TON is for: issuing the jetton, activating the pool (your wallet sends 0.3 TON, 0.1 TON stays on the pool contract, the rest comes back), setting the admin wallet (0.05 TON) and the gas of each pool top-up (your wallet sends 0.25 TON, what is not spent comes back). Achivator takes no fee in TON. 2 TON is plenty, and if you run out, just ask for more.",
           )}
         </p>
         <Done label={done}>
@@ -394,7 +394,10 @@ function Guide({ locale }) {
           </li>
           <li>
             {L("Нажмите", "Tap")} <Ui>{L("Активировать пул", "Activate pool")}</Ui>{" "}
-            {L("и подтвердите в кошельке 0,3 TON. Это разовый платёж.", "and confirm 0.3 TON in your wallet. It's a one-off payment.")}
+            {L(
+              "и подтвердите в кошельке 0,3 TON. Это разовая операция: 0,1 TON останутся на контракте пула на оплату его хранения в сети, остальное за вычетом газа вернётся.",
+              "and confirm 0.3 TON in your wallet. It's a one-off: 0.1 TON stays on the pool contract to pay its network storage, the rest comes back minus gas.",
+            )}
           </li>
         </Steps>
         <Done label={done}>
@@ -439,8 +442,8 @@ function Guide({ locale }) {
           <li>
             {L("Нажмите", "Tap")} <Ui>{L("Пополнить пул", "Top up pool")}</Ui>{" "}
             {L(
-              "и подтвердите. В транзакцию входит комиссия пополнения (0,1 TON для чатов до 1000 участников) и газ.",
-              "and confirm. The transaction includes the top-up fee (0.1 TON for chats under 1,000 members) and gas.",
+              "и подтвердите. В транзакцию входит только газ сети, комиссии нет; неизрасходованные TON вернутся.",
+              "and confirm. The transaction carries only network gas, no fee; the TON that is not spent comes back.",
             )}
           </li>
         </Steps>

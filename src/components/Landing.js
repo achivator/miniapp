@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getTonConfig, tierForMembers } from "@/lib/ton/config";
+import { getTonConfig } from "@/lib/ton/config";
 import { GAS } from "@/lib/ton/constants";
 import {
   ArrowDown,
@@ -23,7 +23,7 @@ import { LangSwitch } from "./LangSwitch";
 // versus by trust in the service. A server component rendered once per
 // locale, at /ru and /en (see lib/locale.js); every text sits next to its
 // translation via L(ru, en). Numbers come from the same config the API uses,
-// so the page cannot promise a rate or a fee the backend does not apply.
+// so the page cannot promise a rate or an amount the backend does not apply.
 
 const APP_URL = "https://t.me/achivator_bot/app";
 const ADD_TO_GROUP_URL = "https://t.me/achivator_bot?startgroup=true";
@@ -174,7 +174,7 @@ function ChatMock({ L, fmt, rate }) {
   );
 }
 
-// ---- The scheme: where jettons, points and fees go ----
+// ---- The scheme: where jettons, points and TON go ----
 
 function Node({ icon, title, children, className = "" }) {
   return (
@@ -197,7 +197,7 @@ function Flow({ children }) {
   );
 }
 
-function Scheme({ L, feeRange }) {
+function Scheme({ L }) {
   return (
     <div className="mx-auto max-w-2xl">
       <div className="grid grid-cols-2 gap-3">
@@ -255,10 +255,10 @@ function Scheme({ L, feeRange }) {
       <div className="mt-4 flex items-start gap-3 rounded-2xl border border-dashed border-[color:var(--separator)] p-4 text-[14px] leading-snug">
         <Info className="mt-0.5 h-5 w-5 shrink-0 text-hint" />
         <p className="text-hint">
-          <b className="text-fg">{L("Куда идёт комиссия.", "Where the fee goes.")}</b>{" "}
+          <b className="text-fg">{L("Куда идут TON.", "Where the TON goes.")}</b>{" "}
           {L(
-            `С каждого пополнения пула Achivator берёт фиксированную плату в TON (${feeRange}) — она уходит на мастер-контракт проекта. Из ваших жетонов не удерживается ни одного.`,
-            `Each pool top-up carries a flat Achivator fee in TON (${feeRange}), paid to the project's master contract. Not a single one of your jettons is taken.`,
+            "Только на газ сети и хранение контрактов: Achivator не берёт комиссию ни в TON, ни в жетонах. Что транзакция не израсходовала, контракты возвращают отправителю.",
+            "Only to network gas and contract storage: Achivator takes no fee, in TON or in jettons. Whatever a transaction does not spend, the contracts send back.",
           )}
         </p>
       </div>
@@ -314,27 +314,9 @@ export function Landing({ locale }) {
 
   const cfg = getTonConfig();
   const rate = Number(cfg.jettonsPerPoint);
-  const tiers = cfg.feeTiers;
-  const fees = tiers.map((t) => Number(t.feeTon));
-  const [minFee, maxFee] = [Math.min(...fees), Math.max(...fees)];
-  const feeRange =
-    minFee === maxFee
-      ? `${fmt(minFee)} TON`
-      : L(
-          `от ${fmt(minFee)} до ${fmt(maxFee)} TON в зависимости от размера чата`,
-          `${fmt(minFee)} to ${fmt(maxFee)} TON depending on chat size`,
-        );
   const testnet = cfg.network !== "mainnet";
-  const depositGas = ton(BigInt(GAS.depositTransferGas) + BigInt(GAS.depositForwardExtra));
+  const depositGas = ton(BigInt(GAS.depositTransferGas) + BigInt(GAS.depositForward));
   const setupTon = ton(BigInt(GAS.createPoolTon) + BigInt(GAS.setAdminTon));
-
-  function tierLabel(i) {
-    const from = tiers[i].minMembers;
-    const next = tiers[i + 1]?.minMembers;
-    if (next === undefined) return L(`от ${fmt(from)} участников`, `${fmt(from)}+ members`);
-    if (from === 0) return L(`до ${fmt(next - 1)} участников`, `up to ${fmt(next - 1)} members`);
-    return L(`${fmt(from)}–${fmt(next - 1)} участников`, `${fmt(from)}–${fmt(next - 1)} members`);
-  }
 
   const check = <Check className="mt-0.5 h-5 w-5 shrink-0 text-success" />;
   const trust = <Info className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--gold-text)]" />;
@@ -479,7 +461,7 @@ export function Landing({ locale }) {
             "The bot counts points, your chat's smart contract holds the funds, and members claim them — with their own tap, to their own wallet.",
           )}
         >
-          <Scheme L={L} feeRange={feeRange} />
+          <Scheme L={L} />
 
           <ol className="mx-auto grid max-w-4xl gap-3 pt-4 md:grid-cols-2">
             {[
@@ -568,8 +550,8 @@ export function Landing({ locale }) {
                 </li>
                 <li>
                   {L(
-                    `Платит разово ${setupTon} TON за запуск пула и ${fmt(tierForMembers(800).feeTon)} TON комиссии Achivator за это пополнение, плюс газ сети. Процента с жетонов нет.`,
-                    `Pays ${setupTon} TON once to set up the pool and a ${fmt(tierForMembers(800).feeTon)} TON Achivator fee for this top-up, plus network gas. No cut of the jettons.`,
+                    `Отправляет разово ${setupTon} TON на запуск пула, из них ${ton(GAS.poolReserveTon)} TON остаются на контракте пула, остальное за вычетом газа возвращается. Пополнение стоит только газ сети. Комиссии и процента с жетонов нет.`,
+                    `Sends ${setupTon} TON once to set up the pool: ${ton(GAS.poolReserveTon)} TON stays on the pool contract, the rest comes back minus gas. The top-up costs only network gas. No fee, no cut of the jettons.`,
                   )}
                 </li>
               </ul>
@@ -626,8 +608,8 @@ export function Landing({ locale }) {
               <p className="text-[15px] leading-relaxed text-hint">
                 {L("Установите", "Install")} <Ext href="https://tonkeeper.com">Tonkeeper</Ext>{" "}
                 {L(
-                  "и пополните его на пару TON — на выпуск жетона, активацию пула и комиссии.",
-                  "and put a couple of TON on it — for issuing the jetton, activating the pool and fees.",
+                  "и пополните его на пару TON — на выпуск жетона, активацию пула и газ.",
+                  "and put a couple of TON on it — for issuing the jetton, activating the pool and gas.",
                 )}
                 {testnet &&
                   L(
@@ -681,8 +663,8 @@ export function Landing({ locale }) {
           eyebrow={L("Стоимость", "Pricing")}
           title={L("Кто и за что платит", "Who pays for what")}
           lead={L(
-            "Подписки нет, процента с жетонов нет. Achivator зарабатывает только фиксированную комиссию в TON с пополнений пула. Остальное — газ сети TON, он уходит валидаторам, а не нам.",
-            "No subscription, no cut of the jettons. Achivator earns only a flat TON fee on pool top-ups. Everything else is TON network gas — it goes to validators, not to us.",
+            "Сейчас Achivator ничего не берёт: ни комиссии в TON, ни процента с жетонов. Вы платите только газ сети TON и хранение своих контрактов — это уходит валидаторам, а не нам.",
+            "Right now Achivator charges nothing: no TON fee, no cut of the jettons. You pay only TON network gas and your contracts' storage — that goes to validators, not to us.",
           )}
         >
           <Panel>
@@ -698,27 +680,26 @@ export function Landing({ locale }) {
             <PriceRow
               what={L("Активация пула", "Pool activation")}
               who={L(
-                `Разово. ${ton(100000000)} TON остаётся на счету контракта пула как резерв на хранение, остальное — газ и Achivator.`,
-                `One-off. ${ton(100000000)} TON stays on the pool contract as its storage reserve; the rest is gas and Achivator.`,
+                `Разово. ${ton(GAS.poolReserveTon)} TON остаётся на счету контракта пула как резерв на хранение, остальное за вычетом газа возвращается.`,
+                `One-off. ${ton(GAS.poolReserveTon)} TON stays on the pool contract as its storage reserve; the rest comes back minus gas.`,
               )}
             >
               {ton(GAS.createPoolTon)} TON
             </PriceRow>
-            <PriceRow what={L("Назначение админ-кошелька", "Setting the admin wallet")} who={L("Разово, газ сети.", "One-off, network gas.")}>
+            <PriceRow
+              what={L("Назначение админ-кошелька", "Setting the admin wallet")}
+              who={L("Разово, газ сети. Неизрасходованное возвращается.", "One-off, network gas. What isn't used comes back.")}
+            >
               {ton(GAS.setAdminTon)} TON
             </PriceRow>
             <PriceRow
               what={L("Пополнение пула", "Pool top-up")}
               who={L(
-                `Комиссия Achivator за каждое пополнение, плюс около ${depositGas} TON газа на перевод. С суммы жетонов не берётся ничего.`,
-                `Achivator's fee per top-up, plus about ${depositGas} TON of gas for the transfer. Nothing is taken from the jettons.`,
+                "Только газ на перевод, комиссии нет. Неизрасходованное возвращается, с суммы жетонов не берётся ничего.",
+                "Only gas for the transfer, no fee. What isn't used comes back, and nothing is taken from the jettons.",
               )}
             >
-              {tiers.map((t, i) => (
-                <span key={t.tier} className="block">
-                  {fmt(t.feeTon)} TON <span className="text-[13px] font-normal text-hint">· {tierLabel(i)}</span>
-                </span>
-              ))}
+              {L("до", "up to")} {depositGas} TON
             </PriceRow>
             <PriceRow
               what={L("Пауза, лимит, вывод остатка", "Pause, limit, withdrawal")}
@@ -741,8 +722,8 @@ export function Landing({ locale }) {
           </Panel>
           <p className="text-[14px] leading-relaxed text-hint">
             {L(
-              "Точную сумму каждой транзакции вы видите в кошельке до подтверждения. Комиссию получает проект Achivator: она приходит на его мастер-контракт, и забрать её оттуда может только владелец этого контракта.",
-              "Your wallet shows the exact amount of every transaction before you confirm it. The fee goes to the Achivator project: it lands on its master contract, and only that contract's owner can take it out.",
+              "Точную сумму каждой транзакции вы видите в кошельке до подтверждения. У мастер-контракта и реестра ачивок нет команды вывода TON — даже у владельца.",
+              "Your wallet shows the exact amount of every transaction before you confirm it. The master contract and the achievement registry have no command to pay TON out — not even for their owner.",
             )}
           </p>
         </Section>
@@ -788,6 +769,12 @@ export function Landing({ locale }) {
                     `By default at most ${DAILY_LIMIT_PERCENT}% of the pool a day, or a number you set. Even in the worst case the pool won't empty in a day.`,
                   )}
                 </Guarantee>
+                <Guarantee icon={check} title={L("Никакой комиссии в TON", "No TON fee")}>
+                  {L(
+                    "Контракты берут только газ и плату за хранение того, что вы в них записали, а остальное возвращают. Вывести TON из мастер-контракта или реестра ачивок не может никто.",
+                    "The contracts take only gas and the storage of what you write to them, and send the rest back. No one can take TON out of the master contract or the achievement registry.",
+                  )}
+                </Guarantee>
                 <Guarantee icon={check} title={L("Одноразовые чеки", "Single-use vouchers")}>
                   {L(
                     "Каждый чек на выплату подписан для конкретного пула, действует час и принимается один раз.",
@@ -818,12 +805,6 @@ export function Landing({ locale }) {
                   {L(
                     "Участники не смогут забрать ещё не выплаченные баллы. Но жетоны из пула вы выведете сами, напрямую через контракт, — наш сервер для этого не нужен.",
                     "Members won't be able to claim points not yet paid out. But you withdraw the pool's jettons yourself, straight through the contract — our server isn't needed for that.",
-                  )}
-                </Guarantee>
-                <Guarantee icon={trust} title={L("Размер комиссии назначает сервис", "The service sets the fee")}>
-                  {L(
-                    "Контракт его не ограничивает. Сумма всегда видна в кошельке до подписи, а тарифы опубликованы выше.",
-                    "The contract doesn't cap it. The amount is always shown in your wallet before you sign, and the rates are published above.",
                   )}
                 </Guarantee>
               </ul>

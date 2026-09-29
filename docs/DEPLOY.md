@@ -31,10 +31,9 @@ Pull requests run step 1 only.
      `MATURATION_DAYS`, `ACHIEVEMENT_REGISTRY`, `ACHIEVEMENT_TEMPLATES`,
      `IPFS_GATEWAY`.
    - Tick **"Is Build Variable?"** for `NEXT_PUBLIC_MASTER_ADDRESS`,
-     `NEXT_PUBLIC_TON_NETWORK`, `JETTONS_PER_POINT` and `FEE_TIERS`. The
+     `NEXT_PUBLIC_TON_NETWORK` and `JETTONS_PER_POINT`. The
      `NEXT_PUBLIC_*` values are inlined into the browser bundle, and the
-     landing page is prerendered at build time with the rate, fee tiers and
-     network. Without the tick the landing page shows the defaults from the
+     landing page is prerendered at build time with the rate and network. Without the tick the landing page shows the defaults from the
      code, whatever the runtime says.
    - Never set `DEV_TELEGRAM_USER_ID` in production. `next start` runs with
      `NODE_ENV=production`, which disables it anyway.

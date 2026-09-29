@@ -141,8 +141,8 @@ function PoolManager({ chatId }) {
       setNotice({
         kind: "info",
         text: L(
-          `Подтвердите в кошельке (включая ${formatTon(tx.amount)} TON на комиссии).`,
-          `Confirm in your wallet (includes ${formatTon(tx.amount)} TON for fees).`,
+          `Подтвердите в кошельке. ${formatTon(tx.amount)} TON — это газ сети, неизрасходованное вернётся.`,
+          `Confirm in your wallet. The ${formatTon(tx.amount)} TON is network gas; what is not spent comes back.`,
         ),
       });
       await send(tx);
@@ -278,9 +278,6 @@ function PoolManager({ chatId }) {
           {info.pool_address && (
             <Row label={L("Контракт пула", "Pool contract")}>{shortenAddress(info.pool_address, 5)}</Row>
           )}
-          <Row label={L(`Комиссия (тариф ${info.fee.tier})`, `Deposit fee · tier ${info.fee.tier}`)}>
-            {t.decimal(info.fee.fee_ton)} TON
-          </Row>
           {info.member_count !== null && <Row label={L("Участники", "Members")}>{t.num(info.member_count)}</Row>}
           {info.active && (
             <Row label={L("Админ-кошелёк", "Admin wallet")}>
@@ -329,8 +326,8 @@ function PoolManager({ chatId }) {
           <Card className="space-y-3">
             <p className="text-[15px] leading-snug text-hint">
               {L(
-                `Разверните пул наград этого чата — контракт, из которого жетоны может вывести только вы (и участники по чекам, подписанным ботом). Разово, ${formatTon(info.create_pool_ton)} TON.`,
-                `Deploy this chat's reward pool — a contract only you (and member claims signed by the bot) can move jettons out of. One-time, ${formatTon(info.create_pool_ton)} TON.`,
+                `Разверните пул наград этого чата — контракт, из которого жетоны может вывести только вы (и участники по чекам, подписанным ботом). Разово: кошелёк отправит ${formatTon(info.create_pool_ton)} TON, ${formatTon(info.pool_reserve_ton)} TON останутся на контракте пула на оплату его хранения в сети, остальное за вычетом газа вернётся.`,
+                `Deploy this chat's reward pool — a contract only you (and member claims signed by the bot) can move jettons out of. One-time: your wallet sends ${formatTon(info.create_pool_ton)} TON, ${formatTon(info.pool_reserve_ton)} TON stays on the pool contract to pay its network storage, and the rest comes back minus gas.`,
               )}
             </p>
             <Button className="w-full" busy={busy === "activate"} disabled={Boolean(busy)} onClick={activate}>
