@@ -1,7 +1,7 @@
 import { getCollection } from "@/lib/mongo";
-import { getTonConfig } from "@/lib/ton/config";
 import { fetchJettonMetadata } from "@/lib/ton/rpc";
-import { pointsToJettons } from "@/lib/ton/amounts";
+import { pointPriceFor } from "@/lib/point-price";
+import { chatDebt, chatLots } from "@/lib/lots";
 import { claimSettingsOf } from "@/lib/claim-rules";
 import { nowSeconds } from "@/lib/rewards";
 import {
@@ -36,7 +36,6 @@ export async function GET(request) {
     const userFilter = /^\d+$/.test(query) ? { user_id: Number(query) } : {};
 
     const now = nowSeconds();
-    const cfg = getTonConfig();
     const settings = claimSettingsOf(chat);
     const rewardsCol = await getCollection("rewards");
     const claimsCol = await getCollection("claims");
@@ -103,9 +102,15 @@ export async function GET(request) {
     }
     const achievementsByUser = new Map(achievementCounts.map((row) => [row._id, row.count]));
 
+    // Valued like a claim (lib/lot-pricing.js): oldest points first, points
+    // that were still maturing when a decrease took effect at the price from
+    // before it. One read of every member's lots serves the page and the
+    // chat total. null without a jetton or its decimals.
     const decimals = metadata?.decimals ?? null;
-    const toUnits = (points) =>
-      chat.jetton_master && decimals !== null ? pointsToJettons(points, cfg.jettonsPerPoint, decimals).toString() : null;
+    const valued = chat.jetton_master && decimals !== null;
+    const lots = valued ? await chatLots(chat, null) : null;
+    const debt = valued ? await chatDebt(chat, decimals, new Date(), lots) : null;
+    const owedUnits = (record) => (valued ? lots.owed(record, decimals).units.toString() : null);
 
     const totals = totalsRows[0] || { members: 0, points: 0, claimed_points: 0, owed: 0 };
 
@@ -116,7 +121,7 @@ export async function GET(request) {
       jetton: chat.jetton_master
         ? { master: chat.jetton_master, symbol: metadata?.symbol ?? null, decimals }
         : null,
-      jettons_per_point: cfg.jettonsPerPoint,
+      jettons_per_point: pointPriceFor(chat),
       maturation_days: settings.maturation_days,
       totals: {
         members: totals.members,
@@ -124,7 +129,7 @@ export async function GET(request) {
         claimed_points: totals.claimed_points,
         // what the pool still owes if everyone claimed everything (matured or not)
         owed_points: totals.owed,
-        owed_units: toUnits(totals.owed),
+        owed_units: debt ? debt.units.toString() : null,
         payouts: serializeSummary(summarizeClaims(chatClaims, chat.jetton_master, now)),
       },
       sort,
@@ -145,7 +150,7 @@ export async function GET(request) {
           points,
           claimed_points: claimed,
           owed_points: r.owed,
-          owed_units: toUnits(r.owed),
+          owed_units: owedUnits(r),
           maturing_points: maturingPoints,
           available_points: Math.max(0, points - claimed - maturingPoints),
           achievements: achievementsByUser.get(r.user_id) || 0,

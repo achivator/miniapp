@@ -1,5 +1,5 @@
 // Whether this page load is a Telegram Mini App launch. Decided before the
-// first paint by an inline script (see layout.js), so the web landing never
+// first paint by an inline script (see app/document.js), so the web landing never
 // flashes inside Telegram and the Telegram app never renders for search
 // engines. Mirrors @tma.js/sdk retrieveLaunchParams: the launch params are in
 // the URL hash, in the first navigation entry after a reload with a changed

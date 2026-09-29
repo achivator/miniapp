@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { translateError } from "@/lib/i18n";
+import { useLocale } from "@/lib/use-locale";
 import { Alert, Check, Info } from "./icons";
 
 export function cx(...parts) {
@@ -81,8 +83,10 @@ export function Chip({ tone = "accent", icon, children }) {
   );
 }
 
-// Inline status line under an action (info / ok / err).
+// Inline status line under an action (info / ok / err). Errors usually come
+// from the API in English: known ones are shown in the app's language.
 export function Notice({ notice }) {
+  const locale = useLocale();
   if (!notice) return null;
   const map = {
     ok: { cls: "tint-success text-success", Icon: Check },
@@ -93,7 +97,7 @@ export function Notice({ notice }) {
   return (
     <div className={cx("flex items-start gap-2 rounded-xl px-3 py-2.5 text-[13px] leading-snug", cls)} role="status">
       <Icon className="mt-px h-4 w-4 shrink-0" />
-      <span>{notice.text}</span>
+      <span>{notice.kind === "err" ? translateError(notice.text, locale) : notice.text}</span>
     </div>
   );
 }

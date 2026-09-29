@@ -21,7 +21,7 @@ import { LangSwitch } from "./LangSwitch";
 // Landing page for visitors from the web: what Achivator gives a chat owner,
 // how the money flows, what it costs and what is guaranteed by the contracts
 // versus by trust in the service. A server component rendered once per
-// locale (the page shows one, see lib/locale.js); every text sits next to its
+// locale, at /ru and /en (see lib/locale.js); every text sits next to its
 // translation via L(ru, en). Numbers come from the same config the API uses,
 // so the page cannot promise a rate or a fee the backend does not apply.
 
@@ -167,7 +167,7 @@ function ChatMock({ L, fmt, rate }) {
               <span className="text-[14px] font-semibold opacity-85">≈ {fmt(month * rate)} FRONT</span>
             </p>
           </div>
-          <span className="rounded-xl bg-white/25 px-3 py-2 text-[13px] font-semibold">Claim</span>
+          <span className="rounded-xl bg-white/25 px-3 py-2 text-[13px] font-semibold">{L("Забрать", "Claim")}</span>
         </div>
       </div>
     </div>
@@ -242,7 +242,7 @@ function Scheme({ L, feeRange }) {
           </span>
         </div>
       </Node>
-      <Flow>{L("участник жмёт «Claim» — жетоны уходят ему", "the member taps “Claim” and gets the jettons")}</Flow>
+      <Flow>{L("участник жмёт «Забрать» — жетоны уходят ему", "the member taps “Claim” and gets the jettons")}</Flow>
       <Node
         icon={<IconTile tone="tint-success text-success"><Check className="h-5 w-5" /></IconTile>}
         title={L("Кошелёк участника", "Member's wallet")}
@@ -310,8 +310,7 @@ export function Landing({ locale }) {
   const numbers = new Intl.NumberFormat(en ? "en-US" : "ru-RU", { maximumFractionDigits: 4 });
   const fmt = (n) => numbers.format(Number(n));
   const ton = (nanotons) => fmt(Number(nanotons) / 1e9);
-  // Section anchors are per locale: both translations are in the DOM.
-  const id = (name) => `${locale}-${name}`;
+  const help = `/${locale}/help`;
 
   const cfg = getTonConfig();
   const rate = Number(cfg.jettonsPerPoint);
@@ -347,23 +346,23 @@ export function Landing({ locale }) {
         style={{ background: "color-mix(in srgb, var(--bg) 85%, transparent)" }}
       >
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 md:px-6">
-          <Link href="/" className="flex items-center gap-2" aria-label="Achivator">
+          <Link href={`/${locale}`} className="flex items-center gap-2" aria-label="Achivator">
             <span className="hero-gradient flex h-8 w-8 items-center justify-center rounded-[10px]">
               <Medal className="h-[18px] w-[18px]" />
             </span>
             <span className="text-[17px] font-bold tracking-tight">Achivator</span>
           </Link>
           <nav className="flex items-center gap-3 text-[14px] font-medium sm:gap-4">
-            <a href={`#${id("how")}`} className="hidden text-hint hover:text-fg md:inline">
+            <a href="#how" className="hidden text-hint hover:text-fg md:inline">
               {L("Как работает", "How it works")}
             </a>
-            <a href={`#${id("pricing")}`} className="hidden text-hint hover:text-fg md:inline">
+            <a href="#pricing" className="hidden text-hint hover:text-fg md:inline">
               {L("Стоимость", "Pricing")}
             </a>
-            <a href={`#${id("guarantees")}`} className="hidden text-hint hover:text-fg md:inline">
+            <a href="#guarantees" className="hidden text-hint hover:text-fg md:inline">
               {L("Гарантии", "Guarantees")}
             </a>
-            <LangSwitch />
+            <LangSwitch locale={locale} />
             <a href={APP_URL} className="rounded-full bg-accent px-3.5 py-1.5 font-semibold text-accent-fg active:opacity-80">
               {L("Открыть", "Open")}
             </a>
@@ -386,8 +385,8 @@ export function Landing({ locale }) {
               )}
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <PrimaryCta href="/help">{L("Подключить свой чат", "Connect your chat")}</PrimaryCta>
-              <SecondaryCta href={`#${id("how")}`}>{L("Как это работает", "How it works")}</SecondaryCta>
+              <PrimaryCta href={help}>{L("Подключить свой чат", "Connect your chat")}</PrimaryCta>
+              <SecondaryCta href="#how">{L("Как это работает", "How it works")}</SecondaryCta>
             </div>
             <ul className="flex flex-wrap gap-x-5 gap-y-2 text-[14px] text-hint">
               <li className="flex items-center gap-1.5">
@@ -420,7 +419,7 @@ export function Landing({ locale }) {
 
         {/* Why */}
         <Section
-          id={id("why")}
+          id="why"
           eyebrow={L("Зачем это владельцу чата", "Why chat owners use it")}
           title={L(
             "Чат живёт, пока в нём отвечают. Achivator делает так, чтобы отвечать было выгодно",
@@ -446,8 +445,8 @@ export function Landing({ locale }) {
             </Benefit>
             <Benefit icon={<Coins className="h-5 w-5" />} title={L("Бюджет под контролем", "A budget you control")}>
               {L(
-                "Платите ровно столько, сколько положили в пул. Пополнять можно когда угодно, остаток — вывести обратно. Дневной лимит выплат не даст пулу опустеть за один день.",
-                "You pay out exactly what you put in the pool. Top it up any time, withdraw what is left. A daily payout limit keeps the pool from draining in a single day.",
+                "Платите ровно столько, сколько положили в пул, и сами решаете, сколько жетонов стоит балл. Пополнять можно когда угодно, остаток — вывести обратно. Дневной лимит выплат не даст пулу опустеть за один день.",
+                "You pay out exactly what you put in the pool, and you decide how many jettons a point is worth. Top it up any time, withdraw what is left. A daily payout limit keeps the pool from draining in a single day.",
               )}
             </Benefit>
             <Benefit icon={<Medal className="h-5 w-5" />} title={L("Награды вручную", "Manual rewards")}>
@@ -472,7 +471,7 @@ export function Landing({ locale }) {
 
         {/* How it works */}
         <Section
-          id={id("how")}
+          id="how"
           eyebrow={L("Как это работает", "How it works")}
           title={L("Три участника: вы, чат и контракт", "Three parties: you, the chat and the contract")}
           lead={L(
@@ -516,8 +515,8 @@ export function Landing({ locale }) {
               [
                 L("Выплата", "Payout"),
                 L(
-                  `Участник жмёт «Claim» в мини-приложении. Сервер выписывает одноразовый подписанный чек, контракт пула проверяет подпись и лимит и отправляет жетоны прямо в кошелёк участника. Курс: 1 балл = ${fmt(rate)} жетона.`,
-                  `The member taps “Claim” in the mini app. The server issues a single-use signed voucher; the pool contract checks the signature and the limit and sends the jettons straight to the member's wallet. Rate: 1 point = ${fmt(rate)} jetton.`,
+                  `Участник жмёт «Забрать» в мини-приложении. Сервер выписывает одноразовый подписанный чек, контракт пула проверяет подпись и лимит и отправляет жетоны прямо в кошелёк участника. Курс по умолчанию: 1 балл = ${fmt(rate)} жетона — владелец чата может задать свой.`,
+                  `The member taps “Claim” in the mini app. The server issues a single-use signed voucher; the pool contract checks the signature and the limit and sends the jettons straight to the member's wallet. Default rate: 1 point = ${fmt(rate)} jetton — the chat owner can set their own.`,
                 ),
               ],
             ].map(([title, body], i) => (
@@ -536,7 +535,7 @@ export function Landing({ locale }) {
 
         {/* Example */}
         <Section
-          id={id("example")}
+          id="example"
           eyebrow={L("Пример", "Example")}
           title={L("Клуб фронтендеров на 800 человек", "A frontend club with 800 members")}
           lead={L(
@@ -594,7 +593,7 @@ export function Landing({ locale }) {
                 <li>
                   {L("За месяц набирается", "Over a month she collects")} <b>{L(`${fmt(900)} баллов`, `${fmt(900)} points`)}</b>.{" "}
                   {L(
-                    `Через ${MATURATION_DAYS} дня дозревания она жмёт «Claim» — и`,
+                    `Через ${MATURATION_DAYS} дня дозревания она жмёт «Забрать» — и`,
                     `After ${MATURATION_DAYS} days of maturation she taps “Claim” and`,
                   )}{" "}
                   <b>{fmt(900 * rate)} FRONT</b> {L("у неё в кошельке.", "are in her wallet.")}
@@ -612,7 +611,7 @@ export function Landing({ locale }) {
 
         {/* Quick start */}
         <Section
-          id={id("start")}
+          id="start"
           eyebrow={L("Как подключить", "Getting started")}
           title={L("Четыре шага и 15–20 минут", "Four steps, 15–20 minutes")}
           lead={L(
@@ -664,21 +663,21 @@ export function Landing({ locale }) {
               <p className="text-[15px] leading-relaxed text-hint">
                 {L("В", "In the")} <Ext href={APP_URL}>{L("мини-приложении", "mini app")}</Ext>{" "}
                 {L(
-                  "→ «My chats» → ваш чат: «Activate pool», затем «Make this wallet the admin» и «Top up» — введите, сколько жетонов перевести. Подтверждаете каждое действие в кошельке.",
+                  "→ «Мои чаты» → ваш чат: «Активировать пул», затем «Сделать этот кошелёк админом» и «Пополнение» — введите, сколько жетонов перевести. Подтверждаете каждое действие в кошельке.",
                   "→ “My chats” → your chat: “Activate pool”, then “Make this wallet the admin” and “Top up” with the amount of jettons. You confirm each step in your wallet.",
                 )}
               </p>
             </Panel>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <PrimaryCta href="/help">{L("Пошаговая инструкция", "Step-by-step guide")}</PrimaryCta>
+            <PrimaryCta href={help}>{L("Пошаговая инструкция", "Step-by-step guide")}</PrimaryCta>
             <SecondaryCta href={ADD_TO_GROUP_URL}>{L("Добавить бота в группу", "Add the bot to a group")}</SecondaryCta>
           </div>
         </Section>
 
         {/* Pricing */}
         <Section
-          id={id("pricing")}
+          id="pricing"
           eyebrow={L("Стоимость", "Pricing")}
           title={L("Кто и за что платит", "Who pays for what")}
           lead={L(
@@ -733,7 +732,7 @@ export function Landing({ locale }) {
             <PriceRow
               what={L("Выплата участнику", "Member payout")}
               who={L(
-                "Газ платит сам участник, при нажатии «Claim». Неизрасходованное возвращается ему вместе с жетонами.",
+                "Газ платит сам участник, при нажатии «Забрать». Неизрасходованное возвращается ему вместе с жетонами.",
                 "The member pays the gas when tapping “Claim”. What isn't used comes back with the jettons.",
               )}
             >
@@ -750,7 +749,7 @@ export function Landing({ locale }) {
 
         {/* Guarantees */}
         <Section
-          id={id("guarantees")}
+          id="guarantees"
           eyebrow={L("Гарантии", "Guarantees")}
           title={L("Что зашито в контракт, а что держится на доверии", "What the contract enforces, and what rests on trust")}
           lead={L(
@@ -842,7 +841,7 @@ export function Landing({ locale }) {
 
         {/* Anti-farming */}
         <Section
-          id={id("antifraud")}
+          id="antifraud"
           eyebrow={L("Защита от накруток", "Anti-cheating")}
           title={L("Почему баллы не накрутить твинками", "Why alt accounts can't farm points")}
           lead={L(
@@ -899,7 +898,7 @@ export function Landing({ locale }) {
 
         {/* Achievements */}
         <Section
-          id={id("achievements")}
+          id="achievements"
           eyebrow={L("Бонус", "Bonus")}
           title={L("Ачивки за стиль общения — с первой минуты", "Achievements for how people chat — from minute one")}
           lead={L(
@@ -924,7 +923,7 @@ export function Landing({ locale }) {
         </Section>
 
         {/* FAQ */}
-        <Section id={id("faq")} eyebrow={L("Вопросы", "FAQ")} title={L("Частые вопросы", "Frequently asked questions")}>
+        <Section id="faq" eyebrow={L("Вопросы", "FAQ")} title={L("Частые вопросы", "Frequently asked questions")}>
           <Panel className="py-1">
             <Faq q={L("Это криптоинвестиция? Жетон вырастет в цене?", "Is this a crypto investment? Will the jetton go up?")}>
               <p>
@@ -948,7 +947,7 @@ export function Landing({ locale }) {
                   "Владельцу — на уровне «установить кошелёк и подтвердить транзакцию»: пошаговая",
                   "As an owner, only enough to install a wallet and confirm a transaction: the step-by-step",
                 )}{" "}
-                <Link href="/help" className="font-medium text-link">
+                <Link href={help} className="font-medium text-link">
                   {L("инструкция", "guide")}
                 </Link>{" "}
                 {L(
@@ -1015,7 +1014,7 @@ export function Landing({ locale }) {
               </p>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Link
-                  href="/help"
+                  href={help}
                   className="inline-flex h-12 items-center justify-center rounded-xl bg-white px-6 text-[15px] font-semibold text-[#1d4ed8] active:opacity-85"
                 >
                   {L("Подключить свой чат", "Connect your chat")}
@@ -1035,7 +1034,7 @@ export function Landing({ locale }) {
       <footer className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 border-t border-[color:var(--separator)] px-4 py-6 text-[14px] text-hint md:px-6">
         <span>{L("Achivator · награды и ачивки для Telegram-чатов", "Achivator · rewards and achievements for Telegram chats")}</span>
         <div className="flex flex-wrap gap-4">
-          <Link href="/help" className="hover:text-fg">
+          <Link href={help} className="hover:text-fg">
             {L("Инструкция", "Guide")}
           </Link>
           <a href={CHANNEL_URL} className="hover:text-fg">
@@ -1050,19 +1049,5 @@ export function Landing({ locale }) {
         </div>
       </footer>
     </div>
-  );
-}
-
-// Both translations, server rendered; CSS shows the one picked for the visitor.
-export function BilingualLanding() {
-  return (
-    <>
-      <div data-locale="ru" lang="ru">
-        <Landing locale="ru" />
-      </div>
-      <div data-locale="en" lang="en">
-        <Landing locale="en" />
-      </div>
-    </>
   );
 }

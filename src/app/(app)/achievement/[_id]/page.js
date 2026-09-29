@@ -4,14 +4,16 @@ import { useEffect, useState } from "react";
 import { useInitDataRaw } from "@tma.js/sdk-react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { apiFetch, sendTonTransaction, sleep } from "@/lib/client-api";
+import { formatDecimal, intlLocale } from "@/lib/i18n";
+import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
 import { AchievementArt, Button, Card, ChatAvatar, Chip, Notice, Skeleton, titleCase } from "@/components/ui";
 import { Check, Medal, Sparkles } from "@/components/icons";
 
-function formatTon(nanotons) {
+function formatTon(nanotons, locale) {
   const v = BigInt(nanotons || 0);
   const frac = (v % 1000000000n).toString().padStart(9, "0").replace(/0+$/, "");
-  return `${v / 1000000000n}${frac ? `.${frac}` : ""}`;
+  return formatDecimal(`${v / 1000000000n}${frac ? `.${frac}` : ""}`, locale);
 }
 
 // Mints the medal as an NFT through the AchievementRegistry: the backend
@@ -21,6 +23,7 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
   const wallet = useTonAddress();
   const [tonConnectUI] = useTonConnectUI();
   const haptic = useHaptic();
+  const { L, locale } = useI18n();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
   const nft = achievement.nft;
@@ -32,9 +35,9 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
           <Sparkles className="h-5 w-5" />
         </div>
         <div>
-          <p className="font-semibold">Mint as NFT — coming soon</p>
+          <p className="font-semibold">{L("Выпуск NFT — скоро", "Mint as NFT — coming soon")}</p>
           <p className="mt-0.5 text-[14px] leading-snug text-hint">
-            This medal can&apos;t be minted to a TON wallet yet.
+            {L("Эту медаль пока нельзя выпустить в TON-кошелёк.", "This medal can't be minted to a TON wallet yet.")}
           </p>
         </div>
       </Card>
@@ -48,8 +51,10 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
           <Check className="h-5 w-5" />
         </div>
         <div>
-          <p className="font-semibold">Minted</p>
-          <p className="mt-0.5 text-[14px] leading-snug text-hint">This medal is an NFT in your TON wallet.</p>
+          <p className="font-semibold">{L("Выпущено", "Minted")}</p>
+          <p className="mt-0.5 text-[14px] leading-snug text-hint">
+            {L("Эта медаль — NFT в вашем TON-кошельке.", "This medal is an NFT in your TON wallet.")}
+          </p>
         </div>
       </Card>
     );
@@ -61,18 +66,18 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
       return;
     }
     setBusy(true);
-    setNotice({ kind: "info", text: "Preparing the mint…" });
+    setNotice({ kind: "info", text: L("Готовим выпуск…", "Preparing the mint…") });
     try {
       const tx = await apiFetch("/api/mint-voucher", {
         method: "POST",
         initDataRaw,
         body: { achievementId: achievement._id, wallet },
       });
-      setNotice({ kind: "info", text: "Confirm in your wallet." });
+      setNotice({ kind: "info", text: L("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await sendTonTransaction(tonConnectUI, nft.network, [
         { address: tx.to, amount: tx.amount, payload: tx.payload_b64 },
       ]);
-      setNotice({ kind: "info", text: "Minting on-chain…" });
+      setNotice({ kind: "info", text: L("Выпускаем в сети…", "Minting on-chain…") });
       for (let i = 0; i < 24; i++) {
         await sleep(5000);
         const fresh = await apiFetch(`/api/achievement?_id=${encodeURIComponent(achievement._id)}`, { initDataRaw }).catch(
@@ -85,7 +90,10 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
           return;
         }
       }
-      setNotice({ kind: "info", text: "Still confirming — check your wallet in a minute." });
+      setNotice({
+        kind: "info",
+        text: L("Ещё подтверждается — проверьте кошелёк через минуту.", "Still confirming — check your wallet in a minute."),
+      });
     } catch (e) {
       haptic("error");
       setNotice({ kind: "err", text: e.message });
@@ -101,15 +109,17 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
           <Sparkles className="h-5 w-5" />
         </div>
         <div>
-          <p className="font-semibold">Mint as NFT</p>
+          <p className="font-semibold">{L("Выпустить как NFT", "Mint as NFT")}</p>
           <p className="mt-0.5 text-[14px] leading-snug text-hint">
-            Keep this medal in your TON wallet as a collectible. Up to {formatTon(nft.price_ton)} TON, unused TON
-            comes back.
+            {L(
+              `Храните медаль в TON-кошельке как коллекционный предмет. До ${formatTon(nft.price_ton, locale)} TON, неизрасходованные TON вернутся.`,
+              `Keep this medal in your TON wallet as a collectible. Up to ${formatTon(nft.price_ton, locale)} TON, unused TON comes back.`,
+            )}
           </p>
         </div>
       </div>
       <Button className="w-full" busy={busy} onClick={mint}>
-        {wallet ? "Mint NFT" : "Connect wallet"}
+        {wallet ? L("Выпустить NFT", "Mint NFT") : L("Подключить кошелёк", "Connect wallet")}
       </Button>
       <Notice notice={notice} />
     </Card>
@@ -119,6 +129,7 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
 function AchievementView({ id }) {
   const initDataRaw = useInitDataRaw();
   useTelegramBack(true);
+  const { L, locale } = useI18n();
   const [achievement, setAchievement] = useState(null);
   const [error, setError] = useState(null);
 
@@ -155,12 +166,12 @@ function AchievementView({ id }) {
 
           <div className="space-y-2 text-center">
             <Chip tone="gold" icon={<Medal className="h-3.5 w-3.5" />}>
-              Achievement unlocked
+              {L("Ачивка получена", "Achievement unlocked")}
             </Chip>
             <h1 className="text-[28px] font-bold leading-tight tracking-tight">{titleCase(achievement.type)}</h1>
             {achievement.date && (
               <p className="text-[14px] text-hint">
-                {new Date(achievement.date).toLocaleDateString(undefined, {
+                {new Date(achievement.date).toLocaleDateString(intlLocale(locale), {
                   year: "numeric",
                   month: "long",
                   day: "numeric",
@@ -172,8 +183,10 @@ function AchievementView({ id }) {
           <Card className="flex items-center gap-3">
             <ChatAvatar title={achievement.chat?.title} id={achievement.chat?.id} size={40} />
             <div className="min-w-0">
-              <p className="text-[13px] text-hint">Earned in</p>
-              <p className="truncate font-semibold">{achievement.chat?.title || `Chat ${achievement.chat?.id}`}</p>
+              <p className="text-[13px] text-hint">{L("Получена в чате", "Earned in")}</p>
+              <p className="truncate font-semibold">
+                {achievement.chat?.title || L(`Чат ${achievement.chat?.id}`, `Chat ${achievement.chat?.id}`)}
+              </p>
             </div>
           </Card>
 

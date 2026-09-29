@@ -54,11 +54,17 @@ async function reconcileExpiredClaims(chatId, userId) {
 // backend instances) can never push claimed_points above points - nor above
 // `ceiling` (points minus what was still maturing when the claim was sized),
 // so points that arrive mid-request can never be claimed before they mature.
-async function claimPoints(chatId, userId, points, ceiling = Infinity) {
+// With `expectedClaimed`, claimed_points must also still be exactly that
+// value: claims take the oldest points first and are valued by which points
+// they take (lib/lot-pricing.js), so a claim sized from one claimed_points
+// must not be booked onto another.
+async function claimPoints(chatId, userId, points, ceiling = Infinity, expectedClaimed = null) {
     const rewards = await getCollection('rewards');
-    const next = { $add: [{ $ifNull: ['$claimed_points', 0] }, points] };
+    const current = { $ifNull: ['$claimed_points', 0] };
+    const next = { $add: [current, points] };
     const conditions = [{ $lte: [next, '$points'] }];
     if (Number.isFinite(ceiling)) conditions.push({ $lte: [next, ceiling] });
+    if (expectedClaimed !== null) conditions.push({ $eq: [current, expectedClaimed] });
     const res = await rewards.updateOne(
         { chat_id: chatId, user_id: userId, $expr: { $and: conditions } },
         { $inc: { claimed_points: points } },

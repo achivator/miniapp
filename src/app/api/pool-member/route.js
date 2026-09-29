@@ -1,7 +1,7 @@
 import { getCollection } from "@/lib/mongo";
-import { getTonConfig } from "@/lib/ton/config";
 import { fetchJettonMetadata } from "@/lib/ton/rpc";
-import { pointsToJettons } from "@/lib/ton/amounts";
+import { chatLots } from "@/lib/lots";
+import { serializeBreakdown } from "@/lib/lot-pricing";
 import { claimSettingsOf, claimablePoints } from "@/lib/claim-rules";
 import { nowSeconds, reconcileExpiredClaims } from "@/lib/rewards";
 import {
@@ -36,7 +36,6 @@ export async function GET(request) {
     await reconcileExpiredClaims(chatId, userId);
 
     const now = nowSeconds();
-    const cfg = getTonConfig();
     const settings = claimSettingsOf(chat);
     const record = await (await getCollection("rewards")).findOne({ chat_id: chatId, user_id: userId });
     if (!record) throw httpError(404, "this member has no rewards in the chat");
@@ -93,8 +92,12 @@ export async function GET(request) {
 
     const current = chat.jetton_master ? jettonOf(chat.jetton_master) : null;
     const owed = Math.max(0, balance.points - (record.claimed_points || 0));
-    const toUnits = (points) =>
-      current && current.decimals !== null ? pointsToJettons(points, cfg.jettonsPerPoint, current.decimals).toString() : null;
+    // Valued like a claim (lib/lot-pricing.js): oldest points first, points
+    // that were still maturing when a decrease took effect at the price from
+    // before it. null without a jetton or its decimals.
+    const lots = current && current.decimals !== null ? await chatLots(chat, [userId]) : null;
+    const owedValue = lots ? lots.owed(record, current.decimals) : null;
+    const availableValue = lots ? lots.value(record, balance.available, current.decimals) : null;
     const reactions = reactionTotals[0] || { points: 0, count: 0, week: 0 };
 
     return Response.json({
@@ -107,11 +110,14 @@ export async function GET(request) {
         points: balance.points,
         claimed_points: record.claimed_points || 0,
         owed_points: owed,
-        owed_units: toUnits(owed),
+        owed_units: owedValue ? owedValue.units.toString() : null,
+        // [{ price, points, units }]: more than one entry when some points
+        // keep the price from before a decrease
+        owed_breakdown: owedValue ? serializeBreakdown(owedValue.breakdown) : null,
         maturing_points: balance.maturing,
         next_mature_at: balance.next_mature_at,
         available_points: balance.available,
-        available_units: toUnits(balance.available),
+        available_units: availableValue ? availableValue.units.toString() : null,
         maturation_days: settings.maturation_days,
       },
       sources: {

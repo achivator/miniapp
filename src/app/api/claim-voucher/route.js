@@ -4,7 +4,10 @@ import { getTonConfig } from "@/lib/ton/config";
 import { Address } from "@ton/core";
 import { fetchJettonMetadata, fetchPoolClaimControls, fetchPoolLedgerBalance, getPoolStatus } from "@/lib/ton/rpc";
 import { buildClaimVoucherCell, buildClaimBody, signVoucher, defaultExpiry } from "@/lib/ton/vouchers";
-import { pointsToJettons, formatUnits } from "@/lib/ton/amounts";
+import { formatUnits } from "@/lib/ton/amounts";
+import { priceFitsDecimals } from "@/lib/point-price";
+import { serializeBreakdown } from "@/lib/lot-pricing";
+import { chatLots } from "@/lib/lots";
 import { GAS, VOUCHER_TAG } from "@/lib/ton/constants";
 import { reconcileExpiredClaims, claimPoints, nowSeconds } from "@/lib/rewards";
 import { claimGate, claimSettingsOf, claimablePoints } from "@/lib/claim-rules";
@@ -121,13 +124,52 @@ export async function POST(request) {
     return Response.json({ error: `TON RPC failed: ${e.message}` }, { status: 502 });
   }
 
-  let claimPointsCount = availablePoints;
-  const unitsPerPoint = pointsToJettons(1, cfg.jettonsPerPoint, metadata.decimals);
-  if (unitsPerPoint > 0n && pointsToJettons(claimPointsCount, cfg.jettonsPerPoint, metadata.decimals) > payable) {
-    claimPointsCount = Number(payable / unitsPerPoint);
+  // The chat's prices right now - re-read after the slow RPC calls above so a
+  // change saved meanwhile applies (a scheduled decrease counts from its
+  // effective_at, whether or not the bot has applied it yet). The current
+  // price, the price history and the maturation period all come from this one
+  // read, so a concurrent save can never make one voucher value some points
+  // before it and others after it. A voucher is priced once, when it is
+  // signed, and keeps that amount even if the creator changes the price before
+  // it is used (its points are already deducted).
+  //
+  // Points are valued as lots (lib/lot-pricing.js): the claim takes the
+  // oldest unclaimed points, and points that were still maturing when a
+  // decrease took effect keep the price from before it.
+  //
+  // The current price was checked against the jetton's decimals when saved,
+  // but the jetton may have been unknown then or switched since: a price
+  // finer than one unit would floor every payout, so refuse instead of paying
+  // less than shown.
+  let valuation;
+  let price;
+  try {
+    const fresh = await chatsCol.findOne(
+      { id: chatId },
+      { projection: { id: 1, point_price: 1, point_price_pending: 1, point_price_history: 1, claim_settings: 1 } },
+    );
+    if (!fresh) return Response.json({ error: "chat not found" }, { status: 404 });
+    const lots = await chatLots(fresh, [userId]);
+    price = lots.timeline.current;
+    if (!priceFitsDecimals(price, metadata.decimals)) {
+      return Response.json(
+        {
+          error: `this chat's point price (${price}) is finer than its jetton's smallest unit; ask the chat creator to update it`,
+        },
+        { status: 409 },
+      );
+    }
+    // Sized to what the pool can pay today: the oldest lots while they fit,
+    // then as many points of the next one as fit (a partial claim; the rest
+    // stays claimable).
+    valuation = lots.value(record, availablePoints, metadata.decimals, { payable });
+  } catch (e) {
+    return Response.json({ error: e.message }, { status: e.status || 500 });
   }
-  const amount = pointsToJettons(claimPointsCount, cfg.jettonsPerPoint, metadata.decimals);
-  if (amount <= 0n || amount > payable) {
+
+  const claimPointsCount = valuation.points;
+  const amount = valuation.units;
+  if (claimPointsCount <= 0 || amount <= 0n || amount > payable) {
     return Response.json(
       {
         error:
@@ -166,15 +208,17 @@ export async function POST(request) {
 
     // Authoritative balance check: the read above is only a fast path, this
     // atomic conditional update is what stops concurrent claims from issuing
-    // multiple vouchers for the same points.
-    const claimed = await claimPoints(
-      chatId,
-      userId,
-      claimPointsCount,
-      (record?.claimed_points || 0) + availablePoints,
-    );
+    // multiple vouchers for the same points. It also requires claimed_points
+    // to be exactly what the voucher was valued from: FIFO valuation priced
+    // the points right after it, so a claim or release in between (which
+    // would move this voucher onto other lots) makes it fail instead.
+    const claimedBefore = record?.claimed_points || 0;
+    const claimed = await claimPoints(chatId, userId, claimPointsCount, claimedBefore + availablePoints, claimedBefore);
     if (!claimed) {
-      return Response.json({ error: "no claimable points", points }, { status: 409 });
+      return Response.json(
+        { error: "your points changed meanwhile (another claim?); try again", points },
+        { status: 409 },
+      );
     }
 
     try {
@@ -183,6 +227,11 @@ export async function POST(request) {
         user_id: userId,
         points: claimPointsCount,
         amount: amount.toString(),
+        // the current price when this voucher was sized, and what each part
+        // of it was paid at (points that were still maturing when a decrease
+        // took effect keep the earlier price), for payout audits
+        point_price: price,
+        price_breakdown: serializeBreakdown(valuation.breakdown),
         nonce,
         recipient: recipient.toString(),
         jetton_master: jettonMaster,
@@ -211,6 +260,14 @@ export async function POST(request) {
       remaining_points: availablePoints - claimPointsCount,
       jettons: formatUnits(amount, metadata.decimals),
       decimals: metadata.decimals,
+      point_price: price,
+      // [{ price, points, jettons }]: more than one entry when some points
+      // keep the price from before a decrease
+      price_breakdown: valuation.breakdown.map((b) => ({
+        price: b.price,
+        points: b.points,
+        jettons: formatUnits(b.units, metadata.decimals),
+      })),
       expiry: Number(expiry),
     });
   } catch (e) {

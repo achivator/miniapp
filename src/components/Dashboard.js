@@ -18,48 +18,65 @@ import {
   Skeleton,
   titleCase,
 } from "@/components/ui";
-import { T } from "@/components/T";
-import { ChevronRight, Clock, Coins, Medal, Pool, Question, Sparkles } from "@/components/icons";
+import { intlLocale } from "@/lib/i18n";
+import { useI18n } from "@/lib/use-locale";
+import { Alert, ChevronRight, Clock, Coins, Medal, Pool, Question, Sparkles } from "@/components/icons";
 
-const numberFormat = new Intl.NumberFormat("en-US");
-
-function shortDate(epochSec) {
-  return new Date(epochSec * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+function shortDate(epochSec, locale) {
+  return new Date(epochSec * 1000).toLocaleDateString(intlLocale(locale), { month: "short", day: "numeric" });
 }
+
+// "в понедельник", "во вторник"… by getUTCDay().
+const RU_ON_WEEKDAY = ["в воскресенье", "в понедельник", "во вторник", "в среду", "в четверг", "в пятницу", "в субботу"];
 
 // Why the chat's claims are closed right now (admin's claim rules).
-function gateText(gate) {
+function gateText(gate, { L, locale }) {
   if (!gate || gate.open) return null;
-  if (gate.reason === "paused") return gate.until ? `Claims paused until ${shortDate(gate.until)}` : "Claims paused by the admin";
-  return `Claims open ${new Date(gate.until * 1000).toLocaleDateString(undefined, { weekday: "long", timeZone: "UTC" })}`;
+  if (gate.reason === "paused") {
+    return gate.until
+      ? L(`Вывод приостановлен до ${shortDate(gate.until, locale)}`, `Claims paused until ${shortDate(gate.until, locale)}`)
+      : L("Вывод приостановлен админом", "Claims paused by the admin");
+  }
+  const day = new Date(gate.until * 1000);
+  return L(
+    `Вывод откроется ${RU_ON_WEEKDAY[day.getUTCDay()]}`,
+    `Claims open ${day.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" })}`,
+  );
 }
 
+// No "1 pt = X" here: each chat sets its own price and pays in its own
+// jetton, so the rate lives on each reward card.
 function Hero({ dashboard, achievementsCount }) {
+  const t = useI18n();
+  const { L } = t;
+  const chats = dashboard?.rewards?.length;
   const totalPoints = dashboard?.rewards?.reduce((sum, r) => sum + (r.available_points || 0), 0) ?? null;
-  const rate = dashboard?.config?.jettons_per_point;
   return (
     <section className="hero-gradient relative overflow-hidden rounded-[22px] p-5 shadow-lg">
       <div className="pointer-events-none absolute -right-8 -top-10 h-40 w-40 rounded-full bg-white/10" />
       <div className="pointer-events-none absolute -bottom-12 right-10 h-28 w-28 rounded-full bg-white/10" />
-      <p className="text-[13px] font-medium opacity-80">Available to claim</p>
+      <p className="text-[13px] font-medium opacity-80">{L("Можно забрать", "Available to claim")}</p>
       <div className="mt-1 flex items-baseline gap-2">
         {totalPoints === null ? (
           <div className="h-9 w-28 animate-pulse rounded-lg bg-white/25" />
         ) : (
           <span className="text-[36px] font-bold leading-none tracking-tight tabular">
-            {numberFormat.format(totalPoints)}
+            {t.num(totalPoints)}
           </span>
         )}
-        <span className="text-[15px] font-semibold opacity-80">points</span>
+        <span className="text-[15px] font-semibold opacity-80">
+          {t.plural(totalPoints ?? 0, ["балл", "балла", "баллов"], ["point", "points"])}
+        </span>
       </div>
       <div className="mt-4 flex flex-wrap gap-2 text-[12px] font-medium">
         <span className="rounded-full bg-white/20 px-2.5 py-1">
-          {dashboard?.rewards?.length ?? "–"} {dashboard?.rewards?.length === 1 ? "chat" : "chats"}
+          {chats === undefined ? `– ${L("чатов", "chats")}` : t.count(chats, ["чат", "чата", "чатов"], ["chat", "chats"])}
         </span>
         <span className="rounded-full bg-white/20 px-2.5 py-1">
-          {achievementsCount ?? "–"} {achievementsCount === 1 ? "achievement" : "achievements"}
+          {achievementsCount === null
+            ? `– ${L("ачивок", "achievements")}`
+            : t.count(achievementsCount, ["ачивка", "ачивки", "ачивок"], ["achievement", "achievements"])}
         </span>
-        {rate && <span className="rounded-full bg-white/20 px-2.5 py-1">1 pt = {rate} jetton</span>}
       </div>
     </section>
   );
@@ -69,13 +86,22 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
   const wallet = useTonAddress();
   const [tonConnectUI] = useTonConnectUI();
   const haptic = useHaptic();
+  const t = useI18n();
+  const { L } = t;
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
 
-  const symbol = reward.symbol || "jetton";
-  const closed = gateText(reward.claim_gate);
+  const symbol = reward.symbol || L("жетона", "jetton");
+  const closed = gateText(reward.claim_gate, t);
   const canClaim = reward.available_points > 0 && Boolean(reward.jetton_master) && !closed;
   const pending = reward.pending?.[0];
+  const priceChange = reward.point_price_change;
+  const priceDrop = reward.point_price_pending;
+  // Points earned before a price decrease keep their old price: the parts of
+  // the estimate priced otherwise than at the current rate.
+  const breakdown = Array.isArray(reward.jettons_breakdown) ? reward.jettons_breakdown : [];
+  const keptPrices =
+    breakdown.length > 1 ? breakdown.filter((part) => part && Number(part.price) !== Number(reward.point_price)) : [];
 
   async function claim() {
     if (!wallet) {
@@ -83,27 +109,42 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
       return;
     }
     setBusy(true);
-    setNotice({ kind: "info", text: "Preparing your claim…" });
+    setNotice({ kind: "info", text: L("Готовим вывод…", "Preparing your claim…") });
     try {
       const voucher = await apiFetch("/api/claim-voucher", {
         method: "POST",
         initDataRaw,
         body: { chatId: reward.chat_id, wallet },
       });
-      setNotice({ kind: "info", text: "Confirm the transaction in your wallet." });
+      // The amount is priced when the voucher is signed and may differ from
+      // the estimate above if the chat's rate just changed: state it here.
+      const jettons = `${t.decimal(voucher.jettons)} ${symbol}`;
+      setNotice({
+        kind: "info",
+        text: L(`Подтвердите в кошельке — вы получите ${jettons}.`, `Confirm in your wallet to receive ${jettons}.`),
+      });
       await sendTonTransaction(tonConnectUI, network, [
         { address: voucher.to, amount: voucher.amount, payload: voucher.payload_b64 },
       ]);
-      setNotice({ kind: "info", text: "Sent — waiting for the pool to pay out…" });
+      setNotice({ kind: "info", text: L("Отправлено — ждём выплату из пула…", "Sent — waiting for the pool to pay out…") });
       const status = await pollClaimStatus(reward.chat_id, voucher.nonce, initDataRaw);
       if (status?.status === "claimed") {
         haptic("success");
         const rest = voucher.remaining_points
-          ? ` ${numberFormat.format(voucher.remaining_points)} pts stay for later: the chat pool has a daily payout limit.`
+          ? L(
+              ` Ещё ${t.pts(voucher.remaining_points)} останутся на потом: у пула чата дневной лимит выплат.`,
+              ` ${t.pts(voucher.remaining_points)} stay for later: the chat pool has a daily payout limit.`,
+            )
           : "";
-        setNotice({ kind: "ok", text: `${voucher.jettons} ${symbol} are on their way to your wallet.${rest}` });
+        setNotice({
+          kind: "ok",
+          text: L(`${jettons} уже в пути к вашему кошельку.${rest}`, `${jettons} are on their way to your wallet.${rest}`),
+        });
       } else {
-        setNotice({ kind: "info", text: "Still confirming on-chain. Check back in a minute." });
+        setNotice({
+          kind: "info",
+          text: L("Транзакция ещё подтверждается в сети. Загляните через минуту.", "Still confirming on-chain. Check back in a minute."),
+        });
       }
       onRefresh();
     } catch (e) {
@@ -119,34 +160,97 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
       <div className="flex items-center gap-3">
         <ChatAvatar title={reward.title} id={reward.chat_id} />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">{reward.title || `Chat ${reward.chat_id}`}</p>
+          <p className="truncate font-semibold">{reward.title || L(`Чат ${reward.chat_id}`, `Chat ${reward.chat_id}`)}</p>
           <p className="text-[13px] text-hint tabular">
-            <span className="font-semibold text-fg">{numberFormat.format(reward.available_points)}</span> pts
-            {reward.jettons !== null && reward.jetton_master ? ` ≈ ${reward.jettons} ${symbol}` : ""}
+            <span className="font-semibold text-fg">{t.num(reward.available_points)}</span>{" "}
+            {L(t.plural(reward.available_points, ["балл", "балла", "баллов"], []), "pts")}
+            {reward.jettons !== null && reward.jetton_master ? ` ≈ ${t.decimal(reward.jettons)} ${symbol}` : ""}
           </p>
         </div>
         <Button size="sm" busy={busy} disabled={!canClaim} onClick={claim}>
-          Claim
+          {L("Забрать", "Claim")}
         </Button>
       </div>
 
-      {(!reward.jetton_master || pending || closed || reward.maturing_points > 0) && (
+      {(!reward.jetton_master || pending || closed || reward.maturing_points > 0 || reward.point_price) && (
         <div className="flex flex-wrap gap-2">
-          {!reward.jetton_master && <Chip tone="neutral">Rewards not enabled in this chat yet</Chip>}
+          {!reward.jetton_master && (
+            <Chip tone="neutral">{L("В этом чате награды ещё не включены", "Rewards not enabled in this chat yet")}</Chip>
+          )}
+          {reward.jetton_master && reward.point_price && (
+            <Chip tone="neutral">
+              {L("1 балл", "1 pt")} = {t.decimal(reward.point_price)} {symbol}
+            </Chip>
+          )}
           {reward.jetton_master && closed && <Chip tone="neutral">{closed}</Chip>}
           {reward.maturing_points > 0 && (
             <Chip tone="accent" icon={<Clock className="h-3.5 w-3.5" />}>
-              +{numberFormat.format(reward.maturing_points)} pts maturing
-              {reward.next_mature_at ? ` · first on ${shortDate(reward.next_mature_at)}` : ""}
+              {L(
+                `+${t.pts(reward.maturing_points)} ${t.plural(reward.maturing_points, ["дозревает", "дозревают", "дозревают"], [])}`,
+                `+${t.pts(reward.maturing_points)} maturing`,
+              )}
+              {reward.jetton_master && reward.maturing_jettons ? ` ≈ ${t.decimal(reward.maturing_jettons)} ${symbol}` : ""}
+              {reward.next_mature_at
+                ? L(
+                    ` · первые ${shortDate(reward.next_mature_at, t.locale)}`,
+                    ` · first on ${shortDate(reward.next_mature_at, t.locale)}`,
+                  )
+                : ""}
             </Chip>
           )}
           {pending && (
             <Chip tone="gold" icon={<Clock className="h-3.5 w-3.5" />}>
-              {pending.amount ?? "…"} {symbol} pending until{" "}
-              {new Date(pending.expiry * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              {pending.amount ? t.decimal(pending.amount) : "…"} {symbol}{" "}
+              {L(`в обработке до ${t.time(pending.expiry)}`, `pending until ${t.time(pending.expiry)}`)}
             </Chip>
           )}
         </div>
+      )}
+
+      {reward.jetton_master &&
+        keptPrices.map((part) => (
+          <p key={part.price} className="text-[12px] leading-snug text-hint">
+            {L(
+              `${t.count(part.points, ["балл", "балла", "баллов"], [])} ${t.plural(part.points, ["сохраняет", "сохраняют", "сохраняют"], [])} цену до снижения: 1 балл = ${t.decimal(part.price)} ${symbol}`,
+              `${t.pts(part.points)} keep 1 pt = ${t.decimal(part.price)} ${symbol} from before the price drop`,
+            )}
+          </p>
+        ))}
+
+      {/* A scheduled decrease: the notice period exists so members can claim
+          at the current rate first, so this is the loudest line on the card. */}
+      {reward.jetton_master && priceDrop && (
+        <div
+          className="tint-gold flex items-start gap-2 rounded-xl px-3 py-2.5 text-[13px] font-medium leading-snug text-[color:var(--gold-text)]"
+          role="alert"
+        >
+          <Alert className="mt-px h-4 w-4 shrink-0" />
+          <span>
+            {L(
+              `${t.moment(priceDrop.effective_at)} цена снизится до 1 балл = ${t.decimal(priceDrop.to)} ${symbol}. Заберите баллы до этого времени — по текущему курсу.`,
+              `Price drops to 1 pt = ${t.decimal(priceDrop.to)} ${symbol} on ${t.moment(priceDrop.effective_at)}. Claim before then to get the current rate.`,
+            )}
+          </span>
+        </div>
+      )}
+
+      {/* The creator can re-price points already earned: say so for a week. */}
+      {reward.jetton_master && priceChange && (
+        <Notice
+          notice={{
+            kind: "info",
+            text: L(
+              `Курс изменён ${shortDate(priceChange.at, t.locale)}: 1 балл = ${t.decimal(priceChange.old)} → ${t.decimal(priceChange.new)} ${symbol}${
+                priceChange.changes > 1
+                  ? ` (${t.count(priceChange.changes, ["изменение", "изменения", "изменений"], [])} за 7 дней)`
+                  : ""
+              }`,
+              `Rate changed on ${shortDate(priceChange.at, t.locale)}: 1 pt = ${t.decimal(priceChange.old)} → ${t.decimal(priceChange.new)} ${symbol}${
+                priceChange.changes > 1 ? ` (${priceChange.changes} changes in 7 days)` : ""
+              }`,
+            ),
+          }}
+        />
       )}
 
       {reward.grants?.length > 0 && (
@@ -155,9 +259,9 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
             <li key={index} className="flex items-center justify-between gap-3 py-2 text-[13px] last:pb-0">
               <span className="min-w-0 truncate text-hint">
                 <Sparkles className="mr-1.5 inline h-3.5 w-3.5 -translate-y-px text-[color:var(--gold)]" />
-                {grant.reason || "Granted by an admin"}
+                {grant.reason || L("Начислено админом", "Granted by an admin")}
               </span>
-              <span className="shrink-0 font-semibold text-success tabular">+{grant.points}</span>
+              <span className="shrink-0 font-semibold text-success tabular">+{t.num(grant.points)}</span>
             </li>
           ))}
         </ul>
@@ -182,6 +286,7 @@ function RewardsSkeleton() {
 }
 
 function CreatorChats({ chats }) {
+  const { L } = useI18n();
   return (
     <Card flush className="overflow-hidden">
       <ul className="divide-y divide-[color:var(--separator)]">
@@ -190,13 +295,15 @@ function CreatorChats({ chats }) {
             <Link href={`/deposit/${chat.chat_id}`} className="flex items-center gap-3 px-4 py-3 active:bg-bg">
               <ChatAvatar title={chat.title} id={chat.chat_id} size={40} />
               <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold">{chat.title || `Chat ${chat.chat_id}`}</p>
+                <p className="truncate font-semibold">{chat.title || L(`Чат ${chat.chat_id}`, `Chat ${chat.chat_id}`)}</p>
                 <p className="truncate text-[13px] text-hint">
-                  {chat.jetton_master ? `Jetton ${shortenAddress(chat.jetton_master, 5)}` : "Set a jetton with /jetton in the chat"}
+                  {chat.jetton_master
+                    ? L(`Жетон ${shortenAddress(chat.jetton_master, 5)}`, `Jetton ${shortenAddress(chat.jetton_master, 5)}`)
+                    : L("Задайте жетон командой /jetton в чате", "Set a jetton with /jetton in the chat")}
                 </p>
               </div>
               <span className="flex items-center gap-1 text-[13px] font-medium text-link">
-                Pool <ChevronRight className="h-4 w-4" />
+                {L("Пул", "Pool")} <ChevronRight className="h-4 w-4" />
               </span>
             </Link>
           </li>
@@ -207,6 +314,7 @@ function CreatorChats({ chats }) {
 }
 
 function Achievements({ groups }) {
+  const { L } = useI18n();
   if (groups === null) {
     return (
       <Card className="grid grid-cols-4 gap-3">
@@ -218,15 +326,18 @@ function Achievements({ groups }) {
   }
   if (!groups.length) {
     return (
-      <EmptyState icon={<Medal className="h-6 w-6" />} title="No achievements yet">
-        Chat, react and share code in groups with the bot — medals unlock automatically.
+      <EmptyState icon={<Medal className="h-6 w-6" />} title={L("Ачивок пока нет", "No achievements yet")}>
+        {L(
+          "Общайтесь, ставьте реакции и делитесь кодом в группах с ботом — медали открываются сами.",
+          "Chat, react and share code in groups with the bot — medals unlock automatically.",
+        )}
       </EmptyState>
     );
   }
   return groups.map(({ chat, achievements }) => (
     <Card key={chat.id} className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="truncate font-semibold">{chat.title || `Chat ${chat.id}`}</p>
+        <p className="truncate font-semibold">{chat.title || L(`Чат ${chat.id}`, `Chat ${chat.id}`)}</p>
         <Chip tone="gold">{achievements.length}</Chip>
       </div>
       <ul className="grid grid-cols-4 gap-x-3 gap-y-4">
@@ -252,6 +363,8 @@ function Achievements({ groups }) {
 export function Dashboard() {
   const initDataRaw = useInitDataRaw();
   useTelegramBack(false);
+  const t = useI18n();
+  const { L } = t;
 
   const [dashboard, setDashboard] = useState(null);
   const [achievements, setAchievements] = useState(null);
@@ -286,7 +399,7 @@ export function Dashboard() {
 
       {dashboard?.config?.network === "testnet" && (
         <div className="-mt-2 flex justify-center">
-          <Chip tone="gold">Testnet — connect a testnet wallet</Chip>
+          <Chip tone="gold">{L("Тестнет — подключите тестнет-кошелёк", "Testnet — connect a testnet wallet")}</Chip>
         </div>
       )}
 
@@ -295,7 +408,7 @@ export function Dashboard() {
       {error && <Notice notice={{ kind: "err", text: error }} />}
 
       <section className="space-y-2.5">
-        <SectionHeader title="Rewards" />
+        <SectionHeader title={L("Награды", "Rewards")} />
         {dashboard === null ? (
           <>
             <RewardsSkeleton />
@@ -312,33 +425,36 @@ export function Dashboard() {
             />
           ))
         ) : (
-          <EmptyState icon={<Coins className="h-6 w-6" />} title="No rewards yet">
-            Get reactions on your messages in a chat with the bot, or earn points from its admins.
+          <EmptyState icon={<Coins className="h-6 w-6" />} title={L("Наград пока нет", "No rewards yet")}>
+            {L(
+              "Получайте реакции на свои сообщения в чате с ботом или баллы от его админов.",
+              "Get reactions on your messages in a chat with the bot, or earn points from its admins.",
+            )}
           </EmptyState>
         )}
       </section>
 
       {dashboard?.creator?.length > 0 && (
         <section className="space-y-2.5">
-          <SectionHeader title="My chats" action={<Pool className="h-4 w-4 text-hint" />} />
+          <SectionHeader title={L("Мои чаты", "My chats")} action={<Pool className="h-4 w-4 text-hint" />} />
           <CreatorChats chats={dashboard.creator} />
         </section>
       )}
 
       <section className="space-y-2.5">
-        <SectionHeader title="Achievements" />
+        <SectionHeader title={L("Ачивки", "Achievements")} />
         <Achievements groups={achievements} />
       </section>
 
-      <Link href="/help" className="block">
+      <Link href={`/${t.locale}/help`} className="block">
         <Card className="flex items-center gap-3 active:opacity-80">
           <div className="tint-accent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-accent">
             <Question className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-semibold">Reward your own chat</p>
+            <p className="font-semibold">{L("Награды в вашем чате", "Reward your own chat")}</p>
             <p className="text-[13px] text-hint">
-              <T ru="Как подключить свой чат — пошаговая инструкция" en="Step-by-step setup guide" />
+              {L("Как подключить свой чат — пошаговая инструкция", "Step-by-step setup guide")}
             </p>
           </div>
           <ChevronRight className="h-5 w-5 text-hint" />

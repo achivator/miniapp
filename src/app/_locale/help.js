@@ -1,20 +1,26 @@
-import Link from "next/link";
 import { Card } from "@/components/ui";
 import { Check, Info, Medal } from "@/components/icons";
 import { TelegramBack } from "@/components/TelegramBack";
 import { LangSwitch } from "@/components/LangSwitch";
+import { HomeLink } from "@/components/HomeLink";
+import { localeMetadata } from "@/lib/locale";
 
-// Setup guide for chat creators (testnet), in Russian and English: both are
-// server rendered and CSS shows the visitor's language (lib/locale.js). A
-// plain server page, not wrapped in AppShell: it must open in a regular
-// browser too, not only inside Telegram.
+// Setup guide for chat creators (testnet), at /ru/help and /en/help (the bare
+// /help redirects to one, see lib/locale.js). A plain server page, not
+// wrapped in AppShell: it must open in a regular browser too, not only
+// inside Telegram.
 
-export const metadata = {
-  title: "Как подключить чат к Achivator · How to connect a chat to Achivator",
-  description:
-    "Пошаговая инструкция для создателя Telegram-группы: тестнет-кошелёк, свой жетон, бот @achivator_bot, пул наград. " +
-    "A step-by-step guide for Telegram group creators: testnet wallet, your own jetton, the @achivator_bot bot, reward pool.",
-};
+export function helpMetadata(locale) {
+  const en = locale === "en";
+  return localeMetadata({
+    locale,
+    page: "/help",
+    title: en ? "How to connect a chat to Achivator" : "Как подключить чат к Achivator",
+    description: en
+      ? "A step-by-step guide for Telegram group creators: testnet wallet, your own jetton, the @achivator_bot bot, reward pool."
+      : "Пошаговая инструкция для создателя Telegram-группы: тестнет-кошелёк, свой жетон, бот @achivator_bot, пул наград.",
+  });
+}
 
 const APP_URL = "https://t.me/achivator_bot/app";
 const MINTER_URL = "https://minter.ton.org/?testnet=true";
@@ -90,8 +96,6 @@ function Faq({ q, children }) {
 function Guide({ locale }) {
   const en = locale === "en";
   const L = (ruText, enText) => (en ? enText : ruText);
-  // Step anchors are per locale: both translations are in the DOM.
-  const id = (name) => `${locale}-${name}`;
   const done = L("Готово, если", "Done when");
   const [open, close] = en ? ["“", "”"] : ["«", "»"];
   // A UI label exactly as the app or wallet shows it.
@@ -118,17 +122,17 @@ function Guide({ locale }) {
   return (
     <main className="pb-safe mx-auto flex min-h-screen max-w-xl flex-col gap-5 px-4">
       <header className="flex items-center justify-between gap-3 py-3">
-        <Link href="/" className="flex items-center gap-2" aria-label="Achivator">
+        <HomeLink locale={locale} className="flex items-center gap-2" aria-label="Achivator">
           <span className="hero-gradient flex h-8 w-8 items-center justify-center rounded-[10px]">
             <Medal className="h-[18px] w-[18px]" />
           </span>
           <span className="text-[17px] font-bold tracking-tight">Achivator</span>
-        </Link>
+        </HomeLink>
         <div className="flex items-center gap-2">
           <span className="tint-gold rounded-full px-2.5 py-1 text-xs font-medium text-[color:var(--gold-text)]">
             {L("Тестнет", "Testnet")}
           </span>
-          <LangSwitch />
+          <LangSwitch locale={locale} page="/help" />
         </div>
       </header>
 
@@ -160,13 +164,13 @@ function Guide({ locale }) {
 
       <nav aria-label={L("Шаги", "Steps")} className="flex flex-wrap gap-2">
         {toc.map(([name, label], i) => (
-          <a key={name} href={`#${id(name)}`} className="rounded-full bg-surface px-3 py-1.5 text-[13px] font-medium">
+          <a key={name} href={`#${name}`} className="rounded-full bg-surface px-3 py-1.5 text-[13px] font-medium">
             <span className="text-hint tabular">{i + 1}.</span> {label}
           </a>
         ))}
       </nav>
 
-      <Step n={1} id={id("wallet")} title={L("Заведите тестнет-кошелёк", "Create a testnet wallet")}>
+      <Step n={1} id="wallet" title={L("Заведите тестнет-кошелёк", "Create a testnet wallet")}>
         <Steps>
           <li>
             {L(
@@ -212,7 +216,7 @@ function Guide({ locale }) {
         </Done>
       </Step>
 
-      <Step n={2} id={id("ton")} title={L("Получите тестовые TON", "Get test TON")}>
+      <Step n={2} id="ton" title={L("Получите тестовые TON", "Get test TON")}>
         <Steps>
           <li>
             {L("Откройте бота", "Open")} <Bot name="testgiver_ton_bot" />
@@ -237,7 +241,7 @@ function Guide({ locale }) {
         </Done>
       </Step>
 
-      <Step n={3} id={id("jetton")} title={L("Выпустите (сминтите) свой жетон", "Issue (mint) your jetton")}>
+      <Step n={3} id="jetton" title={L("Выпустите (сминтите) свой жетон", "Issue (mint) your jetton")}>
         <p>
           {L(
             "Жетон — это токен, которым чат награждает участников. Выпустить его проще всего в TON Minter:",
@@ -294,7 +298,7 @@ function Guide({ locale }) {
         </Done>
       </Step>
 
-      <Step n={4} id={id("bot")} title={L("Добавьте @achivator_bot в группу", "Add @achivator_bot to the group")}>
+      <Step n={4} id="bot" title={L("Добавьте @achivator_bot в группу", "Add @achivator_bot to the group")}>
         <Steps>
           <li>
             {L("Откройте группу → нажмите на её название →", "Open the group → tap its name →")}{" "}
@@ -305,12 +309,13 @@ function Guide({ locale }) {
           </li>
         </Steps>
         <Done label={done}>
-          {L("бот написал в группе приветствие", "the bot posted its greeting in the group:")} {open}Hello! I&apos;m the Achivator Bot…
+          {L("бот написал в группе приветствие", "the bot posted its greeting in the group:")} {open}
+          {L("Привет! Я Achivator Bot…", "Hello! I'm the Achivator Bot…")}
           {close}.
         </Done>
       </Step>
 
-      <Step n={5} id={id("admin")} title={L("Сделайте бота администратором", "Make the bot an admin")}>
+      <Step n={5} id="admin" title={L("Сделайте бота администратором", "Make the bot an admin")}>
         <Steps>
           <li>
             {L("Профиль группы →", "Group profile →")} <Ui>{L("Изменить", "Edit")}</Ui> →{" "}
@@ -330,25 +335,28 @@ function Guide({ locale }) {
           )}
         </p>
         <Done label={done}>
-          {L("бот ответил", "the bot replied")} {open}Thank you for granting me admin rights!…{close}.
+          {L("бот ответил", "the bot replied")} {open}
+          {L("Спасибо за права администратора!…", "Thank you for granting me admin rights!…")}
+          {close}.
         </Done>
       </Step>
 
-      <Step n={6} id={id("commands")} title={L("Отправьте команды боту", "Send the bot its commands")}>
+      <Step n={6} id="commands" title={L("Отправьте команды боту", "Send the bot its commands")}>
         <p>{L("Пишите прямо в группе, от своего аккаунта создателя:", "Type them right in the group, from your creator account:")}</p>
         <div className="space-y-3">
           <div className="space-y-1">
             <Cmd>/verify@achivator_bot</Cmd>
             <p className="text-hint">
-              {L("Подтверждает, что вы создатель чата. Бот ответит", "Confirms you are the chat's creator. The bot replies")} {open}Verified. You are
-              creator.{close}
+              {L("Подтверждает, что вы создатель чата. Бот ответит", "Confirms you are the chat's creator. The bot replies")} {open}
+              {L("Подтверждено: вы создатель.", "Verified. You are creator.")}
+              {close}
             </p>
           </div>
           <div className="space-y-1">
             <Cmd>{L("/jetton EQ…адрес_жетона", "/jetton EQ…jetton_address")}</Cmd>
             <p className="text-hint">
               {L(
-                "Привязывает жетон из шага 3 как награду чата. Бот ответит «Reward jetton set: …». Команда",
+                "Привязывает жетон из шага 3 как награду чата. Бот ответит «Жетон для наград задан: …». Команда",
                 "Sets the jetton from step 3 as the chat's reward. The bot replies “Reward jetton set: …”.",
               )}{" "}
               <Cmd>/jetton</Cmd> {L("без адреса покажет текущий жетон.", "without an address shows the current jetton.")}
@@ -364,7 +372,7 @@ function Guide({ locale }) {
         <Done label={done}>{L("бот подтвердил оба действия.", "the bot confirmed both.")}</Done>
       </Step>
 
-      <Step n={7} id={id("pool")} title={L("Активируйте пул наград", "Activate the reward pool")}>
+      <Step n={7} id="pool" title={L("Активируйте пул наград", "Activate the reward pool")}>
         <p>
           {L(
             "Пул — это смарт-контракт вашего чата, из которого участники забирают жетоны.",
@@ -377,31 +385,31 @@ function Guide({ locale }) {
             {L("(или кнопка в чате с ботом).", "(or the button in the chat with the bot).")}
           </li>
           <li>
-            {L("Вверху справа нажмите", "At the top right tap")} <Ui>Connect Wallet</Ui> → Tonkeeper{" "}
+            {L("Вверху справа нажмите", "At the top right tap")} <Ui>{L("Подключить кошелёк", "Connect Wallet")}</Ui> → Tonkeeper{" "}
             {L("и выберите", "and pick the")} <b>{L("тестнет", "testnet")}</b>{L("-кошелёк.", " wallet.")}
           </li>
           <li>
-            {L("В разделе", "In")} <Ui>My chats</Ui>{" "}
+            {L("В разделе", "In")} <Ui>{L("Мои чаты", "My chats")}</Ui>{" "}
             {L("выберите свою группу — откроется страница пула.", "pick your group — its pool page opens.")}
           </li>
           <li>
-            {L("Нажмите", "Tap")} <Ui>Activate pool</Ui>{" "}
+            {L("Нажмите", "Tap")} <Ui>{L("Активировать пул", "Activate pool")}</Ui>{" "}
             {L("и подтвердите в кошельке 0,3 TON. Это разовый платёж.", "and confirm 0.3 TON in your wallet. It's a one-off payment.")}
           </li>
         </Steps>
         <Done label={done}>
           {L(
-            "у чата появилась зелёная метка «Pool active» (обычно в течение минуты).",
+            "у чата появилась зелёная метка «Пул активен» (обычно в течение минуты).",
             "the chat shows a green “Pool active” badge (usually within a minute).",
           )}
         </Done>
       </Step>
 
-      <Step n={8} id={id("pool-admin")} title={L("Назначьте админ-кошелёк пула", "Set the pool's admin wallet")}>
+      <Step n={8} id="pool-admin" title={L("Назначьте админ-кошелёк пула", "Set the pool's admin wallet")}>
         <Steps>
           <li>
-            {L("На той же странице в блоке", "On the same page, in the")} <Ui>Step 1 · Admin wallet</Ui>{" "}
-            {L("нажмите", "block tap")} <Ui>Make this wallet the admin</Ui>.
+            {L("На той же странице в блоке", "On the same page, in the")} <Ui>{L("Шаг 1 · Админ-кошелёк", "Step 1 · Admin wallet")}</Ui>{" "}
+            {L("нажмите", "block tap")} <Ui>{L("Сделать этот кошелёк админом", "Make this wallet the admin")}</Ui>.
           </li>
           <li>{L("Подтвердите транзакцию (0,05 TON).", "Confirm the transaction (0.05 TON).")}</li>
         </Steps>
@@ -413,23 +421,23 @@ function Guide({ locale }) {
         </p>
         <Done label={done}>
           {L(
-            "блок сменился на «Top up», а в карточке пула указан Admin wallet.",
+            "блок сменился на «Пополнение», а в карточке пула указан админ-кошелёк.",
             "the block turned into “Top up” and the pool card shows an Admin wallet.",
           )}
         </Done>
       </Step>
 
-      <Step n={9} id={id("topup")} title={L("Залейте жетоны в пул", "Fund the pool with jettons")}>
+      <Step n={9} id="topup" title={L("Залейте жетоны в пул", "Fund the pool with jettons")}>
         <Steps>
           <li>
-            {L("В блоке", "In the")} <Ui>Top up</Ui>{" "}
+            {L("В блоке", "In the")} <Ui>{L("Пополнение", "Top up")}</Ui>{" "}
             {L(
               "введите, сколько жетонов перевести в пул — например, 100 000.",
               "block enter how many jettons to move into the pool — for example, 100,000.",
             )}
           </li>
           <li>
-            {L("Нажмите", "Tap")} <Ui>Top up pool</Ui>{" "}
+            {L("Нажмите", "Tap")} <Ui>{L("Пополнить пул", "Top up pool")}</Ui>{" "}
             {L(
               "и подтвердите. В транзакцию входит комиссия пополнения (0,1 TON для чатов до 1000 участников) и газ.",
               "and confirm. The transaction includes the top-up fee (0.1 TON for chats under 1,000 members) and gas.",
@@ -438,7 +446,7 @@ function Guide({ locale }) {
         </Steps>
         <Done label={done}>
           {L(
-            "в карточке «Reward pool» виден баланс жетонов. Чат подключён!",
+            "в карточке «Пул наград» виден баланс жетонов. Чат подключён!",
             "the “Reward pool” card shows the jetton balance. Your chat is connected!",
           )}
         </Done>
@@ -470,7 +478,7 @@ function Guide({ locale }) {
           </p>
           <p>
             <b>{L("Правила выплат.", "Payout rules.")}</b> {L("На странице пула, в блоке", "On the pool page, the")}{" "}
-            <Ui>Claim rules</Ui>{" "}
+            <Ui>{L("Правила вывода", "Claim rules")}</Ui>{" "}
             {L(
               "задаётся, через сколько дней баллы можно забрать (по умолчанию 3 дня), в какие дни недели открыты выплаты и пауза на отпуск.",
               "block sets how many days until points can be claimed (3 by default), which weekdays claims are open, and a vacation pause.",
@@ -479,8 +487,24 @@ function Guide({ locale }) {
             {L(", чтобы не ждать.", " so you don't have to wait.")}
           </p>
           <p>
+            <b>{L("Цена балла.", "Point price.")}</b> {L("На странице пула, в блоке", "On the pool page, the")}{" "}
+            <Ui>{L("Цена балла", "Point price")}</Ui>{" "}
+            {L(
+              "задаётся, сколько жетонов стоит один балл (по умолчанию — курс платформы). Цена действует и для уже накопленных баллов. Повышение применяется сразу, со следующей выплаты. Снижение вступает в силу только через 7 дней: бот сразу объявляет его в чате, чтобы участники успели забрать баллы по текущей цене, и сообщает ещё раз, когда цена снизится. Каждое изменение участники видят в мини-приложении в течение 7 дней.",
+              "block sets how many jettons one point is worth (the platform rate by default). The price also applies to points already earned. An increase applies at once, from the next claim. A decrease takes effect only after 7 days: the bot announces it in the chat right away so members can claim at the current price, and again when the price drops. Members see every change in the mini app for 7 days.",
+            )}
+          </p>
+          <p>
+            <b>{L("Язык бота.", "Bot language.")}</b>{" "}
+            {L(
+              "Бот отвечает на языке Telegram того, кто ему пишет. Чтобы закрепить язык для всего чата, создатель или админ отправляет",
+              "The bot answers in the Telegram language of whoever writes to it. To fix one language for the whole chat, the creator or an admin sends",
+            )}{" "}
+            <Cmd>/lang ru</Cmd> {L("или", "or")} <Cmd>/lang en</Cmd>.
+          </p>
+          <p>
             <b>{L("Как участники забирают награду.", "How members claim.")}</b>{" "}
-            {L("В мини-приложении, кнопкой", "In the mini app, with the")} <Ui>Claim</Ui>
+            {L("В мини-приложении, кнопкой", "In the mini app, with the")} <Ui>{L("Забрать", "Claim")}</Ui>
             {L(
               ". Им тоже нужен тестнет-кошелёк и немного тестовых TON на газ (около 0,15 TON за выплату).",
               " button. They also need a testnet wallet and a little test TON for gas (about 0.15 TON per payout).",
@@ -501,7 +525,7 @@ function Guide({ locale }) {
           {L("Если что-то не так", "Troubleshooting")}
         </h2>
         <Card className="py-1">
-          <Faq q={L("Моего чата нет в «My chats»", "My chat isn't in “My chats”")}>
+          <Faq q={L("Моего чата нет в «Мои чаты»", "My chat isn't in “My chats”")}>
             <p>
               {L("Чат появляется там после", "A chat appears there after")} <Cmd>/verify@achivator_bot</Cmd> {L("или", "or")}{" "}
               <Cmd>/jetton</Cmd>
@@ -520,7 +544,7 @@ function Guide({ locale }) {
               <Cmd>/jetton@achivator_bot …</Cmd>.
             </p>
           </Faq>
-          <Faq q={L("Бот пишет «I cannot see who sent this»", "The bot says “I cannot see who sent this”")}>
+          <Faq q={L("Бот пишет «Я не вижу, кто это отправил»", "The bot says “I cannot see who sent this”")}>
             <p>
               {L(
                 "Вы пишете анонимно или от имени канала. Отключите «Анонимность» в своих правах администратора и отправьте команду от своего имени.",
@@ -528,7 +552,7 @@ function Guide({ locale }) {
               )}
             </p>
           </Faq>
-          <Faq q={`${open}Only the chat creator can…${close}`}>
+          <Faq q={L("«Задать жетон для наград может только создатель чата»", "“Only the chat creator can set the reward jetton”")}>
             <p>
               {L(
                 "Привязать жетон и управлять пулом может только создатель группы. Остальные админы могут начислять баллы командой",
@@ -550,14 +574,14 @@ function Guide({ locale }) {
                 "Скорее всего, подключён кошелёк основной сети. В мини-приложении нажмите на адрес кошелька вверху →",
                 "Most likely a mainnet wallet is connected. In the mini app tap the wallet address at the top →",
               )}{" "}
-              <Ui>Disconnect</Ui>{" "}
+              <Ui>{L("Отключить кошелёк", "Disconnect")}</Ui>{" "}
               {L("и подключите тестнет-кошелёк заново.", "and connect the testnet wallet again.")}
             </p>
           </Faq>
-          <Faq q={L("Висит «Still confirming on-chain»", "Stuck on “Still confirming on-chain”")}>
+          <Faq q={L("Висит «Транзакция ещё подтверждается в сети»", "Stuck on “Still confirming on-chain”")}>
             <p>
               {L("Тестнет иногда тормозит. Подождите минуту и нажмите", "The testnet is sometimes slow. Wait a minute and tap")}{" "}
-              <Ui>Refresh</Ui> {L("внизу страницы пула.", "at the bottom of the pool page.")}
+              <Ui>{L("Обновить", "Refresh")}</Ui> {L("внизу страницы пула.", "at the bottom of the pool page.")}
             </p>
           </Faq>
           <Faq q={L("Закончились тестовые TON", "Out of test TON")}>
@@ -579,16 +603,11 @@ function Guide({ locale }) {
   );
 }
 
-export default function HelpPage() {
+export function HelpPage({ locale }) {
   return (
     <>
       <TelegramBack />
-      <div data-locale="ru" lang="ru">
-        <Guide locale="ru" />
-      </div>
-      <div data-locale="en" lang="en">
-        <Guide locale="en" />
-      </div>
+      <Guide locale={locale} />
     </>
   );
 }
