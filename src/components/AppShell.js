@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Medal, Question } from "./icons";
 import { Spinner } from "./ui";
+import { T } from "./T";
 
 const MANIFEST_URL = "https://achivator.cc/ton-connect.json";
 
@@ -19,19 +20,26 @@ function OpenInTelegram() {
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">Achivator</h1>
         <p className="text-hint text-balance">
-          Rewards and achievements for your Telegram chats. This is a Telegram Mini App — open it
-          from the bot to continue.
+          <T
+            ru="Награды и ачивки для Telegram-чатов. Это мини-приложение Telegram — откройте его из бота, чтобы продолжить."
+            en="Rewards and achievements for your Telegram chats. This is a Telegram Mini App — open it from the bot to continue."
+          />
         </p>
       </div>
       <a
         className="rounded-xl bg-accent px-5 py-3 font-semibold text-accent-fg active:opacity-80"
         href="https://t.me/achivator_bot/app"
       >
-        Open in Telegram
+        <T ru="Открыть в Telegram" en="Open in Telegram" />
       </a>
-      <Link href="/help" className="text-[15px] font-medium text-link">
-        Как подключить свой чат →
-      </Link>
+      <div className="flex flex-col items-center gap-2">
+        <Link href="/" className="text-[15px] font-medium text-link">
+          <T ru="Что такое Achivator →" en="What is Achivator? →" />
+        </Link>
+        <Link href="/help" className="text-[15px] font-medium text-link">
+          <T ru="Как подключить свой чат →" en="Connect your chat →" />
+        </Link>
+      </div>
     </main>
   );
 }
@@ -164,5 +172,9 @@ export function TopBar() {
 }
 
 export function Screen({ children }) {
-  return <main className="pb-safe mx-auto flex min-h-screen max-w-xl flex-col gap-5 px-4">{children}</main>;
+  return (
+    <main lang="en" className="pb-safe mx-auto flex min-h-screen max-w-xl flex-col gap-5 px-4">
+      {children}
+    </main>
+  );
 }

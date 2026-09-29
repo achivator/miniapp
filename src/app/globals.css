@@ -54,6 +54,24 @@
   --gold-text: #f5b544;
 }
 
+/* A Telegram launch of "/" shows the dashboard, never the web landing. */
+html[data-launch="telegram"] .web-only {
+  display: none;
+}
+
+/* Bilingual web pages: show the language picked by LOCALE_SCRIPT (Russian
+   when it did not run). */
+html:not([data-lang="en"]) [data-locale="en"],
+html[data-lang="en"] [data-locale="ru"] {
+  display: none;
+}
+html:not([data-lang="en"]) .lang-option[data-for="ru"],
+html[data-lang="en"] .lang-option[data-for="en"] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
 html,
 body {
   background: var(--bg);
