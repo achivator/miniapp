@@ -1,11 +1,10 @@
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
-import { getTonConfig, tierForMembers } from "@/lib/ton/config";
+import { getTonConfig } from "@/lib/ton/config";
 import { fetchJettonMetadata, fetchJettonWalletAddress, getPoolStatus } from "@/lib/ton/rpc";
 import { buildDepositVoucherCell, buildDepositForwardPayload, buildJettonTransferBody, signVoucher, defaultExpiry } from "@/lib/ton/vouchers";
 import { parseUnits } from "@/lib/ton/amounts";
 import { GAS, VOUCHER_TAG } from "@/lib/ton/constants";
-import { getChatMemberCount } from "@/lib/telegram";
 import { runGetMethod, stackItemToAddress, stackItemToBigInt } from "@/lib/ton/rpc";
 import { Address } from "@ton/core";
 
@@ -88,10 +87,6 @@ export async function POST(request) {
   if (amount <= 0n) return Response.json({ error: "amount must be positive" }, { status: 400 });
 
   try {
-    const memberCount = await getChatMemberCount(chatId);
-    const tier = tierForMembers(memberCount ?? 0);
-    const feeTon = parseUnits(tier.feeTon, 9);
-
     const poolJettonWallet = await fetchJettonWalletAddress(jettonMaster, pool.poolAddress);
     const userJettonWallet = await fetchJettonWalletAddress(jettonMaster, walletAddress);
 
@@ -114,8 +109,6 @@ export async function POST(request) {
       chatId,
       jettonMaster,
       expectedJettonWallet: poolJettonWallet,
-      tier: tier.tier,
-      feeTon,
       expiry,
     });
     const signature = signVoucher(voucher, process.env.BACKEND_SECRET, {
@@ -123,7 +116,9 @@ export async function POST(request) {
       target: pool.poolAddress,
     });
     const forwardPayload = buildDepositForwardPayload(voucher, signature);
-    const forwardTonAmount = feeTon + BigInt(GAS.depositForwardExtra);
+    // Gas only, no fee: the jetton wallet and the pool send back what they
+    // do not spend.
+    const forwardTonAmount = BigInt(GAS.depositForward);
     const totalTon = forwardTonAmount + BigInt(GAS.depositTransferGas);
 
     const transferBody = buildJettonTransferBody({
@@ -142,8 +137,6 @@ export async function POST(request) {
       pool_address: pool.poolAddress.toString(),
       pool_jetton_wallet: poolJettonWallet.toString(),
       user_jetton_wallet: userJettonWallet.toString(),
-      tier: tier.tier,
-      fee_ton: tier.feeTon,
       decimals: metadata.decimals,
       expiry: Number(expiry),
     });

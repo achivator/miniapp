@@ -1,6 +1,6 @@
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
-import { getTonConfig, tierForMembers } from "@/lib/ton/config";
+import { getTonConfig } from "@/lib/ton/config";
 import {
   fetchJettonMetadata,
   fetchPoolClaimControls,
@@ -40,7 +40,6 @@ export async function GET(request) {
 
   const isCreator = chat.creator === auth.user.id;
   const memberCount = await getChatMemberCount(chatId);
-  const tier = tierForMembers(memberCount ?? 0);
 
   let status = { poolAddress: null, active: false, balance: 0n };
   try {
@@ -102,9 +101,9 @@ export async function GET(request) {
     pool_admin: poolAdmin ? poolAdmin.toString() : null,
     controls,
     member_count: memberCount,
-    fee: { tier: tier.tier, fee_ton: tier.feeTon },
     create_pool_body:
       !status.active && isCreator ? buildCreatePoolBody(chatId).toBoc().toString("base64") : null,
     create_pool_ton: GAS.createPoolTon,
+    pool_reserve_ton: GAS.poolReserveTon,
   });
 }
