@@ -12,7 +12,8 @@ const LABELS = { ru: "Русский", en: "English" };
 // What the bare "/" and "/help" render. Visitors never see it: LOCALE_SCRIPT
 // redirects them to /ru… or /en… before the first paint, and the effect below
 // does the same after a client-side navigation here (the inline script only
-// runs on a full load), e.g. the dashboard's link to /help. A layout effect,
+// runs on a full load), e.g. the dashboard's link to /help; the target has
+// another root layout, so the router loads it as a full page. A layout effect,
 // so the chooser is gone before the browser paints it. It stays a plain
 // language choice for whoever runs no JS: crawlers, link previews, readers.
 export function LocaleChooser({ page }) {

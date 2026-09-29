@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { on, postEvent } from "@tma.js/sdk";
+import { on, postEvent, retrieveLaunchParams } from "@tma.js/sdk";
+import { isTelegramLaunch } from "@/lib/launch";
 
 // Telegram's native back button for pages rendered without AppShell (they
 // must also open in a plain browser, where the bridge is missing and
@@ -10,6 +11,17 @@ import { on, postEvent } from "@tma.js/sdk";
 export function TelegramBack() {
   const router = useRouter();
   useEffect(() => {
+    // "/" is in another root layout, so going home (here or the logo's
+    // HomeLink) is a full page load without the launch params in the URL.
+    // Retrieving them keeps the SDK's sessionStorage copy, which LAUNCH_SCRIPT
+    // and the dashboard find there, also when Telegram opened this page first.
+    if (isTelegramLaunch()) {
+      try {
+        retrieveLaunchParams();
+      } catch {
+        // malformed launch params: nothing to keep
+      }
+    }
     try {
       postEvent("web_app_setup_back_button", { is_visible: true });
     } catch {

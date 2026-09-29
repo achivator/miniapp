@@ -1,5 +1,8 @@
-import { DocumentLang } from "@/components/DocumentLang";
+import { Document, metadata, viewport } from "../document";
+import { KeepLaunchMark } from "@/components/KeepLaunchMark";
 import { LOCALES } from "@/lib/locale";
+
+export { metadata, viewport };
 
 // Localized web pages (/ru, /en and their subpages), each statically rendered
 // in one language. Other locales are a 404, not a render on demand.
@@ -9,14 +12,15 @@ export function generateStaticParams() {
   return LOCALES.map((locale) => ({ locale }));
 }
 
-// The root layout serves every route, so its static <html lang> cannot know
-// the locale: the wrapper carries it for the content, and LOCALE_SCRIPT (on
-// load) or DocumentLang (on client-side navigation) sets it on <html>.
+// A root layout of its own, so the served HTML carries the page's language.
+// data-lang is rendered too, and KeepLaunchMark restores data-launch, because
+// a switch between /ru and /en (a client-side navigation) remounts this
+// layout and resets <html> to the attributes rendered here.
 export default function LocaleLayout({ children, params: { locale } }) {
   return (
-    <div lang={locale}>
-      <DocumentLang locale={locale} />
+    <Document lang={locale} data-lang={locale}>
+      <KeepLaunchMark />
       {children}
-    </div>
+    </Document>
   );
 }
