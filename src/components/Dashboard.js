@@ -91,7 +91,7 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
 
-  const symbol = reward.symbol || L("жетонов", "jetton");
+  const symbol = reward.symbol || L("жетона", "jetton");
   const closed = gateText(reward.claim_gate, t);
   const canClaim = reward.available_points > 0 && Boolean(reward.jetton_master) && !closed;
   const pending = reward.pending?.[0];

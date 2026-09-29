@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { MISSING_HEADER } from "@/lib/not-found";
+import { isPage } from "@/lib/pages";
 
 // Unknown URLs get the site's styled 404 with status 404. Next 14.2 cannot
 // do that alone with several root layouts: notFound() answers 404 but with an
@@ -10,18 +11,10 @@ import { MISSING_HEADER } from "@/lib/not-found";
 // app/(app), app/ru, app/en) then render the 404 as a normal page, in their
 // layout. Without the marker they fall back to notFound().
 //
-// Keep PAGES in sync with the page routes in src/app: a page missing here
-// would be served with status 404.
-const PAGES = [
-  /^\/$/,
-  /^\/help$/,
-  /^\/(ru|en)(\/help)?$/,
-  /^\/deposit\/[^/]+(\/members(\/[^/]+)?)?$/,
-  /^\/achievement\/[^/]+$/,
-];
+// The list of page routes lives in lib/pages.js (checked by a test).
 
 export function middleware(request) {
-  if (PAGES.some((page) => page.test(request.nextUrl.pathname))) return NextResponse.next();
+  if (isPage(request.nextUrl.pathname)) return NextResponse.next();
   const headers = new Headers(request.headers);
   headers.set(MISSING_HEADER, "1");
   return NextResponse.rewrite(request.nextUrl, { status: 404, request: { headers } });
