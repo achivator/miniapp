@@ -6,16 +6,13 @@ import { Address } from "@ton/core";
 import { useInitDataRaw } from "@tma.js/sdk-react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { apiFetch, sendTonTransaction, shortenAddress, sleep } from "@/lib/client-api";
-import { formatExact, formatUnits } from "@/lib/format";
+import { formatExact } from "@/lib/format";
+import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
 import { Button, Card, ChatAvatar, Chip, Notice, Row, SectionHeader, Skeleton } from "@/components/ui";
 import { ArrowDown, ArrowUp, Check, ChevronRight, Refresh, Shield, Users } from "@/components/icons";
 import { ClaimRules } from "@/components/ClaimRules";
 import { PointPrice } from "@/components/PointPrice";
-
-function formatTon(nanotons) {
-  return formatUnits(nanotons, 9);
-}
 
 function sameAddress(a, b) {
   try {
@@ -26,6 +23,7 @@ function sameAddress(a, b) {
 }
 
 function AmountField({ value, onChange, symbol, onMax, disabled }) {
+  const { L } = useI18n();
   return (
     <div className="flex h-12 items-center gap-2 rounded-xl bg-bg px-3.5 ring-accent focus-within:ring-2">
       <input
@@ -38,7 +36,7 @@ function AmountField({ value, onChange, symbol, onMax, disabled }) {
       />
       {onMax && (
         <button type="button" className="text-[13px] font-semibold text-link" onClick={onMax} disabled={disabled}>
-          Max
+          {L("Всё", "Max")}
         </button>
       )}
       <span className="text-[15px] font-medium text-hint">{symbol}</span>
@@ -51,6 +49,9 @@ function PoolManager({ chatId }) {
   const wallet = useTonAddress();
   const [tonConnectUI] = useTonConnectUI();
   const haptic = useHaptic();
+  const t = useI18n();
+  const { L } = t;
+  const formatTon = (nanotons) => t.units(nanotons, 9);
   useTelegramBack(true);
 
   const [info, setInfo] = useState(null);
@@ -112,45 +113,58 @@ function PoolManager({ chatId }) {
         return;
       }
     }
-    setNotice({ kind: "info", text: "Still confirming on-chain — pull Refresh in a minute." });
+    setNotice({
+      kind: "info",
+      text: L("Транзакция ещё подтверждается в сети — нажмите «Обновить» через минуту.", "Still confirming on-chain — pull Refresh in a minute."),
+    });
   }
 
   const activate = () =>
     run("activate", async () => {
-      setNotice({ kind: "info", text: "Confirm the activation in your wallet." });
+      setNotice({ kind: "info", text: L("Подтвердите активацию в кошельке.", "Confirm the activation in your wallet.") });
       await send({ to: info.master_address, amount: info.create_pool_ton, payload_b64: info.create_pool_body });
-      await waitFor((s) => s.active, "Deploying the pool…", "The pool is live. Top it up to start rewarding.");
+      await waitFor(
+        (s) => s.active,
+        L("Разворачиваем пул…", "Deploying the pool…"),
+        L("Пул работает. Пополните его, чтобы начать награждать.", "The pool is live. Top it up to start rewarding."),
+      );
     });
 
   const deposit = () =>
     run("deposit", async () => {
-      setNotice({ kind: "info", text: "Preparing the transfer…" });
+      setNotice({ kind: "info", text: L("Готовим перевод…", "Preparing the transfer…") });
       const tx = await apiFetch("/api/deposit-voucher", {
         method: "POST",
         initDataRaw,
         body: { chatId, wallet, amount },
       });
-      setNotice({ kind: "info", text: `Confirm in your wallet (includes ${formatTon(tx.amount)} TON for fees).` });
+      setNotice({
+        kind: "info",
+        text: L(
+          `Подтвердите в кошельке (включая ${formatTon(tx.amount)} TON на комиссии).`,
+          `Confirm in your wallet (includes ${formatTon(tx.amount)} TON for fees).`,
+        ),
+      });
       await send(tx);
       const before = BigInt(info.ledger ?? 0);
       setAmount("");
       await waitFor(
         (s) => s.ledger !== null && BigInt(s.ledger) > before,
-        "Sent — waiting for the pool to credit it…",
-        `Pool topped up.`,
+        L("Отправлено — ждём зачисления в пул…", "Sent — waiting for the pool to credit it…"),
+        L("Пул пополнен.", "Pool topped up."),
       );
     });
 
   const claimAdmin = () =>
     run("admin", async () => {
-      setNotice({ kind: "info", text: "Preparing the admin voucher…" });
+      setNotice({ kind: "info", text: L("Готовим чек админа…", "Preparing the admin voucher…") });
       const tx = await apiFetch("/api/admin-voucher", { method: "POST", initDataRaw, body: { chatId, wallet } });
-      setNotice({ kind: "info", text: "Confirm in your wallet." });
+      setNotice({ kind: "info", text: L("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await send(tx);
       await waitFor(
         (s) => sameAddress(s.pool_admin, wallet),
-        "Registering this wallet as pool admin…",
-        "This wallet now controls withdrawals.",
+        L("Назначаем этот кошелёк админом пула…", "Registering this wallet as pool admin…"),
+        L("Теперь вывод из пула управляется этим кошельком.", "This wallet now controls withdrawals."),
       );
     });
 
@@ -159,36 +173,42 @@ function PoolManager({ chatId }) {
   const setPaused = (paused) =>
     run("pause", async () => {
       const tx = await adminTx({ action: paused ? "pause" : "resume" });
-      setNotice({ kind: "info", text: "Confirm in your wallet." });
+      setNotice({ kind: "info", text: L("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await send(tx);
       await waitFor(
         (s) => s.controls?.paused === paused,
-        paused ? "Pausing claims…" : "Resuming claims…",
-        paused ? "Claims are paused. Nobody can claim until you resume." : "Claims are open again.",
+        paused ? L("Приостанавливаем вывод…", "Pausing claims…") : L("Возобновляем вывод…", "Resuming claims…"),
+        paused
+          ? L("Вывод приостановлен. Никто не сможет забрать баллы, пока вы его не возобновите.", "Claims are paused. Nobody can claim until you resume.")
+          : L("Вывод снова открыт.", "Claims are open again."),
       );
     });
 
   const saveLimit = (value) =>
     run("limit", async () => {
       const tx = await adminTx({ action: "limit", amount: value });
-      setNotice({ kind: "info", text: "Confirm in your wallet." });
+      setNotice({ kind: "info", text: L("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await send(tx);
       setLimitAmount("");
       const before = info.controls?.limit;
-      await waitFor((s) => s.controls && s.controls.limit !== before, "Updating the daily limit…", "Daily limit updated.");
+      await waitFor(
+        (s) => s.controls && s.controls.limit !== before,
+        L("Меняем дневной лимит…", "Updating the daily limit…"),
+        L("Дневной лимит изменён.", "Daily limit updated."),
+      );
     });
 
   const withdraw = () =>
     run("withdraw", async () => {
       const tx = await adminTx({ action: "withdraw", amount: withdrawAmount, to: wallet });
-      setNotice({ kind: "info", text: "Confirm the withdrawal in your wallet." });
+      setNotice({ kind: "info", text: L("Подтвердите вывод в кошельке.", "Confirm the withdrawal in your wallet.") });
       await send(tx);
       const before = BigInt(info.ledger ?? 0);
       setWithdrawAmount("");
       await waitFor(
         (s) => s.ledger !== null && BigInt(s.ledger) < before,
-        "Withdrawing…",
-        "Jettons are on their way to your wallet.",
+        L("Выводим…", "Withdrawing…"),
+        L("Жетоны уже в пути к вашему кошельку.", "Jettons are on their way to your wallet."),
       );
     });
 
@@ -215,7 +235,7 @@ function PoolManager({ chatId }) {
     );
   }
 
-  const symbol = info.jetton?.symbol || "jetton";
+  const symbol = info.jetton?.symbol || L("жетонов", "jetton");
   const decimals = info.jetton?.decimals ?? null;
   const isAdminWallet = sameAddress(info.pool_admin, wallet);
 
@@ -225,19 +245,23 @@ function PoolManager({ chatId }) {
 
       {info.network === "testnet" && (
         <div className="-mt-2 flex justify-center">
-          <Chip tone="gold">Testnet — connect a testnet wallet</Chip>
+          <Chip tone="gold">{L("Тестнет — подключите тестнет-кошелёк", "Testnet — connect a testnet wallet")}</Chip>
         </div>
       )}
 
       <div className="flex items-center gap-3">
         <ChatAvatar title={info.title} id={info.chat_id} size={56} />
         <div className="min-w-0">
-          <h1 className="truncate text-[22px] font-bold leading-tight">{info.title || `Chat ${info.chat_id}`}</h1>
+          <h1 className="truncate text-[22px] font-bold leading-tight">
+            {info.title || L(`Чат ${info.chat_id}`, `Chat ${info.chat_id}`)}
+          </h1>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {info.active ? (
-              <Chip tone="success" icon={<Check className="h-3.5 w-3.5" />}>Pool active</Chip>
+              <Chip tone="success" icon={<Check className="h-3.5 w-3.5" />}>
+                {L("Пул активен", "Pool active")}
+              </Chip>
             ) : (
-              <Chip tone="neutral">Not activated</Chip>
+              <Chip tone="neutral">{L("Не активирован", "Not activated")}</Chip>
             )}
             {info.jetton_master && <Chip tone="accent">{symbol}</Chip>}
           </div>
@@ -245,17 +269,23 @@ function PoolManager({ chatId }) {
       </div>
 
       <Card>
-        <p className="text-[13px] text-hint">Reward pool</p>
+        <p className="text-[13px] text-hint">{L("Пул наград", "Reward pool")}</p>
         <p className="mt-1 text-[30px] font-bold leading-none tracking-tight tabular">
-          {info.active ? formatUnits(info.ledger, decimals) : "0"}{" "}
+          {info.active ? t.units(info.ledger, decimals) : "0"}{" "}
           <span className="text-[17px] font-semibold text-hint">{symbol}</span>
         </p>
         <div className="mt-3 divide-y divide-[color:var(--separator)] border-t border-[color:var(--separator)]">
-          {info.pool_address && <Row label="Pool contract">{shortenAddress(info.pool_address, 5)}</Row>}
-          <Row label={`Deposit fee · tier ${info.fee.tier}`}>{info.fee.fee_ton} TON</Row>
-          {info.member_count !== null && <Row label="Members">{info.member_count.toLocaleString("en-US")}</Row>}
+          {info.pool_address && (
+            <Row label={L("Контракт пула", "Pool contract")}>{shortenAddress(info.pool_address, 5)}</Row>
+          )}
+          <Row label={L(`Комиссия (тариф ${info.fee.tier})`, `Deposit fee · tier ${info.fee.tier}`)}>
+            {t.decimal(info.fee.fee_ton)} TON
+          </Row>
+          {info.member_count !== null && <Row label={L("Участники", "Members")}>{t.num(info.member_count)}</Row>}
           {info.active && (
-            <Row label="Admin wallet">{info.pool_admin ? shortenAddress(info.pool_admin, 5) : "not set"}</Row>
+            <Row label={L("Админ-кошелёк", "Admin wallet")}>
+              {info.pool_admin ? shortenAddress(info.pool_admin, 5) : L("не задан", "not set")}
+            </Row>
           )}
         </div>
       </Card>
@@ -267,8 +297,10 @@ function PoolManager({ chatId }) {
               <Users className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="font-semibold">Member accounts</p>
-              <p className="text-[13px] text-hint">Who earned what, what is owed, payout history</p>
+              <p className="font-semibold">{L("Счета участников", "Member accounts")}</p>
+              <p className="text-[13px] text-hint">
+                {L("Кто сколько заработал, сколько причитается, история выплат", "Who earned what, what is owed, payout history")}
+              </p>
             </div>
             <ChevronRight className="h-5 w-5 text-hint" />
           </Card>
@@ -276,23 +308,33 @@ function PoolManager({ chatId }) {
       )}
 
       {!info.jetton_master && (
-        <Notice notice={{ kind: "info", text: "Set the reward jetton first: send /jetton <master address> in the chat." }} />
+        <Notice
+          notice={{
+            kind: "info",
+            text: L(
+              "Сначала задайте жетон наград: отправьте в чат /jetton <адрес мастер-контракта>.",
+              "Set the reward jetton first: send /jetton <master address> in the chat.",
+            ),
+          }}
+        />
       )}
 
       {!info.is_creator && (
-        <Notice notice={{ kind: "info", text: "Only the chat creator can manage this pool." }} />
+        <Notice notice={{ kind: "info", text: L("Управлять этим пулом может только создатель чата.", "Only the chat creator can manage this pool.") }} />
       )}
 
       {info.is_creator && !info.active && (
         <section className="space-y-2.5">
-          <SectionHeader title="Activate" />
+          <SectionHeader title={L("Активация", "Activate")} />
           <Card className="space-y-3">
             <p className="text-[15px] leading-snug text-hint">
-              Deploy this chat&apos;s reward pool — a contract only you (and member claims signed by the bot) can
-              move jettons out of. One-time, {formatTon(info.create_pool_ton)} TON.
+              {L(
+                `Разверните пул наград этого чата — контракт, из которого жетоны может вывести только вы (и участники по чекам, подписанным ботом). Разово, ${formatTon(info.create_pool_ton)} TON.`,
+                `Deploy this chat's reward pool — a contract only you (and member claims signed by the bot) can move jettons out of. One-time, ${formatTon(info.create_pool_ton)} TON.`,
+              )}
             </p>
             <Button className="w-full" busy={busy === "activate"} disabled={Boolean(busy)} onClick={activate}>
-              {wallet ? "Activate pool" : "Connect wallet"}
+              {wallet ? L("Активировать пул", "Activate pool") : L("Подключить кошелёк", "Connect wallet")}
             </Button>
           </Card>
         </section>
@@ -300,19 +342,24 @@ function PoolManager({ chatId }) {
 
       {info.is_creator && info.active && info.jetton_master && !info.pool_admin && (
         <section className="space-y-2.5">
-          <SectionHeader title="Step 1 · Admin wallet" hint="Needed before the first top-up." />
+          <SectionHeader
+            title={L("Шаг 1 · Админ-кошелёк", "Step 1 · Admin wallet")}
+            hint={L("Нужен до первого пополнения.", "Needed before the first top-up.")}
+          />
           <Card className="space-y-3">
             <div className="flex gap-3">
               <div className="tint-accent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-accent">
                 <Shield className="h-5 w-5" />
               </div>
               <p className="text-[14px] leading-snug text-hint">
-                Register the connected wallet as the pool admin. Only it can withdraw, set the daily payout limit or
-                pause claims, and only it can hand the role over later.
+                {L(
+                  "Назначьте подключённый кошелёк админом пула. Только он сможет выводить жетоны, задавать дневной лимит выплат и приостанавливать вывод, и только он сможет потом передать эту роль.",
+                  "Register the connected wallet as the pool admin. Only it can withdraw, set the daily payout limit or pause claims, and only it can hand the role over later.",
+                )}
               </p>
             </div>
             <Button className="w-full" busy={busy === "admin"} disabled={Boolean(busy)} onClick={claimAdmin}>
-              {wallet ? "Make this wallet the admin" : "Connect wallet"}
+              {wallet ? L("Сделать этот кошелёк админом", "Make this wallet the admin") : L("Подключить кошелёк", "Connect wallet")}
             </Button>
           </Card>
         </section>
@@ -320,7 +367,10 @@ function PoolManager({ chatId }) {
 
       {info.is_creator && info.active && info.jetton_master && info.pool_admin && (
         <section className="space-y-2.5">
-          <SectionHeader title="Top up" hint="Members claim their points from this balance." />
+          <SectionHeader
+            title={L("Пополнение", "Top up")}
+            hint={L("Из этого баланса участники забирают свои баллы.", "Members claim their points from this balance.")}
+          />
           <Card className="space-y-3">
             <AmountField value={amount} onChange={setAmount} symbol={symbol} disabled={Boolean(busy)} />
             <Button
@@ -330,7 +380,7 @@ function PoolManager({ chatId }) {
               onClick={deposit}
             >
               <ArrowDown className="h-4 w-4" />
-              {wallet ? "Top up pool" : "Connect wallet"}
+              {wallet ? L("Пополнить пул", "Top up pool") : L("Подключить кошелёк", "Connect wallet")}
             </Button>
           </Card>
         </section>
@@ -344,7 +394,10 @@ function PoolManager({ chatId }) {
         <Notice
           notice={{
             kind: "info",
-            text: `Withdrawals and safety controls belong to ${shortenAddress(info.pool_admin, 5)}. Connect that wallet to use them.`,
+            text: L(
+              `Вывод и защита пула доступны кошельку ${shortenAddress(info.pool_admin, 5)}. Подключите его, чтобы ими пользоваться.`,
+              `Withdrawals and safety controls belong to ${shortenAddress(info.pool_admin, 5)}. Connect that wallet to use them.`,
+            ),
           }}
         />
       )}
@@ -352,15 +405,22 @@ function PoolManager({ chatId }) {
       {isAdminWallet && info.controls && (
         <section className="space-y-2.5">
           <SectionHeader
-            title="On-chain protection"
-            hint="Enforced by the pool contract itself — holds even if the bot's key is stolen."
+            title={L("Защита в блокчейне", "On-chain protection")}
+            hint={L(
+              "Её соблюдает сам контракт пула — она действует, даже если ключ бота украдут.",
+              "Enforced by the pool contract itself — holds even if the bot's key is stolen.",
+            )}
           />
           <Card className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="font-semibold">{info.controls.paused ? "Claims paused" : "Claims open"}</p>
+                <p className="font-semibold">
+                  {info.controls.paused ? L("Вывод приостановлен", "Claims paused") : L("Вывод открыт", "Claims open")}
+                </p>
                 <p className="text-[13px] text-hint">
-                  {info.controls.paused ? "Nobody can claim until you resume." : "Emergency stop for all member claims."}
+                  {info.controls.paused
+                    ? L("Никто не сможет забрать баллы, пока вы не возобновите вывод.", "Nobody can claim until you resume.")
+                    : L("Экстренная остановка всех выводов участников.", "Emergency stop for all member claims.")}
                 </p>
               </div>
               <Button
@@ -370,18 +430,23 @@ function PoolManager({ chatId }) {
                 disabled={Boolean(busy)}
                 onClick={() => setPaused(!info.controls.paused)}
               >
-                {info.controls.paused ? "Resume" : "Pause"}
+                {info.controls.paused ? L("Возобновить", "Resume") : L("Пауза", "Pause")}
               </Button>
             </div>
             <div className="divide-y divide-[color:var(--separator)] border-t border-[color:var(--separator)]">
-              <Row label="Daily payout limit">
-                {info.controls.limit === "0" ? "10% of pool" : `${formatUnits(info.controls.limit, decimals)} ${symbol}`}
+              <Row label={L("Дневной лимит выплат", "Daily payout limit")}>
+                {info.controls.limit === "0" ? L("10% пула", "10% of pool") : `${t.units(info.controls.limit, decimals)} ${symbol}`}
               </Row>
-              <Row label="Left today">
-                {formatUnits(info.controls.claimable_today, decimals)} {symbol}
+              <Row label={L("Осталось на сегодня", "Left today")}>
+                {t.units(info.controls.claimable_today, decimals)} {symbol}
               </Row>
             </div>
-            <AmountField value={limitAmount} onChange={setLimitAmount} symbol={`${symbol}/day`} disabled={Boolean(busy)} />
+            <AmountField
+              value={limitAmount}
+              onChange={setLimitAmount}
+              symbol={L(`${symbol}/день`, `${symbol}/day`)}
+              disabled={Boolean(busy)}
+            />
             <div className="flex gap-2">
               <Button
                 variant="secondary"
@@ -390,11 +455,11 @@ function PoolManager({ chatId }) {
                 disabled={Boolean(busy) || !Number(limitAmount)}
                 onClick={() => saveLimit(limitAmount)}
               >
-                Set limit
+                {L("Задать лимит", "Set limit")}
               </Button>
               {info.controls.limit !== "0" && (
                 <Button variant="ghost" disabled={Boolean(busy)} onClick={() => saveLimit("0")}>
-                  Use 10%
+                  {L("Вернуть 10%", "Use 10%")}
                 </Button>
               )}
             </div>
@@ -404,7 +469,7 @@ function PoolManager({ chatId }) {
 
       {isAdminWallet && info.jetton_master && (
         <section className="space-y-2.5">
-          <SectionHeader title="Withdraw" hint="Take jettons back from the pool." />
+          <SectionHeader title={L("Вывод из пула", "Withdraw")} hint={L("Заберите жетоны обратно из пула.", "Take jettons back from the pool.")} />
           <Card className="space-y-3">
             <AmountField
               value={withdrawAmount}
@@ -421,7 +486,7 @@ function PoolManager({ chatId }) {
               onClick={withdraw}
             >
               <ArrowUp className="h-4 w-4" />
-              Withdraw to my wallet
+              {L("Вывести на мой кошелёк", "Withdraw to my wallet")}
             </Button>
           </Card>
         </section>
@@ -434,7 +499,7 @@ function PoolManager({ chatId }) {
         onClick={load}
         disabled={Boolean(busy)}
       >
-        <Refresh className="h-4 w-4" /> Refresh
+        <Refresh className="h-4 w-4" /> {L("Обновить", "Refresh")}
       </button>
     </Screen>
   );

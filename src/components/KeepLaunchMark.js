@@ -6,9 +6,10 @@ import { useLayoutEffect } from "react";
 // state, which outlives client-side navigations.
 let launch;
 
-// The [locale] root layout is remounted when the locale changes (/ru <-> /en,
-// a client-side navigation), and React then clears every attribute of <html>
-// it does not render itself, the inline scripts' marks included. This puts
+// When a localized root layout (app/ru, app/en, see app/_locale/layout.js)
+// remounts on a client-side navigation, React clears every attribute of
+// <html> it does not render itself, the inline scripts' marks included
+// (/ru <-> /en is a full page load now, so this is a safeguard). This puts
 // data-launch back before the browser paints, so isTelegramLaunch() and the
 // CSS keep treating a Telegram launch as one.
 export function KeepLaunchMark() {

@@ -167,7 +167,7 @@ function ChatMock({ L, fmt, rate }) {
               <span className="text-[14px] font-semibold opacity-85">≈ {fmt(month * rate)} FRONT</span>
             </p>
           </div>
-          <span className="rounded-xl bg-white/25 px-3 py-2 text-[13px] font-semibold">Claim</span>
+          <span className="rounded-xl bg-white/25 px-3 py-2 text-[13px] font-semibold">{L("Забрать", "Claim")}</span>
         </div>
       </div>
     </div>
@@ -242,7 +242,7 @@ function Scheme({ L, feeRange }) {
           </span>
         </div>
       </Node>
-      <Flow>{L("участник жмёт «Claim» — жетоны уходят ему", "the member taps “Claim” and gets the jettons")}</Flow>
+      <Flow>{L("участник жмёт «Забрать» — жетоны уходят ему", "the member taps “Claim” and gets the jettons")}</Flow>
       <Node
         icon={<IconTile tone="tint-success text-success"><Check className="h-5 w-5" /></IconTile>}
         title={L("Кошелёк участника", "Member's wallet")}
@@ -515,7 +515,7 @@ export function Landing({ locale }) {
               [
                 L("Выплата", "Payout"),
                 L(
-                  `Участник жмёт «Claim» в мини-приложении. Сервер выписывает одноразовый подписанный чек, контракт пула проверяет подпись и лимит и отправляет жетоны прямо в кошелёк участника. Курс по умолчанию: 1 балл = ${fmt(rate)} жетона — владелец чата может задать свой.`,
+                  `Участник жмёт «Забрать» в мини-приложении. Сервер выписывает одноразовый подписанный чек, контракт пула проверяет подпись и лимит и отправляет жетоны прямо в кошелёк участника. Курс по умолчанию: 1 балл = ${fmt(rate)} жетона — владелец чата может задать свой.`,
                   `The member taps “Claim” in the mini app. The server issues a single-use signed voucher; the pool contract checks the signature and the limit and sends the jettons straight to the member's wallet. Default rate: 1 point = ${fmt(rate)} jetton — the chat owner can set their own.`,
                 ),
               ],
@@ -593,7 +593,7 @@ export function Landing({ locale }) {
                 <li>
                   {L("За месяц набирается", "Over a month she collects")} <b>{L(`${fmt(900)} баллов`, `${fmt(900)} points`)}</b>.{" "}
                   {L(
-                    `Через ${MATURATION_DAYS} дня дозревания она жмёт «Claim» — и`,
+                    `Через ${MATURATION_DAYS} дня дозревания она жмёт «Забрать» — и`,
                     `After ${MATURATION_DAYS} days of maturation she taps “Claim” and`,
                   )}{" "}
                   <b>{fmt(900 * rate)} FRONT</b> {L("у неё в кошельке.", "are in her wallet.")}
@@ -663,7 +663,7 @@ export function Landing({ locale }) {
               <p className="text-[15px] leading-relaxed text-hint">
                 {L("В", "In the")} <Ext href={APP_URL}>{L("мини-приложении", "mini app")}</Ext>{" "}
                 {L(
-                  "→ «My chats» → ваш чат: «Activate pool», затем «Make this wallet the admin» и «Top up» — введите, сколько жетонов перевести. Подтверждаете каждое действие в кошельке.",
+                  "→ «Мои чаты» → ваш чат: «Активировать пул», затем «Сделать этот кошелёк админом» и «Пополнение» — введите, сколько жетонов перевести. Подтверждаете каждое действие в кошельке.",
                   "→ “My chats” → your chat: “Activate pool”, then “Make this wallet the admin” and “Top up” with the amount of jettons. You confirm each step in your wallet.",
                 )}
               </p>
@@ -732,7 +732,7 @@ export function Landing({ locale }) {
             <PriceRow
               what={L("Выплата участнику", "Member payout")}
               who={L(
-                "Газ платит сам участник, при нажатии «Claim». Неизрасходованное возвращается ему вместе с жетонами.",
+                "Газ платит сам участник, при нажатии «Забрать». Неизрасходованное возвращается ему вместе с жетонами.",
                 "The member pays the gas when tapping “Claim”. What isn't used comes back with the jettons.",
               )}
             >

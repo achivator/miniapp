@@ -4,18 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useInitDataRaw } from "@tma.js/sdk-react";
 import { apiFetch } from "@/lib/client-api";
-import { formatPoints, formatUnits } from "@/lib/format";
+import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useTelegramBack } from "@/components/AppShell";
 import { Button, Card, ChatAvatar, Chip, EmptyState, Notice, Row, Segmented, Skeleton } from "@/components/ui";
 import { ChevronRight, Clock, Coins, Search, Users } from "@/components/icons";
 import { PayoutRow, hasLeft, memberLabel } from "@/components/PoolAdmin";
 
 const SORTS = ["earned", "owed", "claimed"];
-const SORT_LABELS = { earned: "Earned", owed: "Owed", claimed: "Claimed" };
+const SORT_LABELS = { earned: ["Заработано", "Earned"], owed: ["К выплате", "Owed"], claimed: ["Выплачено", "Claimed"] };
 
 function Totals({ data, ledger }) {
+  const t = useI18n();
+  const { L } = t;
   const { totals, jetton } = data;
-  const symbol = jetton?.symbol || "jetton";
+  const symbol = jetton?.symbol || L("жетонов", "jetton");
   const decimals = jetton?.decimals ?? null;
   const payouts = totals.payouts;
   const inFlight = payouts.pending.count + payouts.unconfirmed.count;
@@ -31,45 +33,54 @@ function Totals({ data, ledger }) {
 
   return (
     <Card>
-      <p className="text-[13px] text-hint">Owed to members</p>
+      <p className="text-[13px] text-hint">{L("Причитается участникам", "Owed to members")}</p>
       <p className="mt-1 text-[30px] font-bold leading-none tracking-tight tabular">
-        {formatPoints(totals.owed_points)} <span className="text-[17px] font-semibold text-hint">pts</span>
+        {t.num(totals.owed_points)}{" "}
+        <span className="text-[17px] font-semibold text-hint">
+          {L(t.plural(totals.owed_points, ["балл", "балла", "баллов"], []), "pts")}
+        </span>
       </p>
       {totals.owed_units !== null && (
         <p className="mt-1 text-[14px] text-hint tabular">
-          ≈ {formatUnits(totals.owed_units, decimals)} {symbol}
+          ≈ {t.units(totals.owed_units, decimals)} {symbol}
         </p>
       )}
       {coverage && (
         <div className="mt-3">
           <Chip tone={coverage.short ? "danger" : "success"}>
             {coverage.short
-              ? `Pool covers ${coverage.pct}% of it — top up before members claim`
-              : "Pool balance covers everything owed"}
+              ? L(
+                  `Пул покрывает ${coverage.pct}% — пополните его, пока участники не начали выводить`,
+                  `Pool covers ${coverage.pct}% of it — top up before members claim`,
+                )
+              : L("Баланс пула покрывает всё, что причитается", "Pool balance covers everything owed")}
           </Chip>
         </div>
       )}
       <div className="mt-3 divide-y divide-[color:var(--separator)] border-t border-[color:var(--separator)]">
-        <Row label="Members with points">{formatPoints(totals.members)}</Row>
-        <Row label="Earned in total">{formatPoints(totals.points)} pts</Row>
-        <Row label="Paid out">
-          {formatUnits(payouts.paid.units, decimals)} {symbol}
+        <Row label={L("Участников с баллами", "Members with points")}>{t.num(totals.members)}</Row>
+        <Row label={L("Заработано всего", "Earned in total")}>{t.pts(totals.points)}</Row>
+        <Row label={L("Выплачено", "Paid out")}>
+          {t.units(payouts.paid.units, decimals)} {symbol}
         </Row>
         {ledger !== null && ledger !== undefined && (
-          <Row label="Pool balance">
-            {formatUnits(ledger, decimals)} {symbol}
+          <Row label={L("Баланс пула", "Pool balance")}>
+            {t.units(ledger, decimals)} {symbol}
           </Row>
         )}
         {inFlight > 0 && (
-          <Row label="In flight">
-            {formatUnits(BigInt(payouts.pending.units) + BigInt(payouts.unconfirmed.units), decimals)} {symbol} ·{" "}
-            {inFlight} {inFlight === 1 ? "claim" : "claims"}
+          <Row label={L("В процессе", "In flight")}>
+            {t.units(BigInt(payouts.pending.units) + BigInt(payouts.unconfirmed.units), decimals)} {symbol} ·{" "}
+            {t.count(inFlight, ["вывод", "вывода", "выводов"], ["claim", "claims"])}
           </Row>
         )}
       </div>
       {payouts.other_jetton && (
         <p className="mt-2 text-[12px] leading-snug text-hint">
-          Some payouts were made in a previous jetton of this chat and are not included in the sums above.
+          {L(
+            "Часть выплат была в прежнем жетоне этого чата — в суммы выше они не входят.",
+            "Some payouts were made in a previous jetton of this chat and are not included in the sums above.",
+          )}
         </p>
       )}
     </Card>
@@ -77,26 +88,30 @@ function Totals({ data, ledger }) {
 }
 
 function MemberRow({ chatId, member, sort }) {
+  const t = useI18n();
+  const { L } = t;
   const primary =
     sort === "claimed" ? member.claimed_points : sort === "owed" ? member.owed_points : member.points;
   const inFlight = member.payouts.pending.count + member.payouts.unconfirmed.count;
   return (
     <li>
       <Link href={`/deposit/${chatId}/members/${member.user_id}`} className="flex items-center gap-3 px-4 py-3 active:bg-bg">
-        <ChatAvatar title={memberLabel(member)} id={member.user_id} size={40} />
+        <ChatAvatar title={memberLabel(member, L)} id={member.user_id} size={40} />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">{memberLabel(member)}</p>
+          <p className="truncate font-semibold">{memberLabel(member, L)}</p>
           <p className="truncate text-[13px] text-hint tabular">
-            {hasLeft(member.status) ? "Left · " : ""}
-            {sort === "earned" ? "" : `Earned ${formatPoints(member.points)} · `}
-            {sort === "owed" ? "" : `Owed ${formatPoints(member.owed_points)} · `}
-            Paid {formatPoints(member.payouts.paid.points)}
-            {member.maturing_points > 0 ? ` · ${formatPoints(member.maturing_points)} maturing` : ""}
+            {hasLeft(member.status) ? L("Вышел · ", "Left · ") : ""}
+            {sort === "earned" ? "" : L(`Заработано ${t.num(member.points)} · `, `Earned ${t.num(member.points)} · `)}
+            {sort === "owed" ? "" : L(`К выплате ${t.num(member.owed_points)} · `, `Owed ${t.num(member.owed_points)} · `)}
+            {L(`Выплачено ${t.num(member.payouts.paid.points)}`, `Paid ${t.num(member.payouts.paid.points)}`)}
+            {member.maturing_points > 0
+              ? L(` · дозревает ${t.num(member.maturing_points)}`, ` · ${t.num(member.maturing_points)} maturing`)
+              : ""}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {inFlight > 0 && <Clock className="h-4 w-4 text-[color:var(--gold)]" />}
-          <span className="text-[15px] font-semibold tabular">{formatPoints(primary)}</span>
+          <span className="text-[15px] font-semibold tabular">{t.num(primary)}</span>
           <ChevronRight className="h-4 w-4 text-hint" />
         </div>
       </Link>
@@ -105,6 +120,7 @@ function MemberRow({ chatId, member, sort }) {
 }
 
 function MembersTab({ chatId, initDataRaw, onChat }) {
+  const { L } = useI18n();
   const [sort, setSort] = useState("earned");
   const [query, setQuery] = useState("");
   const [data, setData] = useState(null);
@@ -175,13 +191,13 @@ function MembersTab({ chatId, initDataRaw, onChat }) {
       {error && <Notice notice={{ kind: "err", text: error }} />}
       {data ? <Totals data={data} ledger={ledger} /> : !error && <Skeleton className="h-48 w-full rounded-card" />}
 
-      <Segmented options={SORTS} value={sort} onChange={setSort} format={(s) => SORT_LABELS[s]} />
+      <Segmented options={SORTS} value={sort} onChange={setSort} format={(s) => L(...SORT_LABELS[s])} />
 
       <label className="flex h-11 items-center gap-2 rounded-xl bg-surface px-3.5 ring-accent focus-within:ring-2">
         <Search className="h-4 w-4 text-hint" />
         <input
           className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-hint"
-          placeholder="Name, @username or user id"
+          placeholder={L("Имя, @username или id пользователя", "Name, @username or user id")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -199,17 +215,26 @@ function MembersTab({ chatId, initDataRaw, onChat }) {
         </Card>
       ) : (
         data && (
-          <EmptyState icon={<Users className="h-6 w-6" />} title={query ? "Nobody found" : "No member has points yet"}>
+          <EmptyState
+            icon={<Users className="h-6 w-6" />}
+            title={query ? L("Никого не нашлось", "Nobody found") : L("Баллов пока нет ни у кого", "No member has points yet")}
+          >
             {query && data.has_more
-              ? "Names are searched among loaded members — load more, or search by user id."
-              : "Points appear when members get reactions or /reward grants."}
+              ? L(
+                  "Имена ищутся среди загруженных участников — загрузите ещё или ищите по id пользователя.",
+                  "Names are searched among loaded members — load more, or search by user id.",
+                )
+              : L(
+                  "Баллы появятся, когда участники получат реакции или начисления через /reward.",
+                  "Points appear when members get reactions or /reward grants.",
+                )}
           </EmptyState>
         )
       )}
 
       {data?.has_more && (
         <Button variant="secondary" busy={loadingMore} onClick={loadMore}>
-          Load more
+          {L("Загрузить ещё", "Load more")}
         </Button>
       )}
     </>
@@ -217,6 +242,7 @@ function MembersTab({ chatId, initDataRaw, onChat }) {
 }
 
 function PayoutsTab({ chatId, initDataRaw }) {
+  const { L } = useI18n();
   const [payouts, setPayouts] = useState(null);
   const [next, setNext] = useState(null);
   const [error, setError] = useState(null);
@@ -255,8 +281,11 @@ function PayoutsTab({ chatId, initDataRaw }) {
   if (payouts === null) return <Skeleton className="h-64 w-full rounded-card" />;
   if (!payouts.length) {
     return (
-      <EmptyState icon={<Coins className="h-6 w-6" />} title="No payouts yet">
-        Every claim a member makes shows up here, with the wallet it went to.
+      <EmptyState icon={<Coins className="h-6 w-6" />} title={L("Выплат пока нет", "No payouts yet")}>
+        {L(
+          "Здесь появится каждый вывод участника — с кошельком, на который он ушёл.",
+          "Every claim a member makes shows up here, with the wallet it went to.",
+        )}
       </EmptyState>
     );
   }
@@ -265,13 +294,13 @@ function PayoutsTab({ chatId, initDataRaw }) {
       <Card className="py-1.5">
         <ul className="divide-y divide-[color:var(--separator)]">
           {payouts.map((p) => (
-            <PayoutRow key={p.nonce} claim={p} who={memberLabel(p)} href={`/deposit/${chatId}/members/${p.user_id}`} />
+            <PayoutRow key={p.nonce} claim={p} who={memberLabel(p, L)} href={`/deposit/${chatId}/members/${p.user_id}`} />
           ))}
         </ul>
       </Card>
       {next && (
         <Button variant="secondary" busy={loadingMore} onClick={loadMore}>
-          Load more
+          {L("Загрузить ещё", "Load more")}
         </Button>
       )}
     </>
@@ -281,6 +310,7 @@ function PayoutsTab({ chatId, initDataRaw }) {
 function MembersScreen({ chatId }) {
   const initDataRaw = useInitDataRaw();
   useTelegramBack(true);
+  const { L } = useI18n();
   const [tab, setTab] = useState("members");
   const [chat, setChat] = useState(null);
 
@@ -290,8 +320,8 @@ function MembersScreen({ chatId }) {
       <div className="flex items-center gap-3">
         <ChatAvatar title={chat?.title} id={chatId} size={48} />
         <div className="min-w-0">
-          <h1 className="truncate text-[20px] font-bold leading-tight">Member accounts</h1>
-          <p className="truncate text-[13px] text-hint">{chat?.title || `Chat ${chatId}`}</p>
+          <h1 className="truncate text-[20px] font-bold leading-tight">{L("Счета участников", "Member accounts")}</h1>
+          <p className="truncate text-[13px] text-hint">{chat?.title || L(`Чат ${chatId}`, `Chat ${chatId}`)}</p>
         </div>
       </div>
 
@@ -299,7 +329,7 @@ function MembersScreen({ chatId }) {
         options={["members", "payouts"]}
         value={tab}
         onChange={setTab}
-        format={(t) => (t === "members" ? "Balances" : "Payouts")}
+        format={(t) => (t === "members" ? L("Балансы", "Balances") : L("Выплаты", "Payouts"))}
       />
 
       {tab === "members" ? (
