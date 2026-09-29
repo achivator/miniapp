@@ -1,8 +1,10 @@
 // Web pages (landing, setup guide) have one URL per language: /ru, /en,
 // /ru/help, /en/help, each statically rendered in its language. The bare
 // "/" and "/help" pick one for the visitor: ?lang= in the URL, then the
-// visitor's earlier pick (LangSwitch), then the browser language, Russian
-// when unsure. A Telegram launch of "/" is the member dashboard and stays.
+// visitor's earlier pick (LangSwitch), then the browser language: Russian
+// for a Russian browser, English for any other (Ukrainian, Belarusian and
+// Kazakh included). A Telegram launch of "/" is the member dashboard and
+// stays.
 export const LOCALES = ["ru", "en"];
 const STORAGE_KEY = "achivator-lang";
 
@@ -10,19 +12,21 @@ const STORAGE_KEY = "achivator-lang";
 // bare path (without a locale) redirects to the visitor's language.
 export const PAGES = ["", "/help"];
 
-// Runs before the first paint (see layout.js, after LAUNCH_SCRIPT) so a
-// redirect never flashes the fallback page and screens that serve both
-// languages (<T>) show one from the start. On /ru* and /en* the route's
-// locale wins; elsewhere it sets html[data-lang] from the preference and, on
-// "/" (browser only) and "/help", replaces the URL with the localized page.
-// The page is hidden while the browser navigates away (globals.css).
+// Runs before the first paint (see app/document.js, after LAUNCH_SCRIPT) so
+// a redirect never flashes the fallback page and screens that serve both
+// languages (<T>) show one from the start. It sets html[data-lang] only:
+// <html lang> is the served page's own (the route's locale on /ru* and
+// /en*, English elsewhere). On /ru* and /en* the route's locale wins;
+// elsewhere data-lang comes from the preference and, on "/" (browser only)
+// and "/help", the URL is replaced with the localized page. The page is
+// hidden while the browser navigates away (globals.css).
 // Keep the preference order in sync with preferredLocale() below.
 export const LOCALE_SCRIPT = `try{
 var d=document.documentElement,p=location.pathname,s=new URLSearchParams(location.search),m=/^\\/(ru|en)(\\/|$)/.exec(p),l=m&&m[1];
 if(!l){l=s.get("lang");
 if(l!=="ru"&&l!=="en"){try{l=localStorage.getItem("${STORAGE_KEY}")}catch(e){}}
-if(l!=="ru"&&l!=="en"){l=/^(ru|uk|be|kk)\\b/i.test(navigator.language||"")?"ru":"en"}}
-d.dataset.lang=l;d.lang=l;
+if(l!=="ru"&&l!=="en"){l=/^ru\\b/i.test(navigator.language||"")?"ru":"en"}}
+d.dataset.lang=l;
 var t=p==="/help"?"/help":p==="/"&&d.dataset.launch!=="telegram"?"":null;
 if(t!==null){s.delete("lang");s=s.toString();d.dataset.redirect="";location.replace("/"+l+t+(s?"?"+s:"")+location.hash)}
 }catch(e){}`;
@@ -38,7 +42,7 @@ export function preferredLocale() {
       // storage blocked
     }
   }
-  if (!LOCALES.includes(locale)) locale = /^(ru|uk|be|kk)\b/i.test(navigator.language || "") ? "ru" : "en";
+  if (!LOCALES.includes(locale)) locale = /^ru\b/i.test(navigator.language || "") ? "ru" : "en";
   return locale;
 }
 
@@ -61,7 +65,7 @@ export function localeAlternates(page) {
 }
 
 // Per-locale page metadata: canonical URL, hreflang alternates and Open
-// Graph. metadataBase is in layout.js.
+// Graph. metadataBase is in app/document.js.
 export function localeMetadata({ locale, page, title, description }) {
   const url = `/${locale}${page}`;
   return {
