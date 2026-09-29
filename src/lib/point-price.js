@@ -42,6 +42,9 @@ const ANNOUNCE = {
     scheduled: 'price_decrease_scheduled',
     cancelled: 'price_decrease_cancelled',
     increased: 'price_increased',
+    // the mini app wrote out a due decrease the bot had not applied (the bot
+    // announces the ones it applies itself)
+    decreased: 'price_decreased',
 };
 
 function httpError(status, message) {
@@ -297,15 +300,17 @@ function pendingFilter(chat) {
 
 // Decides what saving `next` (a canonical price, or null for the platform
 // default) does to the chat, as data the route executes: the conditional
-// `filter`, the `update`, and the `announcement` for the bot (or null).
-// `before`/`after` are the effective prices now and once the save applies.
-// Returns null when nothing would change.
+// `filter`, the `update`, and the `announcements` for the bot (in order,
+// possibly empty). `before`/`after` are the effective prices now and once the
+// save applies. Returns null when nothing would change.
 //
 // A decrease waits `noticeDays` in point_price_pending (replacing any other
-// pending one); anything else applies now and cancels a pending decrease. A
-// decrease that is already due but not yet applied by the bot is written out
-// first (point_price + its history entry), so the history keeps chaining and
-// the bot, finding its pending gone, does not apply it a second time.
+// pending one; requesting the same target again is a no-op, so it neither
+// restarts the notice nor re-announces). Anything else applies now and
+// cancels a pending decrease. A decrease that is already due but not yet
+// applied by the bot is written out first (point_price + its history entry +
+// a price_decreased announcement, since the bot, finding its pending gone,
+// neither applies nor announces it).
 function planPointPriceChange(chat, next, { now = new Date(), noticeDays = pointPriceNoticeDays(), by = null, symbol = null } = {}) {
     const stored = chat?.point_price === undefined ? null : chat.point_price;
     // A malformed pending (hand-edited) is dropped by any save, like a
@@ -331,9 +336,19 @@ function planPointPriceChange(chat, next, { now = new Date(), noticeDays = point
     const target = next ?? platformPointPrice();
 
     const history = [];
+    const announcements = [];
     if (due) {
         const dueEntry = { old: pending.from, new: pendingTarget(pending), at: pending.effective_at, by: pending.by };
         if (dueEntry.old !== dueEntry.new) history.push(dueEntry);
+        // `to` is what was actually applied: the live default for to_default,
+        // which the operator may have raised since, so only a real drop is
+        // announced as one.
+        if (dueEntry.old !== null && isPriceDecrease(dueEntry.old, dueEntry.new)) {
+            announcements.push({
+                type: ANNOUNCE.decreased,
+                params: { from: dueEntry.old, to: dueEntry.new, symbol: symbol ?? pending.symbol },
+            });
+        }
     }
     // What point_price holds once a due decrease is written out.
     const settled = due ? (pending.to_default ? null : pending.price) : stored;
@@ -344,12 +359,13 @@ function planPointPriceChange(chat, next, { now = new Date(), noticeDays = point
         if (value === null) $unset.point_price = '';
         else $set.point_price = value;
     };
-    let announcement = null;
     let after;
 
     // A corrupted current price cannot be compared, and nobody can claim at
     // it anyway: the fix applies at once, as before.
     if (beforeValid && isPriceDecrease(before, target)) {
+        // Same target as the decrease already waiting: keep its date.
+        if (live !== null && (next === null ? live.to_default : !live.to_default && next === live.price)) return null;
         after = before;
         if (settled !== stored) setStored(settled);
         const effectiveAt = decreaseEffectiveAt(now, noticeDays);
@@ -365,7 +381,7 @@ function planPointPriceChange(chat, next, { now = new Date(), noticeDays = point
         // With no notice there is nothing to warn about ahead: the bot's own
         // "price decreased" message, when it applies it, is the announcement.
         if (effectiveAt.getTime() > now.getTime()) {
-            announcement = { type: ANNOUNCE.scheduled, params: { from: before, to: target, symbol, effective_at: effectiveAt } };
+            announcements.push({ type: ANNOUNCE.scheduled, params: { from: before, to: target, symbol, effective_at: effectiveAt } });
         }
     } else {
         if (pending === null && !malformed && next === stored) return null;
@@ -376,9 +392,9 @@ function planPointPriceChange(chat, next, { now = new Date(), noticeDays = point
         // nothing for members to be warned about
         if (before !== target) history.push({ old: before, new: target, at: now, by });
         if (beforeValid && compareDecimal(target, before) > 0) {
-            announcement = { type: ANNOUNCE.increased, params: { from: before, to: target, symbol, cancelled_pending: live !== null } };
+            announcements.push({ type: ANNOUNCE.increased, params: { from: before, to: target, symbol, cancelled_pending: live !== null } });
         } else if (live !== null) {
-            announcement = { type: ANNOUNCE.cancelled, params: { from: before, to: live.price, symbol: symbol ?? live.symbol } };
+            announcements.push({ type: ANNOUNCE.cancelled, params: { from: before, to: pendingTarget(live), symbol: symbol ?? live.symbol } });
         }
     }
 
@@ -389,7 +405,7 @@ function planPointPriceChange(chat, next, { now = new Date(), noticeDays = point
     return {
         filter: { id: chat.id, point_price: stored, ...pendingFilter(chat) },
         update,
-        announcement,
+        announcements,
         before,
         after,
     };
@@ -407,7 +423,7 @@ function planPointPriceCancel(chat, { now = new Date(), symbol = null } = {}) {
         pending = pendingPointPrice(chat);
     } catch {
         // malformed: nothing meaningful to announce, just clear it
-        return { filter, update, announcement: null, before: null, after: null };
+        return { filter, update, announcements: [], before: null, after: null };
     }
     if (isDue(pending, now)) throw httpError(409, 'the price decrease already took effect; set a new price instead');
     let before = null;
@@ -419,10 +435,10 @@ function planPointPriceCancel(chat, { now = new Date(), symbol = null } = {}) {
     return {
         filter,
         update,
-        announcement:
+        announcements:
             before === null
-                ? null
-                : { type: ANNOUNCE.cancelled, params: { from: before, to: pending.price, symbol: symbol ?? pending.symbol } },
+                ? []
+                : [{ type: ANNOUNCE.cancelled, params: { from: before, to: pendingTarget(pending), symbol: symbol ?? pending.symbol } }],
         before,
         after: before,
     };

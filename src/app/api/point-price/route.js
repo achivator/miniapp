@@ -144,9 +144,14 @@ export async function POST(request) {
     // transaction to share: if this insert fails the change stands and the
     // creator is told the chat was not notified.
     let announced = null;
-    if (plan.announcement) {
+    if (plan.announcements.length > 0) {
       try {
-        await (await getCollection("announcements")).insertOne(announcementDoc(chat.id, plan.announcement, now));
+        // ordered: a written-out due decrease is announced before what the
+        // creator just did
+        await (await getCollection("announcements")).insertMany(
+          plan.announcements.map((a) => announcementDoc(chat.id, a, now)),
+          { ordered: true },
+        );
         announced = true;
       } catch (e) {
         console.error("point-price: announcement insert failed", chat.id, e);

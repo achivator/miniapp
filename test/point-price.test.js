@@ -279,10 +279,12 @@ test('planPointPriceChange: an increase applies at once and is announced', () =>
             $set: { point_price: '0.03' },
             $push: { point_price_history: { $each: [{ old: '0.02', new: '0.03', at: T0, by: 42 }], $slice: -50 } },
         });
-        assert.deepEqual(plan.announcement, {
-            type: 'price_increased',
-            params: { from: '0.02', to: '0.03', symbol: 'PTS', cancelled_pending: false },
-        });
+        assert.deepEqual(plan.announcements, [
+            {
+                type: 'price_increased',
+                params: { from: '0.02', to: '0.03', symbol: 'PTS', cancelled_pending: false },
+            },
+        ]);
         assert.equal(plan.after, '0.03');
         // same price: nothing to do
         assert.equal(planPointPriceChange({ id: 5, point_price: '0.02' }, '0.02', OPTS), null);
@@ -291,7 +293,7 @@ test('planPointPriceChange: an increase applies at once and is announced', () =>
         // effective price does not, so no history and no announcement
         const same = planPointPriceChange({ id: 5, point_price: '0.01' }, null, OPTS);
         assert.deepEqual(same.update, { $unset: { point_price: '' } });
-        assert.equal(same.announcement, null);
+        assert.deepEqual(same.announcements, []);
     });
 });
 
@@ -312,10 +314,12 @@ test('planPointPriceChange: a decrease is scheduled, not applied', () => {
                 },
             },
         });
-        assert.deepEqual(plan.announcement, {
-            type: 'price_decrease_scheduled',
-            params: { from: '0.02', to: '0.015', symbol: 'PTS', effective_at: at(7) },
-        });
+        assert.deepEqual(plan.announcements, [
+            {
+                type: 'price_decrease_scheduled',
+                params: { from: '0.02', to: '0.015', symbol: 'PTS', effective_at: at(7) },
+            },
+        ]);
         assert.equal(plan.after, '0.02');
 
         // "Use default" with a lower default is a decrease too
@@ -326,7 +330,7 @@ test('planPointPriceChange: a decrease is scheduled, not applied', () => {
         // ...but with a higher default it applies at once
         const up = planPointPriceChange({ id: 5, point_price: '0.005' }, null, OPTS);
         assert.deepEqual(up.update.$unset, { point_price: '' });
-        assert.equal(up.announcement.type, 'price_increased');
+        assert.deepEqual(up.announcements.map((a) => a.type), ['price_increased']);
         // from the default to a lower custom price
         const fromDefault = planPointPriceChange({ id: 5 }, '0.001', OPTS);
         assert.equal(fromDefault.update.$set.point_price_pending.from, '0.01');
@@ -339,7 +343,7 @@ test('planPointPriceChange: notice 0 schedules the decrease for right now, unann
         const plan = planPointPriceChange({ id: 5, point_price: '0.02' }, '0.015', { ...OPTS, noticeDays: 0 });
         assert.deepEqual(plan.update.$set.point_price_pending.effective_at, T0);
         // the bot's own "price decreased" message covers it when it applies it
-        assert.equal(plan.announcement, null);
+        assert.deepEqual(plan.announcements, []);
         // and it already pays
         const chat = { id: 5, point_price: '0.02', point_price_pending: plan.update.$set.point_price_pending };
         assert.equal(pointPriceFor(chat, T0), '0.015');
@@ -355,7 +359,26 @@ test('planPointPriceChange: a new decrease replaces the pending one with a fresh
         assert.equal(plan.update.$set.point_price_pending.from, '0.02');
         assert.deepEqual(plan.update.$set.point_price_pending.effective_at, at(7));
         assert.equal(plan.update.$push, undefined);
-        assert.equal(plan.announcement.type, 'price_decrease_scheduled');
+        assert.deepEqual(plan.announcements.map((a) => a.type), ['price_decrease_scheduled']);
+    });
+});
+
+test('planPointPriceChange: the same target as the pending decrease is a no-op', () => {
+    withRate('0.01', () => {
+        const chat = { id: 5, point_price: '0.02', point_price_pending: pendingOf('0.015', at(2), { from: '0.02' }) };
+        // no new effective_at, no new announcement
+        assert.equal(planPointPriceChange(chat, '0.015', OPTS), null);
+        // the route canonicalizes first, so another spelling is the same target
+        assert.equal(planPointPriceChange(chat, normalizePointPrice('0.0150'), OPTS), null);
+        // "Use default" while the same "back to default" decrease waits
+        const toDefault = { ...chat, point_price_pending: pendingOf('0.01', at(2), { from: '0.02', to_default: true }) };
+        assert.equal(planPointPriceChange(toDefault, null, OPTS), null);
+        // a custom price equal to the default is a different target (it stays
+        // put if the default changes): replaced
+        assert.equal(planPointPriceChange(toDefault, '0.01', OPTS).update.$set.point_price_pending.to_default, false);
+        assert.equal(planPointPriceChange(chat, null, OPTS).update.$set.point_price_pending.to_default, true);
+        // once due it is no longer "scheduled": a new request is a new decrease
+        assert.notEqual(planPointPriceChange(chat, '0.012', { ...OPTS, now: at(3) }), null);
     });
 });
 
@@ -364,18 +387,22 @@ test('planPointPriceChange: an equal price or an increase cancels the pending de
         const chat = { id: 5, point_price: '0.02', point_price_pending: pendingOf('0.015', at(2), { from: '0.02' }) };
         const equal = planPointPriceChange(chat, '0.02', OPTS);
         assert.deepEqual(equal.update, { $unset: { point_price_pending: '' } });
-        assert.deepEqual(equal.announcement, {
-            type: 'price_decrease_cancelled',
-            params: { from: '0.02', to: '0.015', symbol: 'PTS' },
-        });
+        assert.deepEqual(equal.announcements, [
+            {
+                type: 'price_decrease_cancelled',
+                params: { from: '0.02', to: '0.015', symbol: 'PTS' },
+            },
+        ]);
 
         const up = planPointPriceChange(chat, '0.05', OPTS);
         assert.deepEqual(up.update.$set, { point_price: '0.05' });
         assert.deepEqual(up.update.$unset, { point_price_pending: '' });
-        assert.deepEqual(up.announcement, {
-            type: 'price_increased',
-            params: { from: '0.02', to: '0.05', symbol: 'PTS', cancelled_pending: true },
-        });
+        assert.deepEqual(up.announcements, [
+            {
+                type: 'price_increased',
+                params: { from: '0.02', to: '0.05', symbol: 'PTS', cancelled_pending: true },
+            },
+        ]);
     });
 });
 
@@ -388,10 +415,15 @@ test('planPointPriceChange writes out a due decrease the bot has not applied yet
         };
         const dueEntry = { old: '0.02', new: '0.005', at: at(-1), by: 7 };
 
-        // an increase from the due price: both changes are logged, in order
+        const decreased = { type: 'price_decreased', params: { from: '0.02', to: '0.005', symbol: 'PTS' } };
+
+        // an increase from the due price: both changes are logged and
+        // announced, the written-out drop first
         const up = planPointPriceChange(chat, '0.008', OPTS);
-        assert.equal(up.announcement.type, 'price_increased');
-        assert.deepEqual(up.announcement.params, { from: '0.005', to: '0.008', symbol: 'PTS', cancelled_pending: false });
+        assert.deepEqual(up.announcements, [
+            decreased,
+            { type: 'price_increased', params: { from: '0.005', to: '0.008', symbol: 'PTS', cancelled_pending: false } },
+        ]);
         assert.deepEqual(up.update.$push.point_price_history.$each, [dueEntry, { old: '0.005', new: '0.008', at: T0, by: 42 }]);
         assert.deepEqual(up.update.$unset, { point_price_pending: '' });
 
@@ -400,15 +432,43 @@ test('planPointPriceChange writes out a due decrease the bot has not applied yet
         assert.equal(down.update.$set.point_price, '0.005');
         assert.equal(down.update.$set.point_price_pending.from, '0.005');
         assert.deepEqual(down.update.$push.point_price_history.$each, [dueEntry]);
+        assert.deepEqual(down.announcements.map((a) => a.type), ['price_decreased', 'price_decrease_scheduled']);
+        // the pending's symbol when the jetton cannot be read now
+        assert.deepEqual(planPointPriceChange(chat, '0.004', { ...OPTS, symbol: null }).announcements[0], decreased);
+
+        // the due price itself: written out and announced, nothing else
+        const same = planPointPriceChange(chat, '0.005', OPTS);
+        assert.deepEqual(same.update, {
+            $set: { point_price: '0.005' },
+            $unset: { point_price_pending: '' },
+            $push: { point_price_history: { $each: [dueEntry], $slice: -50 } },
+        });
+        assert.deepEqual(same.announcements, [decreased]);
 
         // the stored price again: an increase from the due price
-        assert.equal(planPointPriceChange(chat, '0.02', OPTS).announcement.type, 'price_increased');
+        assert.deepEqual(
+            planPointPriceChange(chat, '0.02', OPTS).announcements.map((a) => a.type),
+            ['price_decreased', 'price_increased'],
+        );
 
         // a due "back to default": point_price is unset
         const toDefault = { ...chat, point_price_pending: pendingOf('0.01', at(-1), { from: '0.02', to_default: true }) };
         const again = planPointPriceChange(toDefault, '0.001', OPTS);
         assert.deepEqual(again.update.$unset, { point_price: '' });
         assert.equal(again.update.$set.point_price_pending.from, '0.01');
+        // `to` is the default actually applied, i.e. the live one
+        withRate('0.012', () => {
+            assert.deepEqual(planPointPriceChange(toDefault, '0.001', OPTS).announcements[0], {
+                type: 'price_decreased',
+                params: { from: '0.02', to: '0.012', symbol: 'PTS' },
+            });
+        });
+        // a default raised above `from` is no drop: logged, not announced as one
+        withRate('0.03', () => {
+            const raised = planPointPriceChange(toDefault, '0.04', OPTS);
+            assert.deepEqual(raised.announcements.map((a) => a.type), ['price_increased']);
+            assert.deepEqual(raised.update.$push.point_price_history.$each[0], { old: '0.02', new: '0.03', at: at(-1), by: 7 });
+        });
     });
 });
 
@@ -416,7 +476,7 @@ test('planPointPriceChange replaces corrupted state at once', () => {
     withRate('0.01', () => {
         const corrupt = planPointPriceChange({ id: 5, point_price: 'abc' }, '0.001', OPTS);
         assert.deepEqual(corrupt.update.$set, { point_price: '0.001' });
-        assert.equal(corrupt.announcement, null);
+        assert.deepEqual(corrupt.announcements, []);
 
         const malformed = { id: 5, point_price: '0.02', point_price_pending: { price: 'x', requested_at: at(-1) } };
         const plan = planPointPriceChange(malformed, '0.001', OPTS);
@@ -434,16 +494,18 @@ test('planPointPriceCancel cancels a pending decrease explicitly', () => {
         const plan = planPointPriceCancel(chat, { now: T0, symbol: 'PTS' });
         assert.deepEqual(plan.filter, { id: 5, point_price: '0.02', 'point_price_pending.requested_at': at(-1) });
         assert.deepEqual(plan.update, { $unset: { point_price_pending: '' } });
-        assert.deepEqual(plan.announcement, {
-            type: 'price_decrease_cancelled',
-            params: { from: '0.02', to: '0.015', symbol: 'PTS' },
-        });
+        assert.deepEqual(plan.announcements, [
+            {
+                type: 'price_decrease_cancelled',
+                params: { from: '0.02', to: '0.015', symbol: 'PTS' },
+            },
+        ]);
 
         assert.throws(() => planPointPriceCancel({ id: 5 }, { now: T0 }), (e) => e.status === 409);
         assert.throws(() => planPointPriceCancel(chat, { now: at(2) }), (e) => e.status === 409 && /already/.test(e.message));
 
         const malformed = planPointPriceCancel({ id: 5, point_price_pending: { price: 'x' } }, { now: T0 });
-        assert.equal(malformed.announcement, null);
+        assert.deepEqual(malformed.announcements, []);
         assert.deepEqual(malformed.update, { $unset: { point_price_pending: '' } });
     });
 });
