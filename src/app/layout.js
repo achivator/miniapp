@@ -19,7 +19,7 @@ export const viewport = {
 export default function RootLayout({ children }) {
   return (
     // LAUNCH_SCRIPT and LOCALE_SCRIPT set data-launch, data-lang and lang on
-    // <html> before hydration.
+    // <html> before hydration, and send "/" and "/help" on to /ru… or /en….
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: LAUNCH_SCRIPT + LOCALE_SCRIPT }} />
