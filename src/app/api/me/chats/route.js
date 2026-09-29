@@ -2,7 +2,8 @@ import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { getTonConfig } from "@/lib/ton/config";
 import { fetchJettonMetadata } from "@/lib/ton/rpc";
-import { pointsToJettons, formatUnits } from "@/lib/ton/amounts";
+import { formatUnits } from "@/lib/ton/amounts";
+import { chatLots } from "@/lib/lots";
 import { reconcileExpiredClaims } from "@/lib/rewards";
 import { claimGate, claimSettingsOf, claimablePoints } from "@/lib/claim-rules";
 import {
@@ -97,6 +98,26 @@ export async function GET(request) {
       .find({ chat_id: record.chat_id, user_id: userId, status: "issued", expiry: { $gt: Math.floor(Date.now() / 1000) } })
       .toArray();
 
+    // The same valuation a claim voucher uses (lib/lot-pricing.js): the
+    // oldest points first, and points that were still maturing when a
+    // decrease took effect keep the price from before it. null when the
+    // jetton, its decimals or the price are unknown, or the price is finer
+    // than the jetton's unit (claims refuse it): never show a guess.
+    let available = null;
+    let maturing = null;
+    if (chat?.jetton_master && decimals !== null && price !== null && priceFitsDecimals(price, decimals)) {
+      try {
+        const lots = await chatLots(chat, [userId], now);
+        available = lots.value(fresh, availablePoints, decimals);
+        maturing = lots.value(fresh, balance.maturing, decimals, { skip: availablePoints });
+      } catch {
+        available = null;
+        maturing = null;
+      }
+    }
+    const breakdown = (v) =>
+      v ? v.breakdown.map((b) => ({ price: b.price, points: b.points, jettons: formatUnits(b.units, decimals) })) : null;
+
     rewards.push({
       chat_id: record.chat_id,
       title: chat?.title || null,
@@ -109,13 +130,15 @@ export async function GET(request) {
       next_mature_at: balance.next_mature_at,
       maturation_days: settings.maturation_days,
       claim_gate: claimGate(settings),
-      // null when the jetton, its decimals or the price are unknown, or the
-      // price is finer than the jetton's unit (claims refuse it): never show
-      // a guess
-      jettons:
-        chat?.jetton_master && decimals !== null && price !== null && priceFitsDecimals(price, decimals)
-          ? formatUnits(pointsToJettons(availablePoints, price, decimals), decimals)
-          : null,
+      // what the claimable points pay now (see the valuation above)
+      jettons: available ? formatUnits(available.units, decimals) : null,
+      // [{ price, points, jettons }] of the claimable points: more than one
+      // entry when some keep the price from before a decrease
+      jettons_breakdown: breakdown(available),
+      // what the still-maturing points will pay once they mature, at today's
+      // prices (a later change can still move it)
+      maturing_jettons: maturing ? formatUnits(maturing.units, decimals) : null,
+      maturing_breakdown: breakdown(maturing),
       // jettons per point in this chat, and whether its creator set it (vs.
       // the platform default)
       point_price: price,
