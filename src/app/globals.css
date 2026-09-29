@@ -54,6 +54,11 @@
   --gold-text: #f5b544;
 }
 
+/* A Telegram launch of "/" shows the dashboard, never the web landing. */
+html[data-launch="telegram"] .web-only {
+  display: none;
+}
+
 html,
 body {
   background: var(--bg);

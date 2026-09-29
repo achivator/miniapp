@@ -29,9 +29,14 @@ function OpenInTelegram() {
       >
         Open in Telegram
       </a>
-      <Link href="/help" className="text-[15px] font-medium text-link">
-        Как подключить свой чат →
-      </Link>
+      <div className="flex flex-col items-center gap-2">
+        <Link href="/" className="text-[15px] font-medium text-link">
+          Что такое Achivator →
+        </Link>
+        <Link href="/help" className="text-[15px] font-medium text-link">
+          Как подключить свой чат →
+        </Link>
+      </div>
     </main>
   );
 }

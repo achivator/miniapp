@@ -112,3 +112,16 @@ export const Question = (p) => (
     <path d="M9.6 9.3a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2.2-2.4 3.7M12 17v.01" />
   </Svg>
 );
+export const Gift = (p) => (
+  <Svg {...p}>
+    <rect x="3.5" y="8" width="17" height="4" rx="1" />
+    <path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7M12 8v12" />
+    <path d="M12 8C10.5 4 7 4 7 6s3 2 5 2c2 0 5 0 5-2s-3.5-2-5 2" />
+  </Svg>
+);
+export const Lock = (p) => (
+  <Svg {...p}>
+    <rect x="5" y="11" width="14" height="9.5" rx="2" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+  </Svg>
+);
