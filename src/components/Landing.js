@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getTonConfig } from "@/lib/ton/config";
+import { subscriptionConfig } from "@/lib/subscription";
 import { GAS } from "@/lib/ton/constants";
 import {
   ArrowDown,
@@ -315,6 +316,8 @@ export function Landing({ locale }) {
   const cfg = getTonConfig();
   const rate = Number(cfg.jettonsPerPoint);
   const testnet = cfg.network !== "mainnet";
+  const subs = subscriptionConfig();
+  const minStars = subs.tiers[0].stars;
   const depositGas = ton(BigInt(GAS.depositTransferGas) + BigInt(GAS.depositForward));
   const setupTon = ton(BigInt(GAS.createPoolTon) + BigInt(GAS.setAdminTon));
 
@@ -662,21 +665,43 @@ export function Landing({ locale }) {
           id="pricing"
           eyebrow={L("Стоимость", "Pricing")}
           title={L("Кто и за что платит", "Who pays for what")}
-          lead={L(
-            "Сейчас Achivator ничего не берёт: ни комиссии в TON, ни процента с жетонов. Вы платите только газ сети TON и хранение своих контрактов — это уходит валидаторам, а не нам.",
-            "Right now Achivator charges nothing: no TON fee, no cut of the jettons. You pay only TON network gas and your contracts' storage — that goes to validators, not to us.",
-          )}
+          lead={
+            subs.enabled
+              ? L(
+                  `Achivator берёт только подписку в Telegram Stars за начисление баллов — первые ${subs.trialDays} дней бесплатно. Ни комиссии в TON, ни процента с жетонов: в TON вы платите только газ сети и хранение своих контрактов, это уходит валидаторам.`,
+                  `Achivator charges only a Telegram Stars subscription for counting points, free for the first ${subs.trialDays} days. No TON fee, no cut of the jettons: in TON you pay only network gas and your contracts' storage, which goes to validators.`,
+                )
+              : L(
+                  "Сейчас Achivator ничего не берёт: ни комиссии в TON, ни процента с жетонов. Вы платите только газ сети TON и хранение своих контрактов — это уходит валидаторам, а не нам.",
+                  "Right now Achivator charges nothing: no TON fee, no cut of the jettons. You pay only TON network gas and your contracts' storage — that goes to validators, not to us.",
+                )
+          }
         >
           <Panel>
             <PriceRow
-              what={L("Ачивки и баллы", "Achievements and points")}
-              who={L(
-                "Бот, медали и учёт баллов работают сразу после добавления бота.",
-                "The bot, medals and point tracking work as soon as the bot joins.",
-              )}
+              what={subs.enabled ? L("Ачивки", "Achievements") : L("Ачивки и баллы", "Achievements and points")}
+              who={
+                subs.enabled
+                  ? L("Бот и медали работают сразу после добавления бота.", "The bot and medals work as soon as the bot joins.")
+                  : L(
+                      "Бот, медали и учёт баллов работают сразу после добавления бота.",
+                      "The bot, medals and point tracking work as soon as the bot joins.",
+                    )
+              }
             >
               {L("Бесплатно", "Free")}
             </PriceRow>
+            {subs.enabled && (
+              <PriceRow
+                what={L("Баллы за реакции", "Points for reactions")}
+                who={L(
+                  `Подписка создателя чата в Telegram Stars, первые ${subs.trialDays} дней бесплатно. Цена зависит от числа активных участников. Без подписки баллы перестают начисляться, но заработанные всегда можно забрать.`,
+                  `The chat creator's Telegram Stars subscription, free for the first ${subs.trialDays} days. The price follows the number of active members. Without it points stop accruing, but what was earned can always be claimed.`,
+                )}
+              >
+                {L("от", "from")} {fmt(minStars)} ⭐ {L("в месяц", "a month")}
+              </PriceRow>
+            )}
             <PriceRow
               what={L("Активация пула", "Pool activation")}
               who={L(

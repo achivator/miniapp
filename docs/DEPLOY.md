@@ -30,10 +30,16 @@ Pull requests run step 1 only.
      `MASTER_ADDRESS`, `TONCENTER_URL`, `TONCENTER_API_KEY`,
      `MATURATION_DAYS`, `ACHIEVEMENT_REGISTRY`, `ACHIEVEMENT_TEMPLATES`,
      `IPFS_GATEWAY`.
+   - Subscriptions in Telegram Stars: `SUBSCRIPTIONS_ENABLED`,
+     `TRIAL_DAYS`, `GRACE_DAYS` (the same values as the bot) and
+     `SUBSCRIPTION_TIERS`. `TELEGRAM_BOT_TOKEN` must be the bot's own token:
+     Telegram sends the payment to the bot that created the invoice.
    - Tick **"Is Build Variable?"** for `NEXT_PUBLIC_MASTER_ADDRESS`,
-     `NEXT_PUBLIC_TON_NETWORK` and `JETTONS_PER_POINT`. The
+     `NEXT_PUBLIC_TON_NETWORK`, `JETTONS_PER_POINT`,
+     `SUBSCRIPTIONS_ENABLED`, `TRIAL_DAYS` and `SUBSCRIPTION_TIERS`. The
      `NEXT_PUBLIC_*` values are inlined into the browser bundle, and the
-     landing page is prerendered at build time with the rate and network. Without the tick the landing page shows the defaults from the
+     landing page is prerendered at build time with the rate, network and
+     subscription prices. Without the tick the landing page shows the defaults from the
      code, whatever the runtime says.
    - Never set `DEV_TELEGRAM_USER_ID` in production. `next start` runs with
      `NODE_ENV=production`, which disables it anyway.
