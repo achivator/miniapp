@@ -2,19 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/client-api";
+import { useI18n } from "@/lib/use-locale";
 import { Button, Card, Chip, Notice, SectionHeader, Segmented, cx } from "./ui";
 import { useHaptic } from "./AppShell";
 
 const MATURATION_OPTIONS = [0, 1, 3, 7, 14];
 // Display order Monday-first; values are UTC getUTCDay() numbers.
 const WEEKDAYS = [
-  [1, "Mon"],
-  [2, "Tue"],
-  [3, "Wed"],
-  [4, "Thu"],
-  [5, "Fri"],
-  [6, "Sat"],
-  [0, "Sun"],
+  [1, "Пн", "Mon"],
+  [2, "Вт", "Tue"],
+  [3, "Ср", "Wed"],
+  [4, "Чт", "Thu"],
+  [5, "Пт", "Fri"],
+  [6, "Сб", "Sat"],
+  [0, "Вс", "Sun"],
 ];
 
 function Toggle({ checked, onChange, label }) {
@@ -49,6 +50,8 @@ function toDateInput(epochSec) {
 // claim vouchers): maturation period, weekly claim window, vacation pause.
 export function ClaimRules({ chatId, initDataRaw }) {
   const haptic = useHaptic();
+  const t = useI18n();
+  const { L } = t;
   const [saved, setSaved] = useState(null);
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -92,7 +95,7 @@ export function ClaimRules({ chatId, initDataRaw }) {
       setSaved(res.settings);
       setDraft(res.settings);
       haptic("success");
-      setNotice({ kind: "ok", text: "Claim rules saved." });
+      setNotice({ kind: "ok", text: L("Правила вывода сохранены.", "Claim rules saved.") });
     } catch (e) {
       haptic("error");
       setNotice({ kind: "err", text: e.message });
@@ -103,29 +106,37 @@ export function ClaimRules({ chatId, initDataRaw }) {
 
   return (
     <section className="space-y-2.5">
-      <SectionHeader title="Claim rules" hint="Free to change — the bot stops signing claims that break them." />
+      <SectionHeader
+        title={L("Правила вывода", "Claim rules")}
+        hint={L(
+          "Меняются бесплатно — бот не подписывает выводы, которые их нарушают.",
+          "Free to change — the bot stops signing claims that break them.",
+        )}
+      />
       <Card className="space-y-5">
         <div className="space-y-2">
           <div className="flex items-baseline justify-between">
-            <p className="font-semibold">New points mature in</p>
-            {draft.maturation_days > 0 && <Chip tone="accent">anti-farming on</Chip>}
+            <p className="font-semibold">{L("Новые баллы дозревают", "New points mature in")}</p>
+            {draft.maturation_days > 0 && <Chip tone="accent">{L("защита от накруток", "anti-farming on")}</Chip>}
           </div>
           <Segmented
             options={MATURATION_OPTIONS}
             value={draft.maturation_days}
             onChange={(v) => set({ maturation_days: v })}
-            format={(v) => (v === 0 ? "Now" : `${v}d`)}
+            format={(v) => (v === 0 ? L("Сразу", "Now") : L(`${v} дн.`, `${v}d`))}
           />
           <p className="text-[13px] leading-snug text-hint">
-            Points from reactions and /reward become claimable only after this delay, so points farmed with friends
-            can&apos;t be cashed out before you notice.
+            {L(
+              "Баллы за реакции и /reward можно забрать только после этой задержки — накрученные с друзьями баллы не успеют уйти, пока вы не заметите.",
+              "Points from reactions and /reward become claimable only after this delay, so points farmed with friends can't be cashed out before you notice.",
+            )}
           </p>
         </div>
 
         <div className="space-y-2">
-          <p className="font-semibold">Claim days</p>
+          <p className="font-semibold">{L("Дни вывода", "Claim days")}</p>
           <div className="grid grid-cols-7 gap-1.5">
-            {WEEKDAYS.map(([day, label]) => {
+            {WEEKDAYS.map(([day, ruLabel, enLabel]) => {
               const on = draft.claim_days.length === 0 || draft.claim_days.includes(day);
               return (
                 <button
@@ -137,35 +148,38 @@ export function ClaimRules({ chatId, initDataRaw }) {
                     draft.claim_days.includes(day) ? "bg-accent text-accent-fg" : on ? "tint-accent text-accent" : "bg-bg text-hint",
                   )}
                 >
-                  {label}
+                  {L(ruLabel, enLabel)}
                 </button>
               );
             })}
           </div>
           <p className="text-[13px] leading-snug text-hint">
             {draft.claim_days.length === 0
-              ? "Every day. Pick days to open claims only then (UTC)."
-              : "Claims open only on the highlighted days (UTC)."}
+              ? L("Каждый день. Выберите дни, чтобы выводить можно было только в них (UTC).", "Every day. Pick days to open claims only then (UTC).")
+              : L("Вывод открыт только в отмеченные дни (UTC).", "Claims open only on the highlighted days (UTC).")}
           </p>
         </div>
 
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="font-semibold">Pause claims</p>
-              <p className="text-[13px] leading-snug text-hint">Going on vacation? Nobody can claim until you&apos;re back.</p>
+              <p className="font-semibold">{L("Приостановить вывод", "Pause claims")}</p>
+              <p className="text-[13px] leading-snug text-hint">
+                {L("Уезжаете в отпуск? Никто не сможет забрать баллы, пока вы не вернётесь.", "Going on vacation? Nobody can claim until you're back.")}
+              </p>
             </div>
             <Toggle
-              label="Pause claims"
+              label={L("Приостановить вывод", "Pause claims")}
               checked={draft.paused}
               onChange={(paused) => set({ paused, paused_until: paused ? draft.paused_until : null })}
             />
           </div>
           {draft.paused && (
             <label className="flex h-12 items-center justify-between gap-3 rounded-xl bg-bg px-3.5">
-              <span className="text-[14px] text-hint">Resume automatically</span>
+              <span className="text-[14px] text-hint">{L("Возобновить автоматически", "Resume automatically")}</span>
               <input
                 type="date"
+                lang={t.locale}
                 className="bg-transparent text-right text-[15px] font-medium outline-none"
                 min={toDateInput(Math.floor(Date.now() / 1000) + 86400)}
                 value={toDateInput(draft.paused_until)}
@@ -178,7 +192,7 @@ export function ClaimRules({ chatId, initDataRaw }) {
         </div>
 
         <Button variant="secondary" className="w-full" busy={busy} disabled={!dirty} onClick={save}>
-          Save rules
+          {L("Сохранить правила", "Save rules")}
         </Button>
         <Notice notice={notice} />
       </Card>

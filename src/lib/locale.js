@@ -1,12 +1,17 @@
 // Web pages (landing, setup guide) have one URL per language: /ru, /en,
 // /ru/help, /en/help, each statically rendered in its language. The bare
 // "/" and "/help" pick one for the visitor: ?lang= in the URL, then the
-// visitor's earlier pick (LangSwitch), then the browser language: Russian
+// visitor's earlier pick (LangSwitch, the app's TopBar), then, inside
+// Telegram, the Telegram user's language, then the browser language: Russian
 // for a Russian browser, English for any other (Ukrainian, Belarusian and
 // Kazakh included). A Telegram launch of "/" is the member dashboard and
 // stays.
 export const LOCALES = ["ru", "en"];
 const STORAGE_KEY = "achivator-lang";
+// The Telegram user's language, not an explicit pick: kept for the rest of
+// the Telegram session (sessionStorage) once the app has read it from the
+// launch params (AppShell), so full page loads start in it too.
+const TELEGRAM_KEY = "achivator-tg-lang";
 
 // Web pages that exist in every locale, as the suffix after /ru or /en. The
 // bare path (without a locale) redirects to the visitor's language.
@@ -25,25 +30,54 @@ export const LOCALE_SCRIPT = `try{
 var d=document.documentElement,p=location.pathname,s=new URLSearchParams(location.search),m=/^\\/(ru|en)(\\/|$)/.exec(p),l=m&&m[1];
 if(!l){l=s.get("lang");
 if(l!=="ru"&&l!=="en"){try{l=localStorage.getItem("${STORAGE_KEY}")}catch(e){}}
+if(l!=="ru"&&l!=="en"){try{l=sessionStorage.getItem("${TELEGRAM_KEY}")}catch(e){}}
 if(l!=="ru"&&l!=="en"){l=/^ru\\b/i.test(navigator.language||"")?"ru":"en"}}
 d.dataset.lang=l;
 var t=p==="/help"?"/help":p==="/"&&d.dataset.launch!=="telegram"?"":null;
 if(t!==null){s.delete("lang");s=s.toString();d.dataset.redirect="";location.replace("/"+l+t+(s?"?"+s:"")+location.hash)}
 }catch(e){}`;
 
+// The language the visitor asked for: ?lang= in the URL or a saved pick.
+export function explicitLocale() {
+  const fromUrl = new URLSearchParams(window.location.search).get("lang");
+  if (LOCALES.includes(fromUrl)) return fromUrl;
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (LOCALES.includes(saved)) return saved;
+  } catch {
+    // storage blocked
+  }
+  return null;
+}
+
 // Same choice as LOCALE_SCRIPT, for client-side navigations to "/" or
 // "/help", where the inline script does not run again.
 export function preferredLocale() {
-  let locale = new URLSearchParams(window.location.search).get("lang");
-  if (!LOCALES.includes(locale)) {
+  let locale = explicitLocale();
+  if (!locale) {
     try {
-      locale = localStorage.getItem(STORAGE_KEY);
+      locale = sessionStorage.getItem(TELEGRAM_KEY);
     } catch {
       // storage blocked
     }
   }
   if (!LOCALES.includes(locale)) locale = /^ru\b/i.test(navigator.language || "") ? "ru" : "en";
   return locale;
+}
+
+// Russian for a Russian-speaking Telegram user, English for anyone else.
+export function telegramLocale(languageCode) {
+  return /^ru\b/i.test(languageCode || "") ? "ru" : "en";
+}
+
+// Remembers the Telegram user's language for this Telegram session, without
+// making it an explicit pick.
+export function keepTelegramLocale(locale) {
+  try {
+    sessionStorage.setItem(TELEGRAM_KEY, locale);
+  } catch {
+    // storage blocked
+  }
 }
 
 // Remembers an explicit pick, so "/" opens it next time.

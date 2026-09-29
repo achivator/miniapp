@@ -1,47 +1,78 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SDKProvider, useBackButton, useHapticFeedback, useSDKContext, useSettingsButton, useThemeParams } from "@tma.js/sdk-react";
-import { TonConnectButton, TonConnectUIProvider } from "@tonconnect/ui-react";
+import { TonConnectButton, TonConnectUIProvider, useTonConnectUI } from "@tonconnect/ui-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { LOCALES } from "@/lib/locale";
+import { applyTelegramLocale, setAppLocale, useI18n, useLocale } from "@/lib/use-locale";
 import { Medal, Question } from "./icons";
-import { Spinner } from "./ui";
-import { T } from "./T";
+import { Spinner, cx } from "./ui";
 
 const MANIFEST_URL = "https://achivator.cc/ton-connect.json";
 
 function OpenInTelegram() {
+  const { L, locale } = useI18n();
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-5 px-8 text-center">
+      <div className="absolute right-4 top-4">
+        <AppLangSwitch />
+      </div>
       <div className="hero-gradient flex h-20 w-20 items-center justify-center rounded-[26px] shadow-lg">
         <Medal className="h-11 w-11" />
       </div>
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">Achivator</h1>
         <p className="text-hint text-balance">
-          <T
-            ru="Награды и ачивки для Telegram-чатов. Это мини-приложение Telegram — откройте его из бота, чтобы продолжить."
-            en="Rewards and achievements for your Telegram chats. This is a Telegram Mini App — open it from the bot to continue."
-          />
+          {L(
+            "Награды и ачивки для Telegram-чатов. Это мини-приложение Telegram — откройте его из бота, чтобы продолжить.",
+            "Rewards and achievements for your Telegram chats. This is a Telegram Mini App — open it from the bot to continue.",
+          )}
         </p>
       </div>
       <a
         className="rounded-xl bg-accent px-5 py-3 font-semibold text-accent-fg active:opacity-80"
         href="https://t.me/achivator_bot/app"
       >
-        <T ru="Открыть в Telegram" en="Open in Telegram" />
+        {L("Открыть в Telegram", "Open in Telegram")}
       </a>
       <div className="flex flex-col items-center gap-2">
-        <Link href="/" className="text-[15px] font-medium text-link">
-          <T ru="Что такое Achivator →" en="What is Achivator? →" />
+        <Link href={`/${locale}`} className="text-[15px] font-medium text-link">
+          {L("Что такое Achivator →", "What is Achivator? →")}
         </Link>
-        <Link href="/help" className="text-[15px] font-medium text-link">
-          <T ru="Как подключить свой чат →" en="Connect your chat →" />
+        <Link href={`/${locale}/help`} className="text-[15px] font-medium text-link">
+          {L("Как подключить свой чат →", "Connect your chat →")}
         </Link>
       </div>
     </main>
   );
+}
+
+// The app screens' language as <html lang> (the served HTML says "en"): for
+// screen readers, hyphenation and the browser's translate offer. Only while
+// an app screen is shown; the web pages keep the language they were served in.
+function HtmlLang() {
+  const locale = useLocale();
+  useEffect(() => {
+    const root = document.documentElement;
+    const served = root.lang;
+    root.lang = locale;
+    return () => {
+      root.lang = served;
+    };
+  }, [locale]);
+  return null;
+}
+
+// TON Connect's own texts (button, wallet list) in the app's language.
+function TonConnectLanguage() {
+  const locale = useLocale();
+  const [, setOptions] = useTonConnectUI();
+  useEffect(() => {
+    setOptions({ language: locale });
+  }, [locale, setOptions]);
+  return null;
 }
 
 // Mirrors Telegram's light/dark choice onto <html data-theme>.
@@ -61,18 +92,26 @@ function HelpMenuItem() {
   const ref = useRef(settingsButton);
   ref.current = settingsButton;
   const router = useRouter();
+  const locale = useLocale();
   useEffect(() => {
     const button = ref.current;
-    const onClick = () => router.push("/help");
+    // Straight to the guide in the app's language ("/help" would pick one
+    // by the browser's).
+    const onClick = () => router.push(`/${locale}/help`);
     safely(() => button.show());
     button.on("click", onClick);
     return () => button.off("click", onClick);
-  }, [router]);
+  }, [router, locale]);
   return null;
 }
 
 function Gate({ children }) {
   const { initResult, error, loading } = useSDKContext();
+  // The Telegram user's language, unless the visitor picked one; before the
+  // screen paints (the spinner has no text to flash).
+  useLayoutEffect(() => {
+    if (initResult) applyTelegramLocale(initResult.initData?.user?.languageCode);
+  }, [initResult]);
   if (initResult) {
     return (
       <>
@@ -92,13 +131,16 @@ function Gate({ children }) {
 
 // Client-only providers: the Telegram SDK and TON Connect both need `window`.
 export function AppShell({ children }) {
+  const locale = useLocale();
   const [isClient, setIsClient] = useState(false);
   useEffect(() => setIsClient(true), []);
   if (!isClient) return null;
 
   return (
     <SDKProvider options={{ cssVars: true, acceptCustomStyles: true, async: true }}>
-      <TonConnectUIProvider manifestUrl={MANIFEST_URL}>
+      <TonConnectUIProvider manifestUrl={MANIFEST_URL} language={locale}>
+        <HtmlLang />
+        <TonConnectLanguage />
         <Gate>{children}</Gate>
       </TonConnectUIProvider>
     </SDKProvider>
@@ -145,23 +187,50 @@ export function useHaptic() {
   return (type) => safely(() => haptic.notificationOccurred(type));
 }
 
+// Compact RU / EN toggle of the app screens: switches in place and remembers
+// the pick (the web pages' LangSwitch links /ru and /en instead).
+export function AppLangSwitch() {
+  const locale = useLocale();
+  return (
+    <div className="flex rounded-full bg-bg p-0.5 text-[12px] font-semibold ring-1 ring-[color:var(--separator)]" role="group" aria-label="Язык / Language">
+      {LOCALES.map((option) => (
+        <button
+          key={option}
+          type="button"
+          lang={option}
+          aria-pressed={option === locale}
+          onClick={() => setAppLocale(option)}
+          className={cx(
+            "rounded-full px-2 py-1 uppercase transition",
+            option === locale ? "bg-surface text-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-hint hover:text-fg",
+          )}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function TopBar() {
+  const { L, locale } = useI18n();
   return (
     <header
-      className="sticky top-0 z-20 -mx-4 mb-1 flex items-center justify-between px-4 py-3 backdrop-blur-md"
+      className="sticky top-0 z-20 -mx-4 mb-1 flex items-center justify-between gap-2 px-4 py-3 backdrop-blur-md"
       style={{ background: "color-mix(in srgb, var(--bg) 85%, transparent)" }}
     >
-      <Link href="/" className="flex items-center gap-2" aria-label="Achivator home">
-        <span className="hero-gradient flex h-8 w-8 items-center justify-center rounded-[10px]">
+      <Link href="/" className="flex min-w-0 items-center gap-2" aria-label={L("Achivator — на главную", "Achivator home")}>
+        <span className="hero-gradient flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]">
           <Medal className="h-[18px] w-[18px]" />
         </span>
-        <span className="text-[17px] font-bold tracking-tight">Achivator</span>
+        <span className="truncate text-[17px] font-bold tracking-tight max-[380px]:hidden">Achivator</span>
       </Link>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
+        <AppLangSwitch />
         <Link
-          href="/help"
-          className="tint-accent flex h-9 w-9 items-center justify-center rounded-full text-accent active:opacity-80"
-          aria-label="Setup guide"
+          href={`/${locale}/help`}
+          className="tint-accent flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-accent active:opacity-80"
+          aria-label={L("Как подключить чат", "Setup guide")}
         >
           <Question className="h-5 w-5" />
         </Link>
@@ -172,9 +241,5 @@ export function TopBar() {
 }
 
 export function Screen({ children }) {
-  return (
-    <main lang="en" className="pb-safe mx-auto flex min-h-screen max-w-xl flex-col gap-5 px-4">
-      {children}
-    </main>
-  );
+  return <main className="pb-safe mx-auto flex min-h-screen max-w-xl flex-col gap-5 px-4">{children}</main>;
 }
