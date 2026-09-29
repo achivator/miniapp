@@ -1,7 +1,6 @@
 import { getCollection } from "@/lib/mongo";
-import { getTonConfig } from "@/lib/ton/config";
 import { fetchJettonMetadata } from "@/lib/ton/rpc";
-import { pointsToJettons } from "@/lib/ton/amounts";
+import { chatPointsToUnits } from "@/lib/point-price";
 import { claimSettingsOf, claimablePoints } from "@/lib/claim-rules";
 import { nowSeconds, reconcileExpiredClaims } from "@/lib/rewards";
 import {
@@ -36,7 +35,6 @@ export async function GET(request) {
     await reconcileExpiredClaims(chatId, userId);
 
     const now = nowSeconds();
-    const cfg = getTonConfig();
     const settings = claimSettingsOf(chat);
     const record = await (await getCollection("rewards")).findOne({ chat_id: chatId, user_id: userId });
     if (!record) throw httpError(404, "this member has no rewards in the chat");
@@ -94,7 +92,7 @@ export async function GET(request) {
     const current = chat.jetton_master ? jettonOf(chat.jetton_master) : null;
     const owed = Math.max(0, balance.points - (record.claimed_points || 0));
     const toUnits = (points) =>
-      current && current.decimals !== null ? pointsToJettons(points, cfg.jettonsPerPoint, current.decimals).toString() : null;
+      current && current.decimals !== null ? chatPointsToUnits(chat, points, current.decimals).toString() : null;
     const reactions = reactionTotals[0] || { points: 0, count: 0, week: 0 };
 
     return Response.json({

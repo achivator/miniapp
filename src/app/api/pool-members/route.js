@@ -1,7 +1,6 @@
 import { getCollection } from "@/lib/mongo";
-import { getTonConfig } from "@/lib/ton/config";
 import { fetchJettonMetadata } from "@/lib/ton/rpc";
-import { pointsToJettons } from "@/lib/ton/amounts";
+import { chatPointsToUnits, pointPriceFor } from "@/lib/point-price";
 import { claimSettingsOf } from "@/lib/claim-rules";
 import { nowSeconds } from "@/lib/rewards";
 import {
@@ -36,7 +35,6 @@ export async function GET(request) {
     const userFilter = /^\d+$/.test(query) ? { user_id: Number(query) } : {};
 
     const now = nowSeconds();
-    const cfg = getTonConfig();
     const settings = claimSettingsOf(chat);
     const rewardsCol = await getCollection("rewards");
     const claimsCol = await getCollection("claims");
@@ -105,7 +103,7 @@ export async function GET(request) {
 
     const decimals = metadata?.decimals ?? null;
     const toUnits = (points) =>
-      chat.jetton_master && decimals !== null ? pointsToJettons(points, cfg.jettonsPerPoint, decimals).toString() : null;
+      chat.jetton_master && decimals !== null ? chatPointsToUnits(chat, points, decimals).toString() : null;
 
     const totals = totalsRows[0] || { members: 0, points: 0, claimed_points: 0, owed: 0 };
 
@@ -116,7 +114,7 @@ export async function GET(request) {
       jetton: chat.jetton_master
         ? { master: chat.jetton_master, symbol: metadata?.symbol ?? null, decimals }
         : null,
-      jettons_per_point: cfg.jettonsPerPoint,
+      jettons_per_point: pointPriceFor(chat),
       maturation_days: settings.maturation_days,
       totals: {
         members: totals.members,

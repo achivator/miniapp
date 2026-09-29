@@ -5,6 +5,7 @@ import { Address } from "@ton/core";
 import { fetchJettonMetadata, fetchPoolClaimControls, fetchPoolLedgerBalance, getPoolStatus } from "@/lib/ton/rpc";
 import { buildClaimVoucherCell, buildClaimBody, signVoucher, defaultExpiry } from "@/lib/ton/vouchers";
 import { pointsToJettons, formatUnits } from "@/lib/ton/amounts";
+import { pointPriceFor, priceFitsDecimals } from "@/lib/point-price";
 import { GAS, VOUCHER_TAG } from "@/lib/ton/constants";
 import { reconcileExpiredClaims, claimPoints, nowSeconds } from "@/lib/rewards";
 import { claimGate, claimSettingsOf, claimablePoints } from "@/lib/claim-rules";
@@ -121,12 +122,34 @@ export async function POST(request) {
     return Response.json({ error: `TON RPC failed: ${e.message}` }, { status: 502 });
   }
 
+  // The chat's price right now - re-read after the slow RPC calls above so a
+  // change saved meanwhile applies. A voucher is priced once, when it is
+  // signed, and keeps that amount even if the creator changes the price
+  // before it is used (its points are already deducted). The price was checked
+  // against the jetton's decimals when saved, but the jetton may have been
+  // unknown then or switched since: a price finer than one unit would floor
+  // every payout, so refuse instead of paying less than shown.
+  let price;
+  try {
+    price = pointPriceFor(await chatsCol.findOne({ id: chatId }, { projection: { point_price: 1 } }));
+  } catch (e) {
+    return Response.json({ error: e.message }, { status: e.status || 500 });
+  }
+  if (!priceFitsDecimals(price, metadata.decimals)) {
+    return Response.json(
+      {
+        error: `this chat's point price (${price}) is finer than its jetton's smallest unit; ask the chat creator to update it`,
+      },
+      { status: 409 },
+    );
+  }
+
   let claimPointsCount = availablePoints;
-  const unitsPerPoint = pointsToJettons(1, cfg.jettonsPerPoint, metadata.decimals);
-  if (unitsPerPoint > 0n && pointsToJettons(claimPointsCount, cfg.jettonsPerPoint, metadata.decimals) > payable) {
+  const unitsPerPoint = pointsToJettons(1, price, metadata.decimals);
+  if (unitsPerPoint > 0n && pointsToJettons(claimPointsCount, price, metadata.decimals) > payable) {
     claimPointsCount = Number(payable / unitsPerPoint);
   }
-  const amount = pointsToJettons(claimPointsCount, cfg.jettonsPerPoint, metadata.decimals);
+  const amount = pointsToJettons(claimPointsCount, price, metadata.decimals);
   if (amount <= 0n || amount > payable) {
     return Response.json(
       {
@@ -183,6 +206,8 @@ export async function POST(request) {
         user_id: userId,
         points: claimPointsCount,
         amount: amount.toString(),
+        // the price this voucher was sized with, for payout audits
+        point_price: price,
         nonce,
         recipient: recipient.toString(),
         jetton_master: jettonMaster,
@@ -211,6 +236,7 @@ export async function POST(request) {
       remaining_points: availablePoints - claimPointsCount,
       jettons: formatUnits(amount, metadata.decimals),
       decimals: metadata.decimals,
+      point_price: price,
       expiry: Number(expiry),
     });
   } catch (e) {

@@ -11,6 +11,7 @@ import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/componen
 import { Button, Card, ChatAvatar, Chip, Notice, Row, SectionHeader, Skeleton } from "@/components/ui";
 import { ArrowDown, ArrowUp, Check, ChevronRight, Refresh, Shield, Users } from "@/components/icons";
 import { ClaimRules } from "@/components/ClaimRules";
+import { PointPrice } from "@/components/PointPrice";
 
 function formatTon(nanotons) {
   return formatUnits(nanotons, 9);
@@ -334,6 +335,8 @@ function PoolManager({ chatId }) {
           </Card>
         </section>
       )}
+
+      {info.is_creator && info.jetton_master && <PointPrice chatId={chatId} initDataRaw={initDataRaw} />}
 
       {info.is_creator && info.jetton_master && <ClaimRules chatId={chatId} initDataRaw={initDataRaw} />}
 

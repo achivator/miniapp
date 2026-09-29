@@ -5,6 +5,13 @@ import { fetchJettonMetadata } from "@/lib/ton/rpc";
 import { pointsToJettons, formatUnits } from "@/lib/ton/amounts";
 import { reconcileExpiredClaims } from "@/lib/rewards";
 import { claimGate, claimSettingsOf, claimablePoints } from "@/lib/claim-rules";
+import {
+  hasCustomPointPrice,
+  platformPointPrice,
+  pointPriceFor,
+  priceFitsDecimals,
+  recentPointPriceChange,
+} from "@/lib/point-price";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +70,15 @@ export async function GET(request) {
       symbol = metadata.symbol;
     }
 
+    // Each chat's own price; a corrupted one is shown as unknown rather than
+    // breaking the member's whole dashboard (claims refuse it anyway).
+    let price = null;
+    try {
+      price = pointPriceFor(chat);
+    } catch {
+      price = null;
+    }
+
     const pendingClaims = await claimsCol
       .find({ chat_id: record.chat_id, user_id: userId, status: "issued", expiry: { $gt: Math.floor(Date.now() / 1000) } })
       .toArray();
@@ -79,11 +95,20 @@ export async function GET(request) {
       next_mature_at: balance.next_mature_at,
       maturation_days: settings.maturation_days,
       claim_gate: claimGate(settings),
-      // null when the jetton or its decimals are unknown: never show a guess
+      // null when the jetton, its decimals or the price are unknown, or the
+      // price is finer than the jetton's unit (claims refuse it): never show
+      // a guess
       jettons:
-        chat?.jetton_master && decimals !== null
-          ? formatUnits(pointsToJettons(availablePoints, cfg.jettonsPerPoint, decimals), decimals)
+        chat?.jetton_master && decimals !== null && price !== null && priceFitsDecimals(price, decimals)
+          ? formatUnits(pointsToJettons(availablePoints, price, decimals), decimals)
           : null,
+      // jettons per point in this chat, and whether its creator set it (vs.
+      // the platform default)
+      point_price: price,
+      point_price_custom: hasCustomPointPrice(chat),
+      // latest change within the last week: members are told when the value
+      // of the points they already hold moved
+      point_price_change: recentPointPriceChange(chat),
       grants: (grantsByChat.get(record.chat_id) || []).slice(0, 3).map((g) => ({
         points: g.points,
         reason: g.reason || null,
@@ -105,7 +130,8 @@ export async function GET(request) {
     config: {
       network: cfg.network,
       master_address: cfg.masterAddress,
-      jettons_per_point: cfg.jettonsPerPoint,
+      // platform default only; each reward item carries its chat's price
+      jettons_per_point: platformPointPrice(),
     },
     rewards,
     creator: creatorChats.map((c) => ({
