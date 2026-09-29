@@ -123,15 +123,19 @@ export async function POST(request) {
   }
 
   // The chat's price right now - re-read after the slow RPC calls above so a
-  // change saved meanwhile applies. A voucher is priced once, when it is
-  // signed, and keeps that amount even if the creator changes the price
-  // before it is used (its points are already deducted). The price was checked
+  // change saved meanwhile applies (a scheduled decrease counts from its
+  // effective_at, whether or not the bot has applied it yet). A voucher is
+  // priced once, when it is signed, and keeps that amount even if the creator
+  // changes the price before it is used (its points are already deducted).
+  // The price was checked
   // against the jetton's decimals when saved, but the jetton may have been
   // unknown then or switched since: a price finer than one unit would floor
   // every payout, so refuse instead of paying less than shown.
   let price;
   try {
-    price = pointPriceFor(await chatsCol.findOne({ id: chatId }, { projection: { point_price: 1 } }));
+    price = pointPriceFor(
+      await chatsCol.findOne({ id: chatId }, { projection: { point_price: 1, point_price_pending: 1 } }),
+    );
   } catch (e) {
     return Response.json({ error: e.message }, { status: e.status || 500 });
   }

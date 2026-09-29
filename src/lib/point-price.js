@@ -13,6 +13,16 @@ const { parseRate, pointsToJettons } = require('./ton/amounts');
 // Changing it re-prices points members already earned, so every change is
 // kept in chats.point_price_history ({ old, new, at, by }, effective prices)
 // and shown to members on their dashboard for a week.
+//
+// Raising the price (or saving the same one) applies at once. Lowering it
+// takes points' value away from members, so it waits POINT_PRICE_NOTICE_DAYS
+// in chats.point_price_pending and the bot tells the chat to claim first:
+//   { price, to_default, from, symbol, effective_at, requested_at, by }
+// `price` is the target effective price; `to_default` means the bot must
+// $unset point_price (back to the platform rate) rather than set it. The bot
+// applies a due decrease and announces it, but nothing here waits for it:
+// once effective_at has passed, pointPriceFor() already returns the target.
+// Only one decrease can be pending per chat.
 
 // Jetton decimals assumed when the jetton is unknown at save time (TEP-64
 // default, and the most any common jetton uses); re-checked at claim time.
@@ -23,6 +33,16 @@ const MAX_POINT_PRICE = '1000000';
 const MAX_INPUT_LENGTH = 32;
 const HISTORY_LIMIT = 50;
 const RECENT_CHANGE_DAYS = 7;
+const DEFAULT_NOTICE_DAYS = 7;
+const MAX_NOTICE_DAYS = 30;
+const DAY_MS = 86400 * 1000;
+
+// Announcement types written to the `announcements` outbox for the bot.
+const ANNOUNCE = {
+    scheduled: 'price_decrease_scheduled',
+    cancelled: 'price_decrease_cancelled',
+    increased: 'price_increased',
+};
 
 function httpError(status, message) {
     const error = new Error(message);
@@ -87,21 +107,113 @@ function platformPointPrice() {
     return price;
 }
 
-// The chat's effective price. A stored value that fails validation means the
-// document was edited by hand: refuse rather than silently pay a different
-// rate (the creator can fix it by saving a new price).
-function pointPriceFor(chat) {
+// Days a price decrease waits before it applies (POINT_PRICE_NOTICE_DAYS,
+// integer 0-30). A bad value falls back to the default rather than to 0:
+// a typo must not silently remove members' notice.
+function pointPriceNoticeDays() {
+    const raw = process.env.POINT_PRICE_NOTICE_DAYS;
+    if (raw === undefined || String(raw).trim() === '') return DEFAULT_NOTICE_DAYS;
+    const n = Number(raw);
+    return Number.isInteger(n) && n >= 0 && n <= MAX_NOTICE_DAYS ? n : DEFAULT_NOTICE_DAYS;
+}
+
+function invalidStored(what, value) {
+    return httpError(500, `the chat's ${what} is invalid (${String(value)}); its creator must set it again`);
+}
+
+// The price stored on the chat itself (point_price or the platform default),
+// ignoring any pending decrease. A stored value that fails validation means
+// the document was edited by hand: refuse rather than silently pay a
+// different rate (the creator can fix it by saving a new price).
+function storedPointPrice(chat) {
     const stored = chat?.point_price;
     if (stored === undefined || stored === null) return platformPointPrice();
     try {
         return normalizePointPrice(stored);
     } catch {
-        throw httpError(500, `the chat's stored point price is invalid (${String(stored)}); its creator must set it again`);
+        throw invalidStored('stored point price', stored);
     }
 }
 
-function hasCustomPointPrice(chat) {
+function hasPendingPointPrice(chat) {
+    return chat?.point_price_pending !== undefined && chat?.point_price_pending !== null;
+}
+
+// The pending decrease, validated, or null when none is scheduled. Throws
+// (500) on a malformed one for the same reason as storedPointPrice(): the
+// price a member is paid must never be a guess.
+function pendingPointPrice(chat) {
+    if (!hasPendingPointPrice(chat)) return null;
+    const p = chat.point_price_pending;
+    const effectiveAt = p.effective_at instanceof Date ? p.effective_at : new Date(NaN);
+    let price;
+    try {
+        price = normalizePointPrice(p.price);
+    } catch {
+        throw invalidStored('scheduled point price', p.price);
+    }
+    if (Number.isNaN(effectiveAt.getTime())) throw invalidStored('scheduled price date', p.effective_at);
+    return {
+        price,
+        to_default: p.to_default === true,
+        from: p.from === undefined || p.from === null ? null : String(p.from),
+        symbol: p.symbol ?? null,
+        effective_at: effectiveAt,
+        requested_at: p.requested_at ?? null,
+        by: p.by ?? null,
+    };
+}
+
+// The price a due decrease lands on. For a "back to the platform default"
+// decrease that is the default as it is now, not as it was when scheduled:
+// once the bot applies it (by unsetting point_price) the live default is
+// what pays, so reading it here keeps the price identical whether or not the
+// bot has run yet.
+function pendingTarget(pending) {
+    return pending.to_default ? platformPointPrice() : pending.price;
+}
+
+function isDue(pending, now) {
+    return pending !== null && pending.effective_at.getTime() <= now.getTime();
+}
+
+// The chat's effective price at `now`: a pending decrease counts from its
+// effective_at on, whether or not the bot has applied it yet.
+function pointPriceFor(chat, now = new Date()) {
+    const pending = pendingPointPrice(chat);
+    if (isDue(pending, now)) return pendingTarget(pending);
+    return storedPointPrice(chat);
+}
+
+// Whether the effective price at `now` is the creator's own (vs. the
+// platform default).
+function hasCustomPointPrice(chat, now = new Date()) {
+    let pending = null;
+    try {
+        pending = pendingPointPrice(chat);
+    } catch {
+        // a malformed pending: fall back to what is stored
+    }
+    if (isDue(pending, now)) return !pending.to_default;
     return chat?.point_price !== undefined && chat?.point_price !== null;
+}
+
+// The decrease members still have time to claim before, or null (none, or
+// already in effect).
+function upcomingPointPrice(chat, now = new Date()) {
+    const pending = pendingPointPrice(chat);
+    return pending !== null && !isDue(pending, now) ? pending : null;
+}
+
+function isPriceDecrease(from, to) {
+    return compareDecimal(to, from) < 0;
+}
+
+// When a decrease requested at `now` applies. Notice 0 means right away:
+// the decrease is still recorded as pending so the bot announces it when it
+// applies it.
+function decreaseEffectiveAt(now = new Date(), noticeDays = pointPriceNoticeDays()) {
+    return new Date(now.getTime() + noticeDays * DAY_MS);
 }
 
 // Whether `price` can be paid exactly in a jetton with `decimals`: one point
@@ -112,8 +224,8 @@ function priceFitsDecimals(price, decimals) {
 
 // Points -> jetton units at the chat's current price. The one conversion
 // routes use, so none of them can fall back to the platform rate by mistake.
-function chatPointsToUnits(chat, points, decimals) {
-    return pointsToJettons(points, pointPriceFor(chat), decimals);
+function chatPointsToUnits(chat, points, decimals, now = new Date()) {
+    return pointsToJettons(points, pointPriceFor(chat, now), decimals);
 }
 
 function toEpochSec(at) {
@@ -121,11 +233,27 @@ function toEpochSec(at) {
     return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
 }
 
+// The history as members should see it: a decrease that is due but that the
+// bot has not applied yet already pays, so it is listed as a change at its
+// effective_at (the bot logs the same entry when it applies it).
+function effectivePriceHistory(chat, now = new Date()) {
+    const history = Array.isArray(chat?.point_price_history) ? chat.point_price_history : [];
+    let pending = null;
+    try {
+        pending = pendingPointPrice(chat);
+    } catch {
+        return history;
+    }
+    if (!isDue(pending, now)) return history;
+    const entry = { old: pending.from, new: pendingTarget(pending), at: pending.effective_at, by: pending.by };
+    return entry.old === entry.new ? history : [...history, entry];
+}
+
 // The latest price change if it happened within the last week, for the
 // member-facing "rate changed" notice; `changes` counts all changes in that
 // window so several quick edits (down, then back up) are not hidden.
 function recentPointPriceChange(chat, nowSec = Math.floor(Date.now() / 1000)) {
-    const history = Array.isArray(chat?.point_price_history) ? chat.point_price_history : [];
+    const history = effectivePriceHistory(chat, new Date(nowSec * 1000));
     const since = nowSec - RECENT_CHANGE_DAYS * 86400;
     const recent = history.filter((h) => {
         const at = toEpochSec(h?.at);
@@ -137,12 +265,181 @@ function recentPointPriceChange(chat, nowSec = Math.floor(Date.now() / 1000)) {
 }
 
 // History entries for API responses, newest first.
-function serializePriceHistory(chat, limit = 10) {
-    const history = Array.isArray(chat?.point_price_history) ? chat.point_price_history : [];
-    return history
+function serializePriceHistory(chat, limit = 10, now = new Date()) {
+    return effectivePriceHistory(chat, now)
         .slice(-limit)
         .reverse()
         .map((h) => ({ old: String(h.old), new: String(h.new), at: toEpochSec(h.at), by: h.by ?? null }));
+}
+
+// Pending decrease for API responses (epoch seconds, like every other date
+// the API returns), or null. `price` is what it will pay: for a "back to
+// default" decrease, the default as it is now.
+function serializePendingPrice(pending) {
+    if (!pending) return null;
+    return {
+        price: pendingTarget(pending),
+        to_default: pending.to_default,
+        from: pending.from,
+        symbol: pending.symbol,
+        effective_at: toEpochSec(pending.effective_at),
+    };
+}
+
+// Mongo filter matching the pending state we read, so a write based on it
+// fails if the bot applied the decrease, or another save replaced it,
+// meanwhile. requested_at identifies a pending (the bot conditions on it too).
+function pendingFilter(chat) {
+    return hasPendingPointPrice(chat)
+        ? { 'point_price_pending.requested_at': chat.point_price_pending.requested_at ?? null }
+        : { point_price_pending: null };
+}
+
+// Decides what saving `next` (a canonical price, or null for the platform
+// default) does to the chat, as data the route executes: the conditional
+// `filter`, the `update`, and the `announcement` for the bot (or null).
+// `before`/`after` are the effective prices now and once the save applies.
+// Returns null when nothing would change.
+//
+// A decrease waits `noticeDays` in point_price_pending (replacing any other
+// pending one); anything else applies now and cancels a pending decrease. A
+// decrease that is already due but not yet applied by the bot is written out
+// first (point_price + its history entry), so the history keeps chaining and
+// the bot, finding its pending gone, does not apply it a second time.
+function planPointPriceChange(chat, next, { now = new Date(), noticeDays = pointPriceNoticeDays(), by = null, symbol = null } = {}) {
+    const stored = chat?.point_price === undefined ? null : chat.point_price;
+    // A malformed pending (hand-edited) is dropped by any save, like a
+    // corrupted stored price: claims are refused until the creator saves.
+    let pending = null;
+    let malformed = false;
+    try {
+        pending = pendingPointPrice(chat);
+    } catch {
+        malformed = true;
+    }
+    const due = isDue(pending, now);
+    const live = pending !== null && !due ? pending : null;
+
+    let before;
+    let beforeValid = !malformed;
+    try {
+        before = malformed ? storedPointPrice(chat) : pointPriceFor(chat, now);
+    } catch {
+        before = String(stored); // replacing a corrupted value
+        beforeValid = false;
+    }
+    const target = next ?? platformPointPrice();
+
+    const history = [];
+    if (due) {
+        const dueEntry = { old: pending.from, new: pendingTarget(pending), at: pending.effective_at, by: pending.by };
+        if (dueEntry.old !== dueEntry.new) history.push(dueEntry);
+    }
+    // What point_price holds once a due decrease is written out.
+    const settled = due ? (pending.to_default ? null : pending.price) : stored;
+
+    const $set = {};
+    const $unset = {};
+    const setStored = (value) => {
+        if (value === null) $unset.point_price = '';
+        else $set.point_price = value;
+    };
+    let announcement = null;
+    let after;
+
+    // A corrupted current price cannot be compared, and nobody can claim at
+    // it anyway: the fix applies at once, as before.
+    if (beforeValid && isPriceDecrease(before, target)) {
+        after = before;
+        if (settled !== stored) setStored(settled);
+        const effectiveAt = decreaseEffectiveAt(now, noticeDays);
+        $set.point_price_pending = {
+            price: target,
+            to_default: next === null,
+            from: before,
+            symbol,
+            effective_at: effectiveAt,
+            requested_at: now,
+            by,
+        };
+        // With no notice there is nothing to warn about ahead: the bot's own
+        // "price decreased" message, when it applies it, is the announcement.
+        if (effectiveAt.getTime() > now.getTime()) {
+            announcement = { type: ANNOUNCE.scheduled, params: { from: before, to: target, symbol, effective_at: effectiveAt } };
+        }
+    } else {
+        if (pending === null && !malformed && next === stored) return null;
+        after = target;
+        if (next !== stored) setStored(next);
+        if (pending !== null || malformed) $unset.point_price_pending = '';
+        // the effective price did not move (e.g. custom = platform default):
+        // nothing for members to be warned about
+        if (before !== target) history.push({ old: before, new: target, at: now, by });
+        if (beforeValid && compareDecimal(target, before) > 0) {
+            announcement = { type: ANNOUNCE.increased, params: { from: before, to: target, symbol, cancelled_pending: live !== null } };
+        } else if (live !== null) {
+            announcement = { type: ANNOUNCE.cancelled, params: { from: before, to: live.price, symbol: symbol ?? live.symbol } };
+        }
+    }
+
+    const update = {};
+    if (Object.keys($set).length) update.$set = $set;
+    if (Object.keys($unset).length) update.$unset = $unset;
+    if (history.length) update.$push = { point_price_history: { $each: history, $slice: -HISTORY_LIMIT } };
+    return {
+        filter: { id: chat.id, point_price: stored, ...pendingFilter(chat) },
+        update,
+        announcement,
+        before,
+        after,
+    };
+}
+
+// Explicitly cancelling the pending decrease. Throws 409 when there is none
+// or it already took effect (members may have claimed at the new price).
+function planPointPriceCancel(chat, { now = new Date(), symbol = null } = {}) {
+    if (!hasPendingPointPrice(chat)) throw httpError(409, 'no price decrease is scheduled');
+    const stored = chat.point_price === undefined ? null : chat.point_price;
+    const filter = { id: chat.id, point_price: stored, ...pendingFilter(chat) };
+    const update = { $unset: { point_price_pending: '' } };
+    let pending;
+    try {
+        pending = pendingPointPrice(chat);
+    } catch {
+        // malformed: nothing meaningful to announce, just clear it
+        return { filter, update, announcement: null, before: null, after: null };
+    }
+    if (isDue(pending, now)) throw httpError(409, 'the price decrease already took effect; set a new price instead');
+    let before = null;
+    try {
+        before = storedPointPrice(chat);
+    } catch {
+        // corrupted stored price: still cancel, but there is no price to name
+    }
+    return {
+        filter,
+        update,
+        announcement:
+            before === null
+                ? null
+                : { type: ANNOUNCE.cancelled, params: { from: before, to: pending.price, symbol: symbol ?? pending.symbol } },
+        before,
+        after: before,
+    };
+}
+
+// The outbox row the bot drains (sent_at/claimed_at/attempts are its own
+// bookkeeping).
+function announcementDoc(chatId, announcement, now = new Date()) {
+    return {
+        chat_id: chatId,
+        type: announcement.type,
+        params: announcement.params,
+        created_at: now,
+        sent_at: null,
+        claimed_at: null,
+        attempts: 0,
+    };
 }
 
 module.exports = {
@@ -150,14 +447,29 @@ module.exports = {
     MAX_POINT_PRICE,
     HISTORY_LIMIT,
     RECENT_CHANGE_DAYS,
+    DEFAULT_NOTICE_DAYS,
+    MAX_NOTICE_DAYS,
+    ANNOUNCE,
     canonicalDecimal,
     compareDecimal,
     normalizePointPrice,
     platformPointPrice,
+    pointPriceNoticeDays,
+    storedPointPrice,
+    pendingPointPrice,
+    upcomingPointPrice,
+    pendingTarget,
     pointPriceFor,
     hasCustomPointPrice,
+    isPriceDecrease,
+    decreaseEffectiveAt,
     priceFitsDecimals,
     chatPointsToUnits,
+    effectivePriceHistory,
     recentPointPriceChange,
     serializePriceHistory,
+    serializePendingPrice,
+    planPointPriceChange,
+    planPointPriceCancel,
+    announcementDoc,
 };
