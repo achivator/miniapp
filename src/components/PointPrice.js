@@ -45,7 +45,8 @@ export function PointPrice({ chatId, initDataRaw }) {
   // it would refuse.
   let price = null;
   let invalid = null;
-  if (draft.trim()) {
+  // "0." is a price still being typed, not an error
+  if (draft.trim() && !draft.endsWith(".")) {
     try {
       price = normalizePointPrice(draft, data.decimals_known ? data.decimals : null);
     } catch (e) {
