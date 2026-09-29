@@ -19,12 +19,24 @@ import {
   titleCase,
 } from "@/components/ui";
 import { T } from "@/components/T";
-import { ChevronRight, Clock, Coins, Medal, Pool, Question, Sparkles } from "@/components/icons";
+import { Alert, ChevronRight, Clock, Coins, Medal, Pool, Question, Sparkles } from "@/components/icons";
 
 const numberFormat = new Intl.NumberFormat("en-US");
 
 function shortDate(epochSec) {
   return new Date(epochSec * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// A precise moment (a price change lands at a given minute, not a day), in the
+// viewer's time zone with the zone named so it is never ambiguous.
+function momentText(epochSec) {
+  return new Date(epochSec * 1000).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
 }
 
 // Why the chat's claims are closed right now (admin's claim rules).
@@ -77,6 +89,7 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
   const canClaim = reward.available_points > 0 && Boolean(reward.jetton_master) && !closed;
   const pending = reward.pending?.[0];
   const priceChange = reward.point_price_change;
+  const priceDrop = reward.point_price_pending;
 
   async function claim() {
     if (!wallet) {
@@ -154,6 +167,21 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
               {new Date(pending.expiry * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </Chip>
           )}
+        </div>
+      )}
+
+      {/* A scheduled decrease: the notice period exists so members can claim
+          at the current rate first, so this is the loudest line on the card. */}
+      {reward.jetton_master && priceDrop && (
+        <div
+          className="tint-gold flex items-start gap-2 rounded-xl px-3 py-2.5 text-[13px] font-medium leading-snug text-[color:var(--gold-text)]"
+          role="alert"
+        >
+          <Alert className="mt-px h-4 w-4 shrink-0" />
+          <span>
+            Price drops to 1 pt = {priceDrop.to} {symbol} on {momentText(priceDrop.effective_at)}. Claim before then to
+            get the current rate.
+          </span>
         </div>
       )}
 

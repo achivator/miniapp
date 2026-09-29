@@ -6,11 +6,14 @@ import { pointsToJettons, formatUnits } from "@/lib/ton/amounts";
 import { reconcileExpiredClaims } from "@/lib/rewards";
 import { claimGate, claimSettingsOf, claimablePoints } from "@/lib/claim-rules";
 import {
+  compareDecimal,
   hasCustomPointPrice,
+  pendingTarget,
   platformPointPrice,
   pointPriceFor,
   priceFitsDecimals,
   recentPointPriceChange,
+  upcomingPointPrice,
 } from "@/lib/point-price";
 
 export const dynamic = "force-dynamic";
@@ -72,12 +75,23 @@ export async function GET(request) {
 
     // Each chat's own price; a corrupted one is shown as unknown rather than
     // breaking the member's whole dashboard (claims refuse it anyway).
+    const now = new Date();
     let price = null;
+    let upcoming = null;
     try {
-      price = pointPriceFor(chat);
+      price = pointPriceFor(chat, now);
+      upcoming = upcomingPointPrice(chat, now);
     } catch {
       price = null;
     }
+
+    // Only while it is still a drop: a "back to default" decrease follows the
+    // live default, which the operator may have raised since.
+    const dropTo = upcoming && price !== null ? pendingTarget(upcoming) : null;
+    const priceDrop =
+      dropTo !== null && compareDecimal(dropTo, price) < 0
+        ? { to: dropTo, effective_at: Math.floor(upcoming.effective_at.getTime() / 1000) }
+        : null;
 
     const pendingClaims = await claimsCol
       .find({ chat_id: record.chat_id, user_id: userId, status: "issued", expiry: { $gt: Math.floor(Date.now() / 1000) } })
@@ -105,10 +119,13 @@ export async function GET(request) {
       // jettons per point in this chat, and whether its creator set it (vs.
       // the platform default)
       point_price: price,
-      point_price_custom: hasCustomPointPrice(chat),
+      point_price_custom: hasCustomPointPrice(chat, now),
       // latest change within the last week: members are told when the value
       // of the points they already hold moved
-      point_price_change: recentPointPriceChange(chat),
+      point_price_change: recentPointPriceChange(chat, Math.floor(now.getTime() / 1000)),
+      // a decrease still in its notice period: members are told to claim
+      // before effective_at (epoch seconds) to keep the current rate
+      point_price_pending: priceDrop,
       grants: (grantsByChat.get(record.chat_id) || []).slice(0, 3).map((g) => ({
         points: g.points,
         reason: g.reason || null,

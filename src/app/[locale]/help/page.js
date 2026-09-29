@@ -490,8 +490,8 @@ function Guide({ locale }) {
             <b>{L("Цена балла.", "Point price.")}</b> {L("На странице пула, в блоке", "On the pool page, the")}{" "}
             <Ui>Point price</Ui>{" "}
             {L(
-              "задаётся, сколько жетонов стоит один балл (по умолчанию — курс платформы). Новая цена действует со следующей выплаты, в том числе для уже накопленных баллов; каждое изменение участники видят в мини-приложении в течение 7 дней.",
-              "block sets how many jettons one point is worth (the platform rate by default). A new price applies from the next claim, including to points already earned; members see every change in the mini app for 7 days.",
+              "задаётся, сколько жетонов стоит один балл (по умолчанию — курс платформы). Цена действует и для уже накопленных баллов. Повышение применяется сразу, со следующей выплаты. Снижение вступает в силу только через 7 дней: бот сразу объявляет его в чате, чтобы участники успели забрать баллы по текущей цене, и сообщает ещё раз, когда цена снизится. Каждое изменение участники видят в мини-приложении в течение 7 дней.",
+              "block sets how many jettons one point is worth (the platform rate by default). The price also applies to points already earned. An increase applies at once, from the next claim. A decrease takes effect only after 7 days: the bot announces it in the chat right away so members can claim at the current price, and again when the price drops. Members see every change in the mini app for 7 days.",
             )}
           </p>
           <p>
