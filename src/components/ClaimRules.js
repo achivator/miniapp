@@ -115,7 +115,7 @@ export function ClaimRules({ chatId, initDataRaw }) {
       />
       <Card className="space-y-5">
         <div className="space-y-2">
-          <div className="flex items-baseline justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <p className="font-semibold">{L("Новые баллы дозревают", "New points mature in")}</p>
             {draft.maturation_days > 0 && <Chip tone="accent">{L("защита от накруток", "anti-farming on")}</Chip>}
           </div>

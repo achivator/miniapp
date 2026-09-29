@@ -278,7 +278,7 @@ function PoolManager({ chatId }) {
           {info.pool_address && (
             <Row label={L("Контракт пула", "Pool contract")}>{shortenAddress(info.pool_address, 5)}</Row>
           )}
-          <Row label={L(`Комиссия за пополнение · тариф ${info.fee.tier}`, `Deposit fee · tier ${info.fee.tier}`)}>
+          <Row label={L(`Комиссия (тариф ${info.fee.tier})`, `Deposit fee · tier ${info.fee.tier}`)}>
             {t.decimal(info.fee.fee_ton)} TON
           </Row>
           {info.member_count !== null && <Row label={L("Участники", "Members")}>{t.num(info.member_count)}</Row>}

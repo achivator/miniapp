@@ -94,7 +94,12 @@ export function BilingualNotFound() {
           </span>
         </h1>
         <p className="text-hint text-balance">
-          <span lang="ru">{TEXTS.ru.text}</span> <span lang="en">{TEXTS.en.text}</span>
+          <span className="block" lang="ru">
+            {TEXTS.ru.text}
+          </span>
+          <span className="block" lang="en">
+            {TEXTS.en.text}
+          </span>
         </p>
       </div>
       <nav className="flex flex-wrap justify-center gap-3" aria-label="Язык / Language">

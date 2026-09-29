@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { LOCALES } from "@/lib/locale";
 import { applyTelegramLocale, setAppLocale, useI18n, useLocale } from "@/lib/use-locale";
 import { Medal, Question } from "./icons";
-import { Spinner, cx } from "./ui";
+import { Spinner } from "./ui";
 
 const MANIFEST_URL = "https://achivator.cc/ton-connect.json";
 
@@ -187,28 +187,24 @@ export function useHaptic() {
   return (type) => safely(() => haptic.notificationOccurred(type));
 }
 
-// Compact RU / EN toggle of the app screens: switches in place and remembers
-// the pick (the web pages' LangSwitch links /ru and /en instead).
+// Compact language toggle of the app screens: shows the other language and
+// switches to it in place, remembering the pick (the web pages' LangSwitch
+// links /ru and /en instead). One round button, like the guide's, so the
+// TopBar still fits a 360px screen next to TON Connect's button.
 export function AppLangSwitch() {
   const locale = useLocale();
+  const other = LOCALES.find((option) => option !== locale);
   return (
-    <div className="flex rounded-full bg-bg p-0.5 text-[12px] font-semibold ring-1 ring-[color:var(--separator)]" role="group" aria-label="Язык / Language">
-      {LOCALES.map((option) => (
-        <button
-          key={option}
-          type="button"
-          lang={option}
-          aria-pressed={option === locale}
-          onClick={() => setAppLocale(option)}
-          className={cx(
-            "rounded-full px-2 py-1 uppercase transition",
-            option === locale ? "bg-surface text-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-hint hover:text-fg",
-          )}
-        >
-          {option}
-        </button>
-      ))}
-    </div>
+    <button
+      type="button"
+      lang={other}
+      onClick={() => setAppLocale(other)}
+      aria-label={other === "ru" ? "Переключить на русский" : "Switch to English"}
+      title={other === "ru" ? "Русский" : "English"}
+      className="tint-accent flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold uppercase text-accent active:opacity-80"
+    >
+      {other}
+    </button>
   );
 }
 
@@ -219,13 +215,20 @@ export function TopBar() {
       className="sticky top-0 z-20 -mx-4 mb-1 flex items-center justify-between gap-2 px-4 py-3 backdrop-blur-md"
       style={{ background: "color-mix(in srgb, var(--bg) 85%, transparent)" }}
     >
-      <Link href="/" className="flex min-w-0 items-center gap-2" aria-label={L("Achivator — на главную", "Achivator home")}>
-        <span className="hero-gradient flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]">
+      {/* The wordmark gives way to TON Connect's button on narrow screens, and
+          the logo too on the narrowest (Telegram's back button and the
+          dashboard's own content lead home there). */}
+      <Link
+        href="/"
+        className="flex shrink-0 items-center gap-2 max-[379px]:hidden"
+        aria-label={L("Achivator — на главную", "Achivator home")}
+      >
+        <span className="hero-gradient flex h-8 w-8 items-center justify-center rounded-[10px]">
           <Medal className="h-[18px] w-[18px]" />
         </span>
-        <span className="truncate text-[17px] font-bold tracking-tight max-[380px]:hidden">Achivator</span>
+        <span className="text-[17px] font-bold tracking-tight max-[439px]:hidden">Achivator</span>
       </Link>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         <AppLangSwitch />
         <Link
           href={`/${locale}/help`}
