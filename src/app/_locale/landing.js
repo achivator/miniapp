@@ -1,7 +1,8 @@
 import { Landing } from "@/components/Landing";
 import { localeMetadata } from "@/lib/locale";
 
-export function generateMetadata({ params: { locale } }) {
+// The landing at /ru and /en.
+export function landingMetadata(locale) {
   const en = locale === "en";
   return localeMetadata({
     locale,
@@ -13,6 +14,6 @@ export function generateMetadata({ params: { locale } }) {
   });
 }
 
-export default function LandingPage({ params: { locale } }) {
+export function LandingPage({ locale }) {
   return <Landing locale={locale} />;
 }

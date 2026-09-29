@@ -10,7 +10,7 @@ import { localeMetadata } from "@/lib/locale";
 // wrapped in AppShell: it must open in a regular browser too, not only
 // inside Telegram.
 
-export function generateMetadata({ params: { locale } }) {
+export function helpMetadata(locale) {
   const en = locale === "en";
   return localeMetadata({
     locale,
@@ -603,7 +603,7 @@ function Guide({ locale }) {
   );
 }
 
-export default function HelpPage({ params: { locale } }) {
+export function HelpPage({ locale }) {
   return (
     <>
       <TelegramBack />
