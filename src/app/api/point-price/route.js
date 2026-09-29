@@ -1,12 +1,24 @@
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { getChatMemberStatus } from "@/lib/telegram";
-import { fetchJettonMetadata } from "@/lib/ton/rpc";
+import { getTonConfig } from "@/lib/ton/config";
+import {
+  fetchJettonMetadata,
+  fetchPoolClaimControls,
+  fetchPoolLedgerBalance,
+  getPoolStatus,
+  runGetMethod,
+  stackItemToAddress,
+} from "@/lib/ton/rpc";
+import { chatDebt } from "@/lib/lots";
+import { budgetDays, payoutCoverage, serializeCoverage } from "@/lib/payout-coverage";
+import { sameAddress } from "@/lib/pool-members";
 import { claimGate, claimSettingsOf } from "@/lib/claim-rules";
 import {
   FALLBACK_DECIMALS,
   MAX_POINT_PRICE,
   announcementDoc,
+  decreaseEffectiveAt,
   hasCustomPointPrice,
   normalizePointPrice,
   planPointPriceCancel,
@@ -44,6 +56,94 @@ async function jettonOf(chat) {
     return { master: chat.jetton_master, symbol: metadata.symbol, decimals: metadata.decimals };
   } catch {
     return { master: chat.jetton_master, symbol: null, decimals: null };
+  }
+}
+
+// Whether members can claim what they hold before a decrease applies: the
+// chat's debt (every member's unclaimed points, valued as claims value them -
+// maturing points included, since they will be claimed later at the price the
+// valuation gives them - plus vouchers issued and not yet used) against the
+// pool's balance and daily payout limit over the notice period. For the
+// pending decrease if there is one, else for a decrease requested now.
+// { coverage, coverage_error }: never throws, the card works without it.
+// It costs several chain reads and a pass over every member's points, so it
+// is computed only when asked (`force`: GET ?coverage=1, the card asks once a
+// decrease is being typed) or while a decrease is pending.
+async function coverageOf(chat, jetton, now, force = false) {
+  const none = (why) => ({ coverage: null, coverage_error: why });
+  let scheduled = false;
+  try {
+    scheduled = upcomingPointPrice(chat, now) !== null;
+  } catch {
+    scheduled = false;
+  }
+  if (!force && !scheduled) return none(null);
+  if (!chat.jetton_master) return none("this chat has no jetton");
+  const decimals = jetton?.decimals;
+  if (!Number.isInteger(decimals)) return none("cannot read the jetton's decimals right now");
+  const cfg = getTonConfig();
+  if (!cfg.masterAddress) return none("MASTER_ADDRESS is not configured");
+  try {
+    const pool = await getPoolStatus(cfg.masterAddress, chat.id);
+    if (!pool.poolAddress || !pool.active) return none("the pool is not activated yet");
+    const nowSec = Math.floor(now.getTime() / 1000);
+    const [ledger, controls, adminStack, debt, vouchers] = await Promise.all([
+      fetchPoolLedgerBalance(pool.poolAddress, chat.jetton_master),
+      fetchPoolClaimControls(pool.poolAddress, chat.jetton_master),
+      runGetMethod(pool.poolAddress, "poolAdmin", []).catch(() => null),
+      chatDebt(chat, decimals, now),
+      (await getCollection("claims"))
+        .find(
+          { chat_id: chat.id, status: "issued", expiry: { $gt: nowSec } },
+          { projection: { amount: 1, jetton_master: 1 } },
+        )
+        .toArray(),
+    ]);
+    // Vouchers in hand draw on the same balance and budget. One already used
+    // but not reconciled yet is counted twice (its payout already left the
+    // balance): an overestimate, the safe side.
+    const issued = vouchers
+      .filter((c) => sameAddress(c.jetton_master, chat.jetton_master))
+      .reduce((sum, c) => sum + BigInt(c.amount || 0), 0n);
+    let pending = null;
+    try {
+      pending = upcomingPointPrice(chat, now);
+    } catch {
+      pending = null;
+    }
+    const effectiveAt = pending ? pending.effective_at : decreaseEffectiveAt(now);
+    const coverage = payoutCoverage({
+      debt: debt.units + issued,
+      poolBalance: ledger,
+      limit: controls.limit,
+      days: budgetDays(now.getTime(), effectiveAt.getTime()),
+    });
+    let admin = null;
+    try {
+      admin = adminStack ? stackItemToAddress(adminStack[0]) : null;
+    } catch {
+      admin = null;
+    }
+    return {
+      coverage: serializeCoverage(coverage, {
+        decimals,
+        debt_points: debt.points,
+        members_owed: debt.members,
+        issued_vouchers: issued.toString(),
+        // left of today's budget (not counted in capacity: may be spent)
+        claimable_today: controls.claimableToday.toString(),
+        claims_paused: controls.paused,
+        // the decrease this is for: the pending one, or one requested now
+        for_pending: pending !== null,
+        effective_at: Math.floor(effectiveAt.getTime() / 1000),
+        // only this wallet can change the limit (pool-admin-tx "limit")
+        pool_admin: admin ? admin.toString() : null,
+        network: cfg.network,
+      }),
+      coverage_error: null,
+    };
+  } catch (e) {
+    return none(`cannot check the pool right now: ${e.message}`);
   }
 }
 
@@ -85,10 +185,13 @@ function view(chat, jetton, extra = {}) {
 
 export async function GET(request) {
   try {
-    const chatId = Number(new URL(request.url).searchParams.get("chatId"));
+    const { searchParams } = new URL(request.url);
+    const chatId = Number(searchParams.get("chatId"));
     const { chat, error } = await creatorChat(request, chatId);
     if (error) return error;
-    return Response.json(view(chat, await jettonOf(chat)));
+    const jetton = await jettonOf(chat);
+    const force = searchParams.get("coverage") === "1";
+    return Response.json(view(chat, jetton, await coverageOf(chat, jetton, new Date(), force)));
   } catch (e) {
     return Response.json({ error: e.message }, { status: e.status || 500 });
   }
@@ -126,7 +229,7 @@ export async function POST(request) {
       }
       plan = planPointPriceChange(chat, next, { now, by: auth.user.id, symbol });
     }
-    if (!plan) return Response.json(view(chat, jetton));
+    if (!plan) return Response.json(view(chat, jetton, await coverageOf(chat, jetton, new Date(), body?.coverage === true)));
 
     // Conditional on the price and the pending decrease we read, so two
     // concurrent saves cannot both log a change from the same "old" price
@@ -158,7 +261,9 @@ export async function POST(request) {
         announced = false;
       }
     }
-    return Response.json(view(res, jetton, { announced }));
+    return Response.json(
+      view(res, jetton, { announced, ...(await coverageOf(res, jetton, new Date(), body?.coverage === true)) }),
+    );
   } catch (e) {
     return Response.json({ error: e.message }, { status: e.status || 500 });
   }
