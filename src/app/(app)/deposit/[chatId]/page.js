@@ -13,6 +13,7 @@ import { Button, Card, ChatAvatar, Chip, Notice, Row, SectionHeader, Skeleton } 
 import { ArrowDown, ArrowUp, Check, ChevronRight, Refresh, Shield, Users } from "@/components/icons";
 import { ClaimRules } from "@/components/ClaimRules";
 import { PointPrice } from "@/components/PointPrice";
+import { Subscription } from "@/components/Subscription";
 
 function sameAddress(a, b) {
   try {
@@ -382,6 +383,8 @@ function PoolManager({ chatId }) {
           </Card>
         </section>
       )}
+
+      {info.is_creator && <Subscription chatId={chatId} initDataRaw={initDataRaw} />}
 
       {info.is_creator && info.jetton_master && <PointPrice chatId={chatId} initDataRaw={initDataRaw} />}
 

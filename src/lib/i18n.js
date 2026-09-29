@@ -124,6 +124,13 @@ const ERRORS = {
   "only the chat creator can change claim rules": ["Менять правила вывода может только создатель чата.", "Only the chat creator can change claim rules."],
   "only the chat creator can change the point price": ["Менять цену балла может только создатель чата.", "Only the chat creator can change the point price."],
   "only the chat creator can see member accounts": ["Счета участников видит только создатель чата.", "Only the chat creator can see member accounts."],
+  "only the chat creator can manage the subscription": ["Подпиской управляет только создатель чата.", "Only the chat creator can manage the subscription."],
+  "subscriptions are not enabled": ["Подписка пока не включена.", "Subscriptions aren't enabled yet."],
+  "set the reward jetton first (/jetton in the chat)": [
+    "Сначала задайте жетон наград: /jetton в чате.",
+    "Set the reward jetton first: /jetton in the chat.",
+  ],
+  "you already have a subscription for this chat": ["У вас уже есть подписка на этот чат.", "You already have a subscription for this chat."],
   "telegram does not confirm you as the chat creator": ["Telegram не подтверждает, что вы создатель чата.", "Telegram does not confirm you as the chat creator."],
   "register the pool admin wallet first": ["Сначала назначьте админ-кошелёк пула.", "Register the pool admin wallet first."],
   "this wallet is already the pool admin": ["Этот кошелёк уже админ пула.", "This wallet is already the pool admin."],
