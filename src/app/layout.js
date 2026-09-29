@@ -1,5 +1,6 @@
 import "./globals.css";
 import { LAUNCH_SCRIPT } from "@/lib/launch";
+import { LOCALE_SCRIPT } from "@/lib/locale";
 
 export const metadata = {
   metadataBase: new URL("https://achivator.cc"),
@@ -17,10 +18,11 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    // LAUNCH_SCRIPT sets data-launch on <html> before hydration.
+    // LAUNCH_SCRIPT and LOCALE_SCRIPT set data-launch, data-lang and lang on
+    // <html> before hydration.
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: LAUNCH_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: LAUNCH_SCRIPT + LOCALE_SCRIPT }} />
       </head>
       <body>{children}</body>
     </html>

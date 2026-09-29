@@ -18,6 +18,7 @@ import {
   Skeleton,
   titleCase,
 } from "@/components/ui";
+import { T } from "@/components/T";
 import { ChevronRight, Clock, Coins, Medal, Pool, Question, Sparkles } from "@/components/icons";
 
 const numberFormat = new Intl.NumberFormat("en-US");
@@ -336,7 +337,9 @@ export function Dashboard() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="font-semibold">Reward your own chat</p>
-            <p className="text-[13px] text-hint">Как подключить свой чат — пошаговая инструкция</p>
+            <p className="text-[13px] text-hint">
+              <T ru="Как подключить свой чат — пошаговая инструкция" en="Step-by-step setup guide" />
+            </p>
           </div>
           <ChevronRight className="h-5 w-5 text-hint" />
         </Card>

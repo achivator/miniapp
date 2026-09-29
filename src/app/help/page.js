@@ -2,14 +2,18 @@ import Link from "next/link";
 import { Card } from "@/components/ui";
 import { Check, Info, Medal } from "@/components/icons";
 import { TelegramBack } from "@/components/TelegramBack";
+import { LangSwitch } from "@/components/LangSwitch";
 
-// Setup guide for chat creators (testnet). A plain server page, not wrapped in
-// AppShell: it must open in a regular browser too, not only inside Telegram.
+// Setup guide for chat creators (testnet), in Russian and English: both are
+// server rendered and CSS shows the visitor's language (lib/locale.js). A
+// plain server page, not wrapped in AppShell: it must open in a regular
+// browser too, not only inside Telegram.
 
 export const metadata = {
-  title: "Как подключить чат к Achivator (тестнет)",
+  title: "Как подключить чат к Achivator · How to connect a chat to Achivator",
   description:
-    "Пошаговая инструкция для создателя Telegram-группы: тестнет-кошелёк, свой жетон, бот @achivator_bot, пул наград.",
+    "Пошаговая инструкция для создателя Telegram-группы: тестнет-кошелёк, свой жетон, бот @achivator_bot, пул наград. " +
+    "A step-by-step guide for Telegram group creators: testnet wallet, your own jetton, the @achivator_bot bot, reward pool.",
 };
 
 const APP_URL = "https://t.me/achivator_bot/app";
@@ -33,17 +37,12 @@ function Cmd({ children }) {
   );
 }
 
-// A UI label exactly as the app or wallet shows it.
-function Ui({ children }) {
-  return <span className="font-semibold text-fg">«{children}»</span>;
-}
-
-function Done({ children }) {
+function Done({ label, children }) {
   return (
     <div className="tint-success flex items-start gap-2 rounded-xl px-3 py-2.5 text-[13px] leading-snug text-success">
       <Check className="mt-px h-4 w-4 shrink-0" />
       <span>
-        <b>Готово, если</b> {children}
+        <b>{label}</b> {children}
       </span>
     </div>
   );
@@ -88,313 +87,483 @@ function Faq({ q, children }) {
   );
 }
 
-const TOC = [
-  ["wallet", "Тестнет-кошелёк"],
-  ["ton", "Тестовые TON"],
-  ["jetton", "Свой жетон"],
-  ["bot", "Бот в группе"],
-  ["admin", "Бот — админ"],
-  ["commands", "Команды боту"],
-  ["pool", "Активация пула"],
-  ["pool-admin", "Админ-кошелёк пула"],
-  ["topup", "Пополнение пула"],
-];
+function Guide({ locale }) {
+  const en = locale === "en";
+  const L = (ruText, enText) => (en ? enText : ruText);
+  // Step anchors are per locale: both translations are in the DOM.
+  const id = (name) => `${locale}-${name}`;
+  const done = L("Готово, если", "Done when");
+  const [open, close] = en ? ["“", "”"] : ["«", "»"];
+  // A UI label exactly as the app or wallet shows it.
+  const Ui = ({ children }) => (
+    <span className="font-semibold text-fg">
+      {open}
+      {children}
+      {close}
+    </span>
+  );
 
-export default function HelpPage() {
+  const toc = [
+    ["wallet", L("Тестнет-кошелёк", "Testnet wallet")],
+    ["ton", L("Тестовые TON", "Test TON")],
+    ["jetton", L("Свой жетон", "Your jetton")],
+    ["bot", L("Бот в группе", "Bot in the group")],
+    ["admin", L("Бот — админ", "Bot as admin")],
+    ["commands", L("Команды боту", "Bot commands")],
+    ["pool", L("Активация пула", "Pool activation")],
+    ["pool-admin", L("Админ-кошелёк пула", "Pool admin wallet")],
+    ["topup", L("Пополнение пула", "Pool top-up")],
+  ];
+
   return (
-    <main lang="ru" className="pb-safe mx-auto flex min-h-screen max-w-xl flex-col gap-5 px-4">
-      <TelegramBack />
-
-      <header className="flex items-center justify-between py-3">
+    <main className="pb-safe mx-auto flex min-h-screen max-w-xl flex-col gap-5 px-4">
+      <header className="flex items-center justify-between gap-3 py-3">
         <Link href="/" className="flex items-center gap-2" aria-label="Achivator">
           <span className="hero-gradient flex h-8 w-8 items-center justify-center rounded-[10px]">
             <Medal className="h-[18px] w-[18px]" />
           </span>
           <span className="text-[17px] font-bold tracking-tight">Achivator</span>
         </Link>
-        <span className="tint-gold rounded-full px-2.5 py-1 text-xs font-medium text-[color:var(--gold-text)]">Тестнет</span>
+        <div className="flex items-center gap-2">
+          <span className="tint-gold rounded-full px-2.5 py-1 text-xs font-medium text-[color:var(--gold-text)]">
+            {L("Тестнет", "Testnet")}
+          </span>
+          <LangSwitch />
+        </div>
       </header>
 
       <section className="space-y-2">
-        <h1 className="text-[28px] font-bold leading-tight tracking-tight text-balance">Как подключить свой чат</h1>
+        <h1 className="text-[28px] font-bold leading-tight tracking-tight text-balance">
+          {L("Как подключить свой чат", "How to connect your chat")}
+        </h1>
         <p className="text-[15px] leading-relaxed text-hint">
-          Инструкция для создателя группы: от тестового кошелька до пула, из которого участники забирают награды
-          жетонами. Всё происходит в тестовой сети TON — деньги настоящие не нужны. Займёт 15–20 минут.
+          {L(
+            "Инструкция для создателя группы: от тестового кошелька до пула, из которого участники забирают награды жетонами. Всё происходит в тестовой сети TON — деньги настоящие не нужны. Займёт 15–20 минут.",
+            "A guide for the group's creator: from a test wallet to the pool members claim their jetton rewards from. Everything happens on the TON testnet — no real money needed. Takes 15–20 minutes.",
+          )}
         </p>
       </section>
 
       <Card className="space-y-2">
-        <p className="font-semibold">Что понадобится</p>
+        <p className="font-semibold">{L("Что понадобится", "What you need")}</p>
         <ul className="list-disc space-y-1 pl-5 text-[15px] leading-relaxed marker:text-hint">
           <li>
-            Telegram-группа, где вы — <b>создатель</b> (владелец). Обычному админу подключить чат нельзя.
+            {L("Telegram-группа, где вы —", "A Telegram group where you are the")} <b>{L("создатель", "creator")}</b>{" "}
+            {L("(владелец). Обычному админу подключить чат нельзя.", "(owner). A regular admin can't connect a chat.")}
           </li>
           <li>
-            Кошелёк <Ext href="https://tonkeeper.com">Tonkeeper</Ext> на телефоне.
+            {L("Кошелёк", "The")} <Ext href="https://tonkeeper.com">Tonkeeper</Ext> {L("на телефоне.", "wallet on your phone.")}
           </li>
-          <li>Около 2 тестовых TON — их бесплатно раздают боты.</li>
+          <li>{L("Около 2 тестовых TON — их бесплатно раздают боты.", "About 2 test TON — bots hand them out for free.")}</li>
         </ul>
       </Card>
 
-      <nav aria-label="Шаги" className="flex flex-wrap gap-2">
-        {TOC.map(([id, label], i) => (
-          <a key={id} href={`#${id}`} className="rounded-full bg-surface px-3 py-1.5 text-[13px] font-medium">
+      <nav aria-label={L("Шаги", "Steps")} className="flex flex-wrap gap-2">
+        {toc.map(([name, label], i) => (
+          <a key={name} href={`#${id(name)}`} className="rounded-full bg-surface px-3 py-1.5 text-[13px] font-medium">
             <span className="text-hint tabular">{i + 1}.</span> {label}
           </a>
         ))}
       </nav>
 
-      <Step n={1} id="wallet" title="Заведите тестнет-кошелёк">
+      <Step n={1} id={id("wallet")} title={L("Заведите тестнет-кошелёк", "Create a testnet wallet")}>
         <Steps>
-          <li>Установите Tonkeeper и создайте обычный кошелёк, если его ещё нет.</li>
           <li>
-            Откройте <Ui>Settings</Ui> (Настройки) и 5 раз быстро коснитесь логотипа Tonkeeper внизу экрана —
-            появится <Ui>Dev Menu</Ui>.
+            {L(
+              "Установите Tonkeeper и создайте обычный кошелёк, если его ещё нет.",
+              "Install Tonkeeper and create a regular wallet if you don't have one yet.",
+            )}
           </li>
           <li>
-            Нажмите на название кошелька вверху главного экрана → <Ui>Add Wallet</Ui> → <Ui>Testnet Account</Ui>.
+            {L("Откройте", "Open")} <Ui>Settings</Ui>{" "}
+            {L(
+              "(Настройки) и 5 раз быстро коснитесь логотипа Tonkeeper внизу экрана — появится",
+              "and quickly tap the Tonkeeper logo at the bottom of the screen 5 times —",
+            )}{" "}
+            <Ui>Dev Menu</Ui>
+            {L(".", " appears.")}
           </li>
           <li>
-            Введите фразу восстановления из 24 слов. Подойдёт и фраза основного кошелька — балансы в тестнете
-            отдельные, — но спокойнее завести для тестов отдельный кошелёк.
+            {L("Нажмите на название кошелька вверху главного экрана →", "Tap the wallet name at the top of the main screen →")}{" "}
+            <Ui>Add Wallet</Ui> → <Ui>Testnet Account</Ui>.
           </li>
           <li>
-            Скопируйте адрес тестнет-кошелька — он начинается на <Cmd>0Q…</Cmd> или <Cmd>kQ…</Cmd>.
+            {L(
+              "Введите фразу восстановления из 24 слов. Подойдёт и фраза основного кошелька — балансы в тестнете отдельные, — но спокойнее завести для тестов отдельный кошелёк.",
+              "Enter a 24-word recovery phrase. Your main wallet's phrase works too — testnet balances are separate — but a dedicated test wallet is the safer choice.",
+            )}
+          </li>
+          <li>
+            {L("Скопируйте адрес тестнет-кошелька — он начинается на", "Copy the testnet wallet address — it starts with")}{" "}
+            <Cmd>0Q…</Cmd> {L("или", "or")} <Cmd>kQ…</Cmd>.
           </li>
         </Steps>
         <Tip>
-          Кошелёк внутри Telegram (@wallet) тестнет не поддерживает. Подойдёт любой другой кошелёк с тестнетом,
-          который подключается через TON Connect.
+          {L(
+            "Кошелёк внутри Telegram (@wallet) тестнет не поддерживает. Подойдёт любой другой кошелёк с тестнетом, который подключается через TON Connect.",
+            "The wallet built into Telegram (@wallet) doesn't support the testnet. Any other testnet wallet that connects via TON Connect will do.",
+          )}
         </Tip>
-        <Done>в списке кошельков Tonkeeper есть кошелёк с пометкой Testnet.</Done>
+        <Done label={done}>
+          {L(
+            "в списке кошельков Tonkeeper есть кошелёк с пометкой Testnet.",
+            "Tonkeeper's wallet list has a wallet marked Testnet.",
+          )}
+        </Done>
       </Step>
 
-      <Step n={2} id="ton" title="Получите тестовые TON">
+      <Step n={2} id={id("ton")} title={L("Получите тестовые TON", "Get test TON")}>
         <Steps>
           <li>
-            Откройте бота <Bot name="testgiver_ton_bot" />, отправьте ему адрес тестнет-кошелька и пройдите
-            проверку.
+            {L("Откройте бота", "Open")} <Bot name="testgiver_ton_bot" />
+            {L(
+              ", отправьте ему адрес тестнет-кошелька и пройдите проверку.",
+              ", send it your testnet wallet address and pass the check.",
+            )}
           </li>
           <li>
-            Если бот не отвечает или просит подождать — попробуйте <Bot name="tnfaucet_bot" />.
+            {L("Если бот не отвечает или просит подождать — попробуйте", "If it doesn't reply or asks you to wait, try")}{" "}
+            <Bot name="tnfaucet_bot" />.
           </li>
         </Steps>
         <p className="text-hint">
-          На что уйдут TON: выпуск жетона, активация пула (0,3 TON), назначение админ-кошелька (0,05 TON) и каждое
-          пополнение пула (около 0,35 TON: комиссия и газ). 2 TON хватит с запасом, а если закончатся — просто
-          запросите ещё.
+          {L(
+            "На что уйдут TON: выпуск жетона, активация пула (0,3 TON), назначение админ-кошелька (0,05 TON) и каждое пополнение пула (около 0,35 TON: комиссия и газ). 2 TON хватит с запасом, а если закончатся — просто запросите ещё.",
+            "What the TON is for: issuing the jetton, activating the pool (0.3 TON), setting the admin wallet (0.05 TON) and each pool top-up (about 0.35 TON: fee and gas). 2 TON is plenty, and if you run out, just ask for more.",
+          )}
         </p>
-        <Done>в Tonkeeper на тестнет-кошельке ненулевой баланс TON.</Done>
+        <Done label={done}>
+          {L("в Tonkeeper на тестнет-кошельке ненулевой баланс TON.", "the testnet wallet in Tonkeeper has a non-zero TON balance.")}
+        </Done>
       </Step>
 
-      <Step n={3} id="jetton" title="Выпустите (сминтите) свой жетон">
+      <Step n={3} id={id("jetton")} title={L("Выпустите (сминтите) свой жетон", "Issue (mint) your jetton")}>
         <p>
-          Жетон — это токен, которым чат награждает участников. Выпустить его проще всего в TON Minter:
+          {L(
+            "Жетон — это токен, которым чат награждает участников. Выпустить его проще всего в TON Minter:",
+            "A jetton is the token your chat rewards members with. The easiest way to issue one is TON Minter:",
+          )}
         </p>
         <Steps>
           <li>
-            Откройте <Ext href={MINTER_URL}>minter.ton.org/?testnet=true</Ext> — параметр <Cmd>testnet=true</Cmd>{" "}
-            важен, без него минтер работает в основной сети.
+            {L("Откройте", "Open")} <Ext href={MINTER_URL}>minter.ton.org/?testnet=true</Ext> — {L("параметр", "the")}{" "}
+            <Cmd>testnet=true</Cmd>{" "}
+            {L("важен, без него минтер работает в основной сети.", "parameter matters: without it the minter works on mainnet.")}
           </li>
           <li>
-            Нажмите <Ui>Connect Wallet</Ui> → Tonkeeper и выберите тестнет-кошелёк.
+            {L("Нажмите", "Tap")} <Ui>Connect Wallet</Ui> → Tonkeeper{" "}
+            {L("и выберите тестнет-кошелёк.", "and pick the testnet wallet.")}
           </li>
           <li>
-            Заполните форму: <b>Name</b> (например, «Монеты нашего чата»), <b>Symbol</b> (коротко, 3–5 латинских
-            букв, например <Cmd>CHAT</Cmd>), <b>Decimals</b> — оставьте 9, <b>Tokens to mint</b> — сколько выпустить,
-            например 1 000 000. Описание и ссылка на картинку — по желанию.
+            {L("Заполните форму:", "Fill in the form:")} <b>Name</b>{" "}
+            {L("(например, «Монеты нашего чата»),", "(for example, “Our chat coins”),")} <b>Symbol</b>{" "}
+            {L("(коротко, 3–5 латинских букв, например", "(short, 3–5 Latin letters, e.g.")} <Cmd>CHAT</Cmd>),{" "}
+            <b>Decimals</b> — {L("оставьте 9,", "keep 9,")} <b>Tokens to mint</b> —{" "}
+            {L(
+              "сколько выпустить, например 1 000 000. Описание и ссылка на картинку — по желанию.",
+              "how many to issue, e.g. 1,000,000. Description and image link are optional.",
+            )}
           </li>
           <li>
-            Нажмите <Ui>Deploy</Ui> и подтвердите транзакцию в кошельке. Весь выпуск придёт на ваш кошелёк.
+            {L("Нажмите", "Tap")} <Ui>Deploy</Ui>{" "}
+            {L(
+              "и подтвердите транзакцию в кошельке. Весь выпуск придёт на ваш кошелёк.",
+              "and confirm the transaction in your wallet. The whole supply lands in your wallet.",
+            )}
           </li>
           <li>
-            Когда страница жетона откроется, скопируйте <b>адрес жетона</b> (адрес мастер-контракта, Jetton
-            address). Он понадобится на шаге 6.
+            {L("Когда страница жетона откроется, скопируйте", "When the jetton page opens, copy the")}{" "}
+            <b>{L("адрес жетона", "jetton address")}</b>{" "}
+            {L(
+              "(адрес мастер-контракта, Jetton address). Он понадобится на шаге 6.",
+              "(the master contract address, “Jetton address”). You'll need it in step 6.",
+            )}
           </li>
         </Steps>
         <Tip>
-          Нужен именно адрес мастер-контракта жетона — не адрес вашего кошелька и не адрес «jetton wallet». В
-          Tonkeeper его видно в карточке жетона, а в минтере — в адресной строке страницы жетона.
+          {L(
+            "Нужен именно адрес мастер-контракта жетона — не адрес вашего кошелька и не адрес «jetton wallet». В Tonkeeper его видно в карточке жетона, а в минтере — в адресной строке страницы жетона.",
+            "You need the jetton's master contract address — not your wallet address and not a “jetton wallet” address. Tonkeeper shows it on the jetton card; in the minter it's in the jetton page's URL.",
+          )}
         </Tip>
-        <Done>в Tonkeeper на тестнет-кошельке появился ваш жетон с выпущенным количеством.</Done>
+        <Done label={done}>
+          {L(
+            "в Tonkeeper на тестнет-кошельке появился ваш жетон с выпущенным количеством.",
+            "your jetton shows up in the testnet wallet in Tonkeeper with the minted amount.",
+          )}
+        </Done>
       </Step>
 
-      <Step n={4} id="bot" title="Добавьте @achivator_bot в группу">
+      <Step n={4} id={id("bot")} title={L("Добавьте @achivator_bot в группу", "Add @achivator_bot to the group")}>
         <Steps>
           <li>
-            Откройте группу → нажмите на её название → <Ui>Добавить участников</Ui>.
+            {L("Откройте группу → нажмите на её название →", "Open the group → tap its name →")}{" "}
+            <Ui>{L("Добавить участников", "Add Members")}</Ui>.
           </li>
           <li>
-            Найдите <Bot name="achivator_bot" /> и добавьте.
+            {L("Найдите", "Find")} <Bot name="achivator_bot" /> {L("и добавьте.", "and add it.")}
           </li>
         </Steps>
-        <Done>бот написал в группе приветствие «Hello! I&apos;m the Achivator Bot…».</Done>
+        <Done label={done}>
+          {L("бот написал в группе приветствие", "the bot posted its greeting in the group:")} {open}Hello! I&apos;m the Achivator Bot…
+          {close}.
+        </Done>
       </Step>
 
-      <Step n={5} id="admin" title="Сделайте бота администратором">
+      <Step n={5} id={id("admin")} title={L("Сделайте бота администратором", "Make the bot an admin")}>
         <Steps>
           <li>
-            Профиль группы → <Ui>Изменить</Ui> → <Ui>Администраторы</Ui> → <Ui>Добавить администратора</Ui>.
+            {L("Профиль группы →", "Group profile →")} <Ui>{L("Изменить", "Edit")}</Ui> →{" "}
+            <Ui>{L("Администраторы", "Administrators")}</Ui> → <Ui>{L("Добавить администратора", "Add Admin")}</Ui>.
           </li>
-          <li>Выберите achivator_bot и сохраните. Права по умолчанию подходят.</li>
+          <li>
+            {L(
+              "Выберите achivator_bot и сохраните. Права по умолчанию подходят.",
+              "Pick achivator_bot and save. The default rights are fine.",
+            )}
+          </li>
         </Steps>
         <p className="text-hint">
-          Права админа нужны, чтобы бот видел сообщения и реакции и мог проверить, кто отдаёт ему команды. Бот
-          хранит только статистику, а не тексты сообщений.
+          {L(
+            "Права админа нужны, чтобы бот видел сообщения и реакции и мог проверить, кто отдаёт ему команды. Бот хранит только статистику, а не тексты сообщений.",
+            "Admin rights let the bot see messages and reactions and check who sends it commands. The bot stores statistics only, not message texts.",
+          )}
         </p>
-        <Done>бот ответил «Thank you for granting me admin rights!…».</Done>
+        <Done label={done}>
+          {L("бот ответил", "the bot replied")} {open}Thank you for granting me admin rights!…{close}.
+        </Done>
       </Step>
 
-      <Step n={6} id="commands" title="Отправьте команды боту">
-        <p>Пишите прямо в группе, от своего аккаунта создателя:</p>
+      <Step n={6} id={id("commands")} title={L("Отправьте команды боту", "Send the bot its commands")}>
+        <p>{L("Пишите прямо в группе, от своего аккаунта создателя:", "Type them right in the group, from your creator account:")}</p>
         <div className="space-y-3">
           <div className="space-y-1">
             <Cmd>/verify@achivator_bot</Cmd>
             <p className="text-hint">
-              Подтверждает, что вы создатель чата. Бот ответит «Verified. You are creator.»
+              {L("Подтверждает, что вы создатель чата. Бот ответит", "Confirms you are the chat's creator. The bot replies")} {open}Verified. You are
+              creator.{close}
             </p>
           </div>
           <div className="space-y-1">
-            <Cmd>/jetton EQ…адрес_жетона</Cmd>
+            <Cmd>{L("/jetton EQ…адрес_жетона", "/jetton EQ…jetton_address")}</Cmd>
             <p className="text-hint">
-              Привязывает жетон из шага 3 как награду чата. Бот ответит «Reward jetton set: …». Команда{" "}
-              <Cmd>/jetton</Cmd> без адреса покажет текущий жетон.
+              {L(
+                "Привязывает жетон из шага 3 как награду чата. Бот ответит «Reward jetton set: …». Команда",
+                "Sets the jetton from step 3 as the chat's reward. The bot replies “Reward jetton set: …”.",
+              )}{" "}
+              <Cmd>/jetton</Cmd> {L("без адреса покажет текущий жетон.", "without an address shows the current jetton.")}
             </p>
           </div>
         </div>
         <Tip>
-          Если в ваших правах администратора включена «Анонимность», отключите её: бот не видит, кто отправил
-          анонимное сообщение, и не примет команду.
+          {L(
+            "Если в ваших правах администратора включена «Анонимность», отключите её: бот не видит, кто отправил анонимное сообщение, и не примет команду.",
+            "If “Remain Anonymous” is on in your admin rights, turn it off: the bot can't see who sent an anonymous message and won't accept the command.",
+          )}
         </Tip>
-        <Done>бот подтвердил оба действия.</Done>
+        <Done label={done}>{L("бот подтвердил оба действия.", "the bot confirmed both.")}</Done>
       </Step>
 
-      <Step n={7} id="pool" title="Активируйте пул наград">
-        <p>Пул — это смарт-контракт вашего чата, из которого участники забирают жетоны.</p>
+      <Step n={7} id={id("pool")} title={L("Активируйте пул наград", "Activate the reward pool")}>
+        <p>
+          {L(
+            "Пул — это смарт-контракт вашего чата, из которого участники забирают жетоны.",
+            "The pool is your chat's smart contract that members claim their jettons from.",
+          )}
+        </p>
         <Steps>
           <li>
-            Откройте мини-приложение: <Ext href={APP_URL}>t.me/achivator_bot/app</Ext> (или кнопка в чате с
-            ботом).
+            {L("Откройте мини-приложение:", "Open the mini app:")} <Ext href={APP_URL}>t.me/achivator_bot/app</Ext>{" "}
+            {L("(или кнопка в чате с ботом).", "(or the button in the chat with the bot).")}
           </li>
           <li>
-            Вверху справа нажмите <Ui>Connect Wallet</Ui> → Tonkeeper и выберите <b>тестнет</b>-кошелёк.
+            {L("Вверху справа нажмите", "At the top right tap")} <Ui>Connect Wallet</Ui> → Tonkeeper{" "}
+            {L("и выберите", "and pick the")} <b>{L("тестнет", "testnet")}</b>{L("-кошелёк.", " wallet.")}
           </li>
           <li>
-            В разделе <Ui>My chats</Ui> выберите свою группу — откроется страница пула.
+            {L("В разделе", "In")} <Ui>My chats</Ui>{" "}
+            {L("выберите свою группу — откроется страница пула.", "pick your group — its pool page opens.")}
           </li>
           <li>
-            Нажмите <Ui>Activate pool</Ui> и подтвердите в кошельке 0,3 TON. Это разовый платёж.
+            {L("Нажмите", "Tap")} <Ui>Activate pool</Ui>{" "}
+            {L("и подтвердите в кошельке 0,3 TON. Это разовый платёж.", "and confirm 0.3 TON in your wallet. It's a one-off payment.")}
           </li>
         </Steps>
-        <Done>у чата появилась зелёная метка «Pool active» (обычно в течение минуты).</Done>
+        <Done label={done}>
+          {L(
+            "у чата появилась зелёная метка «Pool active» (обычно в течение минуты).",
+            "the chat shows a green “Pool active” badge (usually within a minute).",
+          )}
+        </Done>
       </Step>
 
-      <Step n={8} id="pool-admin" title="Назначьте админ-кошелёк пула">
+      <Step n={8} id={id("pool-admin")} title={L("Назначьте админ-кошелёк пула", "Set the pool's admin wallet")}>
         <Steps>
           <li>
-            На той же странице в блоке <Ui>Step 1 · Admin wallet</Ui> нажмите <Ui>Make this wallet the admin</Ui>.
+            {L("На той же странице в блоке", "On the same page, in the")} <Ui>Step 1 · Admin wallet</Ui>{" "}
+            {L("нажмите", "block tap")} <Ui>Make this wallet the admin</Ui>.
           </li>
-          <li>Подтвердите транзакцию (0,05 TON).</li>
+          <li>{L("Подтвердите транзакцию (0,05 TON).", "Confirm the transaction (0.05 TON).")}</li>
         </Steps>
         <p className="text-hint">
-          Только этот кошелёк сможет выводить жетоны из пула, ставить дневной лимит выплат и паузу. Шаг обязателен:
-          пока у пула нет админа, он возвращает пополнения обратно.
+          {L(
+            "Только этот кошелёк сможет выводить жетоны из пула, ставить дневной лимит выплат и паузу. Шаг обязателен: пока у пула нет админа, он возвращает пополнения обратно.",
+            "Only this wallet can withdraw jettons from the pool, set the daily payout limit and pause payouts. The step is required: until the pool has an admin, it sends deposits back.",
+          )}
         </p>
-        <Done>блок сменился на «Top up», а в карточке пула указан Admin wallet.</Done>
+        <Done label={done}>
+          {L(
+            "блок сменился на «Top up», а в карточке пула указан Admin wallet.",
+            "the block turned into “Top up” and the pool card shows an Admin wallet.",
+          )}
+        </Done>
       </Step>
 
-      <Step n={9} id="topup" title="Залейте жетоны в пул">
+      <Step n={9} id={id("topup")} title={L("Залейте жетоны в пул", "Fund the pool with jettons")}>
         <Steps>
           <li>
-            В блоке <Ui>Top up</Ui> введите, сколько жетонов перевести в пул — например, 100 000.
+            {L("В блоке", "In the")} <Ui>Top up</Ui>{" "}
+            {L(
+              "введите, сколько жетонов перевести в пул — например, 100 000.",
+              "block enter how many jettons to move into the pool — for example, 100,000.",
+            )}
           </li>
           <li>
-            Нажмите <Ui>Top up pool</Ui> и подтвердите. В транзакцию входит комиссия пополнения (0,1 TON для
-            чатов до 1000 участников) и газ.
+            {L("Нажмите", "Tap")} <Ui>Top up pool</Ui>{" "}
+            {L(
+              "и подтвердите. В транзакцию входит комиссия пополнения (0,1 TON для чатов до 1000 участников) и газ.",
+              "and confirm. The transaction includes the top-up fee (0.1 TON for chats under 1,000 members) and gas.",
+            )}
           </li>
         </Steps>
-        <Done>в карточке «Reward pool» виден баланс жетонов. Чат подключён!</Done>
+        <Done label={done}>
+          {L(
+            "в карточке «Reward pool» виден баланс жетонов. Чат подключён!",
+            "the “Reward pool” card shows the jetton balance. Your chat is connected!",
+          )}
+        </Done>
       </Step>
 
       <section className="space-y-2.5">
-        <h2 className="px-1 text-[13px] font-semibold uppercase tracking-wide text-hint">Что дальше</h2>
+        <h2 className="px-1 text-[13px] font-semibold uppercase tracking-wide text-hint">{L("Что дальше", "What's next")}</h2>
         <Card className="space-y-3 text-[15px] leading-relaxed">
           <p>
-            <b>Баллы за реакции.</b> Участники получают баллы, когда их сообщениям ставят позитивные реакции:
-            👍 ❤ 🔥 ❤‍🔥 🎉 😍 🥰 👏 💯 🤩 😁 🤣 🙏 🤝 🏆 👌 ⚡ 🫡 😎 🤗 😇 💘 🍾 🆒. Считаются любые сообщения — текст,
-            фото, стикеры, голосовые, — но только написанные после того, как бот стал админом. Платные звёзды,
-            премиум-эмодзи и анонимные реакции в каналах баллов не дают. Реакции на сообщения создателя стоят больше.
-            Чтобы реакции засчитывались, у реагирующего должно быть хотя бы 5 сообщений в чате, а число реакций от
-            одного человека другому в день ограничено — так сложнее накручивать.
+            <b>{L("Баллы за реакции.", "Points for reactions.")}</b>{" "}
+            {L(
+              "Участники получают баллы, когда их сообщениям ставят позитивные реакции:",
+              "Members earn points when their messages get positive reactions:",
+            )}{" "}
+            👍 ❤ 🔥 ❤‍🔥 🎉 😍 🥰 👏 💯 🤩 😁 🤣 🙏 🤝 🏆 👌 ⚡ 🫡 😎 🤗 😇 💘 🍾 🆒.{" "}
+            {L(
+              "Считаются любые сообщения — текст, фото, стикеры, голосовые, — но только написанные после того, как бот стал админом. Платные звёзды, премиум-эмодзи и анонимные реакции в каналах баллов не дают. Реакции на сообщения создателя стоят больше. Чтобы реакции засчитывались, у реагирующего должно быть хотя бы 5 сообщений в чате, а число реакций от одного человека другому в день ограничено — так сложнее накручивать.",
+              "Any message counts — text, photos, stickers, voice — but only those written after the bot became an admin. Paid stars, premium emoji and anonymous reactions in channels earn nothing. Reactions to the creator's messages are worth more. For a reaction to count, the person reacting needs at least 5 messages in the chat, and the number of reactions one person can give another per day is capped — that makes farming harder.",
+            )}
           </p>
           <p>
-            <b>Ручные награды.</b> Вы и другие админы можете начислить баллы за что угодно: ответьте на сообщение
-            командой <Cmd>/reward 50 за помощь</Cmd> или напишите <Cmd>/reward @username 50 причина</Cmd>.
+            <b>{L("Ручные награды.", "Manual rewards.")}</b>{" "}
+            {L(
+              "Вы и другие админы можете начислить баллы за что угодно: ответьте на сообщение командой",
+              "You and other admins can grant points for anything: reply to a message with",
+            )}{" "}
+            <Cmd>{L("/reward 50 за помощь", "/reward 50 for helping")}</Cmd> {L("или напишите", "or send")}{" "}
+            <Cmd>{L("/reward @username 50 причина", "/reward @username 50 reason")}</Cmd>.
           </p>
           <p>
-            <b>Правила выплат.</b> На странице пула, в блоке <Ui>Claim rules</Ui>, задаётся, через сколько дней баллы
-            можно забрать (по умолчанию 3 дня), в какие дни недели открыты выплаты и пауза на отпуск.{" "}
-            <b>Для теста поставьте 0 дней</b>, чтобы не ждать.
+            <b>{L("Правила выплат.", "Payout rules.")}</b> {L("На странице пула, в блоке", "On the pool page, the")}{" "}
+            <Ui>Claim rules</Ui>{" "}
+            {L(
+              "задаётся, через сколько дней баллы можно забрать (по умолчанию 3 дня), в какие дни недели открыты выплаты и пауза на отпуск.",
+              "block sets how many days until points can be claimed (3 by default), which weekdays claims are open, and a vacation pause.",
+            )}{" "}
+            <b>{L("Для теста поставьте 0 дней", "For testing set 0 days")}</b>
+            {L(", чтобы не ждать.", " so you don't have to wait.")}
           </p>
           <p>
-            <b>Как участники забирают награду.</b> В мини-приложении, кнопкой <Ui>Claim</Ui>. Им тоже нужен
-            тестнет-кошелёк и немного тестовых TON на газ (около 0,15 TON за выплату).
+            <b>{L("Как участники забирают награду.", "How members claim.")}</b>{" "}
+            {L("В мини-приложении, кнопкой", "In the mini app, with the")} <Ui>Claim</Ui>
+            {L(
+              ". Им тоже нужен тестнет-кошелёк и немного тестовых TON на газ (около 0,15 TON за выплату).",
+              " button. They also need a testnet wallet and a little test TON for gas (about 0.15 TON per payout).",
+            )}
           </p>
           <p>
-            <b>Защита пула.</b> С админ-кошелька можно поставить выплаты на паузу, изменить дневной лимит (по
-            умолчанию 10% пула в день) и вывести жетоны обратно. Эти ограничения зашиты в контракт и действуют, даже
-            если что-то случится с ботом.
+            <b>{L("Защита пула.", "Pool protection.")}</b>{" "}
+            {L(
+              "С админ-кошелька можно поставить выплаты на паузу, изменить дневной лимит (по умолчанию 10% пула в день) и вывести жетоны обратно. Эти ограничения зашиты в контракт и действуют, даже если что-то случится с ботом.",
+              "From the admin wallet you can pause payouts, change the daily limit (10% of the pool per day by default) and withdraw jettons back. These limits are built into the contract and hold even if something happens to the bot.",
+            )}
           </p>
         </Card>
       </section>
 
       <section className="space-y-2.5">
-        <h2 className="px-1 text-[13px] font-semibold uppercase tracking-wide text-hint">Если что-то не так</h2>
+        <h2 className="px-1 text-[13px] font-semibold uppercase tracking-wide text-hint">
+          {L("Если что-то не так", "Troubleshooting")}
+        </h2>
         <Card className="py-1">
-          <Faq q="Моего чата нет в «My chats»">
+          <Faq q={L("Моего чата нет в «My chats»", "My chat isn't in “My chats”")}>
             <p>
-              Чат появляется там после <Cmd>/verify@achivator_bot</Cmd> или <Cmd>/jetton</Cmd>, отправленных
-              создателем в группе. Отправьте команду и перезапустите мини-приложение.
+              {L("Чат появляется там после", "A chat appears there after")} <Cmd>/verify@achivator_bot</Cmd> {L("или", "or")}{" "}
+              <Cmd>/jetton</Cmd>
+              {L(
+                ", отправленных создателем в группе. Отправьте команду и перезапустите мини-приложение.",
+                " sent by the creator in the group. Send the command and restart the mini app.",
+              )}
             </p>
           </Faq>
-          <Faq q="Бот не реагирует на команды">
+          <Faq q={L("Бот не реагирует на команды", "The bot ignores commands")}>
             <p>
-              Проверьте, что бот — администратор группы (шаг 5). Если в группе несколько ботов, пишите команду с
-              упоминанием: <Cmd>/jetton@achivator_bot …</Cmd>.
+              {L(
+                "Проверьте, что бот — администратор группы (шаг 5). Если в группе несколько ботов, пишите команду с упоминанием:",
+                "Check that the bot is a group admin (step 5). If the group has several bots, mention it in the command:",
+              )}{" "}
+              <Cmd>/jetton@achivator_bot …</Cmd>.
             </p>
           </Faq>
-          <Faq q="Бот пишет «I cannot see who sent this»">
+          <Faq q={L("Бот пишет «I cannot see who sent this»", "The bot says “I cannot see who sent this”")}>
             <p>
-              Вы пишете анонимно или от имени канала. Отключите «Анонимность» в своих правах администратора и
-              отправьте команду от своего имени.
+              {L(
+                "Вы пишете анонимно или от имени канала. Отключите «Анонимность» в своих правах администратора и отправьте команду от своего имени.",
+                "You are posting anonymously or as a channel. Turn off “Remain Anonymous” in your admin rights and send the command as yourself.",
+              )}
             </p>
           </Faq>
-          <Faq q="«Only the chat creator can…»">
+          <Faq q={`${open}Only the chat creator can…${close}`}>
             <p>
-              Привязать жетон и управлять пулом может только создатель группы. Остальные админы могут начислять
-              баллы командой <Cmd>/reward</Cmd>.
+              {L(
+                "Привязать жетон и управлять пулом может только создатель группы. Остальные админы могут начислять баллы командой",
+                "Only the group's creator can set the jetton and manage the pool. Other admins can grant points with",
+              )}{" "}
+              <Cmd>/reward</Cmd>.
             </p>
           </Faq>
-          <Faq q="Бот не принимает адрес жетона">
+          <Faq q={L("Бот не принимает адрес жетона", "The bot rejects the jetton address")}>
             <p>
-              Нужен адрес мастер-контракта жетона целиком — он начинается на <Cmd>EQ</Cmd>, <Cmd>UQ</Cmd>,{" "}
-              <Cmd>kQ</Cmd> или <Cmd>0Q</Cmd>. Не путайте его с адресом своего кошелька.
+              {L("Нужен адрес мастер-контракта жетона целиком — он начинается на", "It needs the full jetton master contract address — starting with")}{" "}
+              <Cmd>EQ</Cmd>, <Cmd>UQ</Cmd>, <Cmd>kQ</Cmd> {L("или", "or")} <Cmd>0Q</Cmd>.{" "}
+              {L("Не путайте его с адресом своего кошелька.", "Don't confuse it with your wallet address.")}
             </p>
           </Faq>
-          <Faq q="Кошелёк не подтверждает транзакцию или ругается на сеть">
+          <Faq q={L("Кошелёк не подтверждает транзакцию или ругается на сеть", "The wallet won't confirm or complains about the network")}>
             <p>
-              Скорее всего, подключён кошелёк основной сети. В мини-приложении нажмите на адрес кошелька вверху →{" "}
-              <Ui>Disconnect</Ui> и подключите тестнет-кошелёк заново.
+              {L(
+                "Скорее всего, подключён кошелёк основной сети. В мини-приложении нажмите на адрес кошелька вверху →",
+                "Most likely a mainnet wallet is connected. In the mini app tap the wallet address at the top →",
+              )}{" "}
+              <Ui>Disconnect</Ui>{" "}
+              {L("и подключите тестнет-кошелёк заново.", "and connect the testnet wallet again.")}
             </p>
           </Faq>
-          <Faq q="Висит «Still confirming on-chain»">
+          <Faq q={L("Висит «Still confirming on-chain»", "Stuck on “Still confirming on-chain”")}>
             <p>
-              Тестнет иногда тормозит. Подождите минуту и нажмите <Ui>Refresh</Ui> внизу страницы пула.
+              {L("Тестнет иногда тормозит. Подождите минуту и нажмите", "The testnet is sometimes slow. Wait a minute and tap")}{" "}
+              <Ui>Refresh</Ui> {L("внизу страницы пула.", "at the bottom of the pool page.")}
             </p>
           </Faq>
-          <Faq q="Закончились тестовые TON">
+          <Faq q={L("Закончились тестовые TON", "Out of test TON")}>
             <p>
-              Запросите ещё у <Bot name="testgiver_ton_bot" /> или <Bot name="tnfaucet_bot" />.
+              {L("Запросите ещё у", "Ask")} <Bot name="testgiver_ton_bot" /> {L("или", "or")} <Bot name="tnfaucet_bot" />
+              {L(".", " for more.")}
             </p>
           </Faq>
         </Card>
@@ -404,8 +573,22 @@ export default function HelpPage() {
         href={APP_URL}
         className="flex h-12 items-center justify-center rounded-xl bg-accent px-5 text-[15px] font-semibold text-accent-fg active:opacity-80"
       >
-        Открыть Achivator в Telegram
+        {L("Открыть Achivator в Telegram", "Open Achivator in Telegram")}
       </a>
     </main>
+  );
+}
+
+export default function HelpPage() {
+  return (
+    <>
+      <TelegramBack />
+      <div data-locale="ru" lang="ru">
+        <Guide locale="ru" />
+      </div>
+      <div data-locale="en" lang="en">
+        <Guide locale="en" />
+      </div>
+    </>
   );
 }
