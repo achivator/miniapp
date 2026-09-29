@@ -1,8 +1,10 @@
 // Web pages (landing, setup guide) have one URL per language: /ru, /en,
 // /ru/help, /en/help, each statically rendered in its language. The bare
 // "/" and "/help" pick one for the visitor: ?lang= in the URL, then the
-// visitor's earlier pick (LangSwitch), then the browser language, Russian
-// when unsure. A Telegram launch of "/" is the member dashboard and stays.
+// visitor's earlier pick (LangSwitch), then the browser language: Russian
+// for a Russian browser, English for any other (Ukrainian, Belarusian and
+// Kazakh included). A Telegram launch of "/" is the member dashboard and
+// stays.
 export const LOCALES = ["ru", "en"];
 const STORAGE_KEY = "achivator-lang";
 
@@ -23,7 +25,7 @@ export const LOCALE_SCRIPT = `try{
 var d=document.documentElement,p=location.pathname,s=new URLSearchParams(location.search),m=/^\\/(ru|en)(\\/|$)/.exec(p),l=m&&m[1];
 if(!l){l=s.get("lang");
 if(l!=="ru"&&l!=="en"){try{l=localStorage.getItem("${STORAGE_KEY}")}catch(e){}}
-if(l!=="ru"&&l!=="en"){l=/^(ru|uk|be|kk)\\b/i.test(navigator.language||"")?"ru":"en"}}
+if(l!=="ru"&&l!=="en"){l=/^ru\\b/i.test(navigator.language||"")?"ru":"en"}}
 d.dataset.lang=l;
 var t=p==="/help"?"/help":p==="/"&&d.dataset.launch!=="telegram"?"":null;
 if(t!==null){s.delete("lang");s=s.toString();d.dataset.redirect="";location.replace("/"+l+t+(s?"?"+s:"")+location.hash)}
@@ -40,7 +42,7 @@ export function preferredLocale() {
       // storage blocked
     }
   }
-  if (!LOCALES.includes(locale)) locale = /^(ru|uk|be|kk)\b/i.test(navigator.language || "") ? "ru" : "en";
+  if (!LOCALES.includes(locale)) locale = /^ru\b/i.test(navigator.language || "") ? "ru" : "en";
   return locale;
 }
 
