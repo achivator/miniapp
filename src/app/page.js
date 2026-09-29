@@ -1,6 +1,9 @@
-import { BilingualLanding } from "@/components/Landing";
+import { LocaleChooser } from "@/components/LocaleChooser";
 import { StartScreen } from "@/components/StartScreen";
+import { localeAlternates } from "@/lib/locale";
 
+// Shown by link previews and crawlers that run no JS; visitors land on /ru or
+// /en (see LocaleChooser), so this stays bilingual.
 const TITLE = "Achivator — система лояльности для Telegram-чатов · Loyalty for Telegram chats";
 const DESCRIPTION =
   "Участники получают баллы за реакции на полезные сообщения и забирают их жетонами вашего сообщества. " +
@@ -9,6 +12,7 @@ const DESCRIPTION =
 export const metadata = {
   title: TITLE,
   description: DESCRIPTION,
+  alternates: { languages: localeAlternates("") },
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,
@@ -21,7 +25,8 @@ export const metadata = {
   },
 };
 
-// Telegram launches get the dashboard, browsers the landing (StartScreen).
+// The Telegram Mini App entry: Telegram launches get the dashboard, browsers
+// are sent to the landing in their language (StartScreen, LocaleChooser).
 export default function Home() {
-  return <StartScreen landing={<BilingualLanding />} />;
+  return <StartScreen fallback={<LocaleChooser page="" />} />;
 }
