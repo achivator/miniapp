@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { MISSING_HEADER } from "@/lib/not-found";
-import { isPage } from "@/lib/pages";
+import { isFile, isPage } from "@/lib/pages";
 
 // Unknown URLs get the site's styled 404 with status 404. Next 14.2 cannot
 // do that alone with several root layouts: notFound() answers 404 but with an
@@ -11,17 +11,21 @@ import { isPage } from "@/lib/pages";
 // app/(app), app/ru, app/en) then render the 404 as a normal page, in their
 // layout. Without the marker they fall back to notFound().
 //
-// The list of page routes lives in lib/pages.js (checked by a test).
+// Paths with a dot are files (public/, favicon.ico, robots.txt, sitemap.xml)
+// or nothing at all (/foo.txt): the same styled 404 for the latter.
+//
+// The lists of page routes and files live in lib/pages.js (checked by a
+// test). /api/ has its own JSON 404 (app/api/[...missing]).
 
 export function middleware(request) {
-  if (isPage(request.nextUrl.pathname)) return NextResponse.next();
+  const { pathname } = request.nextUrl;
+  if (isPage(pathname) || isFile(pathname)) return NextResponse.next();
   const headers = new Headers(request.headers);
   headers.set(MISSING_HEADER, "1");
   return NextResponse.rewrite(request.nextUrl, { status: 404, request: { headers } });
 }
 
-// API routes, Next's assets and files (a dot in the path: public/, favicon,
-// robots.txt, sitemap.xml) answer for themselves.
+// API routes and Next's assets answer for themselves.
 export const config = {
-  matcher: ["/((?!api/|_next/|.*\\.).*)"],
+  matcher: ["/((?!api/|_next/).*)"],
 };
