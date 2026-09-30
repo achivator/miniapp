@@ -25,6 +25,15 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      # The API routes against a real MongoDB (mongodb-memory-server). It
+      # downloads a mongod binary on first use; keep it between runs. CI=true
+      # makes the suite fail, not skip, when mongod cannot be started.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: mongodb-binaries-${{ runner.os }}-
+      - run: npm run test:integration
       - run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1

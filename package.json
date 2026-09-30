@@ -10,7 +10,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --test"
+    "test": "node --test \"test/*.test.js\"",
+    "test:integration": "node --test \"test/integration/*.test.js\""
+  },
+  "config": {
+    "mongodbMemoryServer": {
+      "disablePostinstall": "1"
+    }
   },
   "dependencies": {
     "@tma.js/init-data-node": "^1.1.15",
@@ -28,6 +34,7 @@
     "@tailwindcss/typography": "^0.5.13",
     "eslint": "^8",
     "eslint-config-next": "14.2.2",
+    "mongodb-memory-server": "^10.4.3",
     "postcss": "^8",
     "tailwindcss": "^3.4.1"
   }
