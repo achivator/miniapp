@@ -11,18 +11,30 @@ const { parseRate, pointsToJettons } = require('./ton/amounts');
 // conversion must go through pointPriceFor() and never read the env rate.
 //
 // Changing it re-prices points members already earned, so every change is
-// kept in chats.point_price_history ({ old, new, at, by }, effective prices)
-// and shown to members on their dashboard for a week.
+// kept in chats.point_price_history ({ old, new, at, by, maturation_days },
+// effective prices) and shown to members on their dashboard for a week.
+//
+// The history is also what values points (lot-pricing.js): points still
+// maturing when a decrease took effect keep the earlier price. So it is never
+// trimmed - a decrease dropped from it would stop protecting its points - and
+// each entry snapshots the chat's maturation_days in force when it took
+// effect, so changing the maturation later does not re-value old points.
+// Entries written before the snapshot existed have no maturation_days; they
+// are valued with the chat's current setting (the best that is known).
 //
 // Raising the price (or saving the same one) applies at once. Lowering it
 // takes points' value away from members, so it waits POINT_PRICE_NOTICE_DAYS
 // in chats.point_price_pending and the bot tells the chat to claim first:
-//   { price, to_default, from, symbol, effective_at, requested_at, by }
+//   { price, to_default, from, symbol, effective_at, requested_at, by,
+//     maturation_days }
 // `price` is the target effective price; `to_default` means the bot must
-// $unset point_price (back to the platform rate) rather than set it. The bot
-// applies a due decrease and announces it, but nothing here waits for it:
-// once effective_at has passed, pointPriceFor() already returns the target.
-// Only one decrease can be pending per chat.
+// $unset point_price (back to the platform rate) rather than set it;
+// `maturation_days` is the chat's setting, kept in step by claim-settings
+// saves until effective_at, and copied into the history entry the decrease
+// becomes (by the bot, or by a save here). The bot applies a due decrease and
+// announces it, but nothing here waits for it: once effective_at has passed,
+// pointPriceFor() already returns the target. Only one decrease can be
+// pending per chat.
 
 // Jetton decimals assumed when the jetton is unknown at save time (TEP-64
 // default, and the most any common jetton uses); re-checked at claim time.
@@ -31,7 +43,6 @@ const FALLBACK_DECIMALS = 9;
 // sane loyalty rate, and it keeps vouchers well inside the 120-bit coins field.
 const MAX_POINT_PRICE = '1000000';
 const MAX_INPUT_LENGTH = 32;
-const HISTORY_LIMIT = 50;
 const RECENT_CHANGE_DAYS = 7;
 const DEFAULT_NOTICE_DAYS = 7;
 const MAX_NOTICE_DAYS = 30;
@@ -138,6 +149,15 @@ function storedPointPrice(chat) {
     }
 }
 
+// A snapshotted maturation period (days), or null when there is none
+// (written before snapshots existed) or it is unreadable: the caller then
+// uses the chat's current setting. Its range was checked when the setting was
+// saved (claim-rules.js, not imported: this file is also bundled for the
+// browser).
+function snapshotMaturationDays(value) {
+    return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
 function hasPendingPointPrice(chat) {
     return chat?.point_price_pending !== undefined && chat?.point_price_pending !== null;
 }
@@ -164,6 +184,7 @@ function pendingPointPrice(chat) {
         effective_at: effectiveAt,
         requested_at: p.requested_at ?? null,
         by: p.by ?? null,
+        maturation_days: snapshotMaturationDays(p.maturation_days),
     };
 }
 
@@ -236,9 +257,21 @@ function toEpochSec(at) {
     return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
 }
 
+// The history entry a due decrease becomes (the bot logs the same one when it
+// applies it).
+function pendingHistoryEntry(pending) {
+    return {
+        old: pending.from,
+        new: pendingTarget(pending),
+        at: pending.effective_at,
+        by: pending.by,
+        maturation_days: pending.maturation_days,
+    };
+}
+
 // The history as members should see it: a decrease that is due but that the
 // bot has not applied yet already pays, so it is listed as a change at its
-// effective_at (the bot logs the same entry when it applies it).
+// effective_at.
 function effectivePriceHistory(chat, now = new Date()) {
     const history = Array.isArray(chat?.point_price_history) ? chat.point_price_history : [];
     let pending = null;
@@ -248,7 +281,7 @@ function effectivePriceHistory(chat, now = new Date()) {
         return history;
     }
     if (!isDue(pending, now)) return history;
-    const entry = { old: pending.from, new: pendingTarget(pending), at: pending.effective_at, by: pending.by };
+    const entry = pendingHistoryEntry(pending);
     return entry.old === entry.new ? history : [...history, entry];
 }
 
@@ -311,7 +344,23 @@ function pendingFilter(chat) {
 // applied by the bot is written out first (point_price + its history entry +
 // a price_decreased announcement, since the bot, finding its pending gone,
 // neither applies nor announces it).
-function planPointPriceChange(chat, next, { now = new Date(), noticeDays = pointPriceNoticeDays(), by = null, symbol = null } = {}) {
+//
+// `maturationDays` is the chat's current maturation setting
+// (claimSettingsOf(chat).maturation_days, passed in by the route): it is
+// snapshotted into every history entry and into a new pending decrease; a due
+// decrease keeps its own snapshot (one scheduled before snapshots existed
+// gets this one).
+function planPointPriceChange(
+    chat,
+    next,
+    {
+        now = new Date(),
+        noticeDays = pointPriceNoticeDays(),
+        by = null,
+        symbol = null,
+        maturationDays = null,
+    } = {},
+) {
     const stored = chat?.point_price === undefined ? null : chat.point_price;
     // A malformed pending (hand-edited) is dropped by any save, like a
     // corrupted stored price: claims are refused until the creator saves.
@@ -338,7 +387,8 @@ function planPointPriceChange(chat, next, { now = new Date(), noticeDays = point
     const history = [];
     const announcements = [];
     if (due) {
-        const dueEntry = { old: pending.from, new: pendingTarget(pending), at: pending.effective_at, by: pending.by };
+        const dueEntry = pendingHistoryEntry(pending);
+        if (dueEntry.maturation_days === null) dueEntry.maturation_days = maturationDays;
         if (dueEntry.old !== dueEntry.new) history.push(dueEntry);
         // `to` is what was actually applied: the live default for to_default,
         // which the operator may have raised since, so only a real drop is
@@ -377,6 +427,7 @@ function planPointPriceChange(chat, next, { now = new Date(), noticeDays = point
             effective_at: effectiveAt,
             requested_at: now,
             by,
+            maturation_days: maturationDays,
         };
         // With no notice there is nothing to warn about ahead: the bot's own
         // "price decreased" message, when it applies it, is the announcement.
@@ -390,7 +441,7 @@ function planPointPriceChange(chat, next, { now = new Date(), noticeDays = point
         if (pending !== null || malformed) $unset.point_price_pending = '';
         // the effective price did not move (e.g. custom = platform default):
         // nothing for members to be warned about
-        if (before !== target) history.push({ old: before, new: target, at: now, by });
+        if (before !== target) history.push({ old: before, new: target, at: now, by, maturation_days: maturationDays });
         if (beforeValid && compareDecimal(target, before) > 0) {
             announcements.push({ type: ANNOUNCE.increased, params: { from: before, to: target, symbol, cancelled_pending: live !== null } });
         } else if (live !== null) {
@@ -401,7 +452,8 @@ function planPointPriceChange(chat, next, { now = new Date(), noticeDays = point
     const update = {};
     if (Object.keys($set).length) update.$set = $set;
     if (Object.keys($unset).length) update.$unset = $unset;
-    if (history.length) update.$push = { point_price_history: { $each: history, $slice: -HISTORY_LIMIT } };
+    // never $slice: every decrease must stay (see the top of this file)
+    if (history.length) update.$push = { point_price_history: { $each: history } };
     return {
         filter: { id: chat.id, point_price: stored, ...pendingFilter(chat) },
         update,
@@ -461,7 +513,6 @@ function announcementDoc(chatId, announcement, now = new Date()) {
 module.exports = {
     FALLBACK_DECIMALS,
     MAX_POINT_PRICE,
-    HISTORY_LIMIT,
     RECENT_CHANGE_DAYS,
     DEFAULT_NOTICE_DAYS,
     MAX_NOTICE_DAYS,
@@ -472,6 +523,7 @@ module.exports = {
     platformPointPrice,
     pointPriceNoticeDays,
     storedPointPrice,
+    snapshotMaturationDays,
     pendingPointPrice,
     upcomingPointPrice,
     pendingTarget,

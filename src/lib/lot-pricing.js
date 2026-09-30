@@ -1,5 +1,5 @@
 const { pointsToJettons } = require('./ton/amounts');
-const { canonicalDecimal, compareDecimal, effectivePriceHistory, pointPriceFor } = require('./point-price');
+const { canonicalDecimal, compareDecimal, effectivePriceHistory, pointPriceFor, snapshotMaturationDays } = require('./point-price');
 
 // Which price a point is paid at, once the price has moved.
 //
@@ -15,12 +15,16 @@ const { canonicalDecimal, compareDecimal, effectivePriceHistory, pointPriceFor }
 // Whatever part of rewards.points no lot explains (older data) is the oldest
 // lot, earned at epoch 0.
 //
-// A lot earned at `e` matures at `m = e + maturation_days` (the chat's
-// current setting). If some decrease took effect at `d` with e < d < m, the
-// lot is paid at max(current price, price in force just before the earliest
-// such decrease); otherwise at the current price. A lot earned exactly at `d`
-// was earned at the new price; one maturing exactly at `d` was claimable at
-// `d` (the same `date <= now - maturation` rule claim-rules uses).
+// A decrease that took effect at `d` protects the lots earned at `e` with
+// e < d < e + M, where M is the maturation period in force at `d`: the
+// maturation_days its history entry snapshotted (point-price.js), so changing
+// the setting later does not re-value those lots. An entry written before
+// snapshots existed has none and uses the chat's current setting instead.
+// A protected lot is paid at max(current price, price in force just before
+// the earliest decrease protecting it); any other lot at the current price.
+// A lot earned exactly at `d` was earned at the new price; one maturing
+// exactly at `d` was claimable at `d` (the same `date <= now - maturation`
+// rule claim-rules uses).
 //
 // Rounding: points are grouped by the price they are paid at and each group
 // is converted with pointsToJettons (floor). A price that fits the jetton's
@@ -55,7 +59,9 @@ function maxPrice(a, b) {
 // written out yet. Throws like pointPriceFor() on a corrupted price.
 //   current   the effective price at `now`
 //   initial   the price before the first retained change (null if unknown)
-//   steps     [{ at (ms), price }] in time order: `price` applies from `at`
+//   steps     [{ at (ms), price, maturationDays }] in time order: `price`
+//             applies from `at`; maturationDays is the entry's snapshot, or
+//             null (use the chat's current setting)
 function priceTimeline(chat, now = new Date()) {
     const current = pointPriceFor(chat, now);
     const nowMs = now.getTime();
@@ -66,13 +72,13 @@ function priceTimeline(chat, now = new Date()) {
         // an unreadable entry (hand-edited) is skipped: without it a drop is
         // not seen and its lots are paid at the current price - never more
         if (!Number.isFinite(at) || at > nowMs || price === null) return;
-        entries.push({ at, price, old: canonicalPrice(h?.old), index });
+        entries.push({ at, price, old: canonicalPrice(h?.old), maturationDays: snapshotMaturationDays(h?.maturation_days), index });
     });
     entries.sort((a, b) => a.at - b.at || a.index - b.index);
     return {
         current,
         initial: entries.length ? entries[0].old : null,
-        steps: entries.map((e) => ({ at: e.at, price: e.price })),
+        steps: entries.map((e) => ({ at: e.at, price: e.price, maturationDays: e.maturationDays })),
     };
 }
 
@@ -98,8 +104,9 @@ function priceBefore(timeline, atMs) {
     return timeline.steps.length ? timeline.initial : timeline.current;
 }
 
-// Moments the price went down: [{ at, before, after }], oldest first. Several
-// changes at the same instant count as one move (the last one wins).
+// Moments the price went down: [{ at, before, after, maturationDays }],
+// oldest first. Several changes at the same instant count as one move (the
+// last one wins, maturation snapshot included).
 function priceDecreases(timeline) {
     const out = [];
     const seen = new Set();
@@ -109,7 +116,8 @@ function priceDecreases(timeline) {
         const before = priceBefore(timeline, step.at);
         const after = priceAt(timeline, step.at);
         if (before !== null && after !== null && compareDecimal(after, before) < 0) {
-            out.push({ at: step.at, before, after });
+            const last = timeline.steps.findLast((s) => s.at === step.at);
+            out.push({ at: step.at, before, after, maturationDays: last.maturationDays ?? null });
         }
     }
     return out;
@@ -119,11 +127,17 @@ function maturationMs(maturationDays) {
     return Number.isInteger(maturationDays) && maturationDays > 0 ? maturationDays * DAY_MS : 0;
 }
 
-// The price one lot earned at `earnedMs` is paid at. `decreases` is
+// How long lots were maturing at decrease `d`: its snapshot, else the chat's
+// current setting.
+function decreaseMaturationMs(d, currentMaturationDays) {
+    return maturationMs(d.maturationDays ?? currentMaturationDays);
+}
+
+// The price one lot earned at `earnedMs` is paid at. `maturationDays` is the
+// chat's current setting (for decreases without a snapshot). `decreases` is
 // priceDecreases(timeline), passed in so a batch computes it once.
 function lotPrice(earnedMs, timeline, maturationDays, decreases = priceDecreases(timeline)) {
-    const matures = earnedMs + maturationMs(maturationDays);
-    const hit = decreases.find((d) => earnedMs < d.at && d.at < matures);
+    const hit = decreases.find((d) => earnedMs < d.at && d.at < earnedMs + decreaseMaturationMs(d, maturationDays));
     return hit ? maxPrice(timeline.current, hit.before) : timeline.current;
 }
 
@@ -165,7 +179,8 @@ function groupUnits(points, price, decimals) {
 //   claimed   rewards.claimed_points: the oldest `claimed` points are used
 //   count     how many points to claim after them (the claimable ones)
 //   timeline  priceTimeline() at `now`
-//   maturationDays, decimals (the jetton's; an integer)
+//   maturationDays  the chat's current setting (see lotPrice)
+//   decimals  the jetton's; an integer
 //   payable   optional BigInt: jetton units the pool can pay right now; lots
 //             are taken oldest first while they fit, then as many points of
 //             the next lot as fit, and the claim stops there (never skipping
@@ -226,15 +241,16 @@ function serializeBreakdown(breakdown) {
     return breakdown.map((b) => ({ price: b.price, points: b.points, units: b.units.toString() }));
 }
 
-// The earliest decrease that can still affect a lot, and the last one: lots
-// earned at or before (first decrease - maturation) or at or after the last
-// decrease are paid at the current price whatever their exact date. Loaders
-// use it to sum those instead of reading every doc. null when no decrease.
+// The earliest moment a lot can be earned and still be protected by a
+// decrease, and the last decrease: lots earned at or before `from` (every
+// decrease minus its maturation) or at or after `to` are paid at the current
+// price whatever their exact date. Loaders use it to sum those instead of
+// reading every doc. null when no decrease.
 function affectedWindow(timeline, maturationDays) {
     const decreases = priceDecreases(timeline);
     if (decreases.length === 0) return null;
     return {
-        from: decreases[0].at - maturationMs(maturationDays),
+        from: decreases.reduce((min, d) => Math.min(min, d.at - decreaseMaturationMs(d, maturationDays)), Infinity),
         to: decreases[decreases.length - 1].at,
     };
 }

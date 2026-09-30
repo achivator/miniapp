@@ -1,7 +1,8 @@
 // Unit tests for lot valuation: which price each earned point is paid at once
 // the price has moved (points still maturing when a decrease took effect keep
-// the earlier price), FIFO consumption by claims, the legacy remainder, the
-// cut to what the pool can pay, and rounding. Pure functions, no Mongo.
+// the earlier price, by the maturation in force then), FIFO consumption by
+// claims, the legacy remainder, the cut to what the pool can pay, rounding,
+// and a history longer than any cap. Pure functions, no Mongo.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -17,6 +18,8 @@ const {
     affectedWindow,
 } = require('../src/lib/lot-pricing');
 const { _dateRange: dateRange } = require('../src/lib/lots');
+const { planPointPriceChange } = require('../src/lib/point-price');
+const { claimSettingsOf } = require('../src/lib/claim-rules');
 const { pointsToJettons } = require('../src/lib/ton/amounts');
 
 const DAY_MS = 86400 * 1000;
@@ -76,10 +79,10 @@ test('price timeline: price at / just before a moment', () => {
     assert.equal(priceAt(t, ms(0)), '5'); // a change counts from its moment
     assert.equal(priceBefore(t, ms(0)), '10');
     assert.equal(priceAt(t, ms(20)), '12');
-    assert.deepEqual(priceDecreases(t), [{ at: ms(0), before: '10', after: '5' }]);
+    assert.deepEqual(priceDecreases(t), [{ at: ms(0), before: '10', after: '5', maturationDays: null }]);
     // entries after `now` (none should exist) and unreadable ones are ignored
     const odd = chatWith([drop('10', '5', at(0)), drop('5', 'abc', at(1)), { old: '5', new: '1', at: 'x' }, drop('5', '1', at(99))], '5');
-    assert.deepEqual(priceTimeline(odd, at(30)).steps, [{ at: ms(0), price: '5' }]);
+    assert.deepEqual(priceTimeline(odd, at(30)).steps, [{ at: ms(0), price: '5', maturationDays: null }]);
 });
 
 test('a decrease: lots matured before it pay the new price, lots maturing across it keep the old one', () => {
@@ -141,7 +144,7 @@ test('an increase after a decrease: max(current, price before the drop)', () => 
     // just before the decrease (the raised one)
     const bump = chatWith([drop('10', '12', at(0)), drop('12', '10', at(1))], '10');
     t = priceTimeline(bump, at(30));
-    assert.deepEqual(priceDecreases(t), [{ at: ms(1), before: '12', after: '10' }]);
+    assert.deepEqual(priceDecreases(t), [{ at: ms(1), before: '12', after: '10', maturationDays: null }]);
     assert.equal(lotPrice(ms(-1), t, 3), '12');
 });
 
@@ -166,7 +169,7 @@ test('a due decrease the bot has not applied yet already counts', () => {
     assert.deepEqual(priceDecreases(t), []);
     t = priceTimeline(chat, at(1));
     assert.equal(t.current, '5');
-    assert.deepEqual(priceDecreases(t), [{ at: ms(0), before: '10', after: '5' }]);
+    assert.deepEqual(priceDecreases(t), [{ at: ms(0), before: '10', after: '5', maturationDays: null }]);
     assert.equal(lotPrice(ms(-1), t, 3), '10');
 });
 
@@ -400,4 +403,165 @@ test('the loader date ranges split lots into head, middle and tail exactly once'
     }
     assert.deepEqual(dateRange(true, {}), { $type: 'date' });
     assert.deepEqual(dateRange(false, {}), { $type: 'number' });
+});
+
+test('each decrease uses the maturation snapshotted with it, not the current setting', () => {
+    // 10 -> 5 at T0 while lots matured in 3 days
+    const snap = chatWith([{ ...drop('10', '5', at(0)), maturation_days: 3 }], '5');
+    const t = priceTimeline(snap, at(30));
+    assert.deepEqual(priceDecreases(t), [{ at: ms(0), before: '10', after: '5', maturationDays: 3 }]);
+    for (const current of [0, 1, 3, 10, 30]) {
+        // shortening the maturation later does not strip protection...
+        assert.equal(lotPrice(ms(-2), t, current), '10', `current ${current}`);
+        // ...and lengthening it does not protect lots that had matured
+        assert.equal(lotPrice(ms(-5), t, current), '5', `current ${current}`);
+        const v = value(snap, [{ points: 4, at: at(-5) }, { points: 3, at: at(-2) }], { maturationDays: current });
+        assert.equal(v.units, (4n * 5n + 3n * 10n) * U, `current ${current}`);
+    }
+    // an entry written before snapshots falls back to the current setting
+    const legacy = chatWith([drop('10', '5', at(0))], '5');
+    const lt = priceTimeline(legacy, at(30));
+    assert.equal(lotPrice(ms(-2), lt, 3), '10');
+    assert.equal(lotPrice(ms(-2), lt, 1), '5');
+    assert.equal(lotPrice(ms(-5), lt, 10), '10');
+    // an unreadable snapshot is treated like a missing one
+    const junk = chatWith([{ ...drop('10', '5', at(0)), maturation_days: 'x' }], '5');
+    assert.equal(lotPrice(ms(-2), priceTimeline(junk, at(30)), 1), '5');
+    // a maturation 0 snapshot protects nothing, whatever the setting is now
+    const zero = chatWith([{ ...drop('10', '5', at(0)), maturation_days: 0 }], '5');
+    assert.equal(lotPrice(ms(-0.5), priceTimeline(zero, at(30)), 10), '5');
+});
+
+test('a due pending decrease uses its own snapshot too', () => {
+    const chat = {
+        id: 1,
+        point_price: '10',
+        point_price_history: [],
+        point_price_pending: {
+            price: '5',
+            to_default: false,
+            from: '10',
+            symbol: null,
+            effective_at: at(0),
+            requested_at: at(-7),
+            by: 1,
+            maturation_days: 3,
+        },
+    };
+    const t = priceTimeline(chat, at(1));
+    assert.equal(lotPrice(ms(-2), t, 1), '10');
+    assert.equal(lotPrice(ms(-5), t, 10), '5');
+});
+
+test('several decreases with different snapshots: the window covers the widest', () => {
+    const chat = chatWith(
+        [
+            { ...drop('10', '8', at(0)), maturation_days: 1 },
+            { ...drop('8', '12', at(2)), maturation_days: 1 },
+            { ...drop('12', '5', at(6)), maturation_days: 10 },
+            { ...drop('5', '4', at(9)), maturation_days: 0 },
+        ],
+        '4',
+    );
+    const t = priceTimeline(chat, at(40));
+    assert.deepEqual(affectedWindow(t, 3), { from: ms(-4), to: ms(9) });
+    assert.equal(lotPrice(ms(-0.5), t, 3), '10'); // inside the first drop's 1 day
+    // matured before the first drop (1 day, not the current 3), but the
+    // third drop's 10 days reach back to -4
+    assert.equal(lotPrice(ms(-1.5), t, 3), '12');
+    assert.equal(lotPrice(ms(-3.5), t, 3), '12');
+    assert.equal(lotPrice(ms(-4.5), t, 3), '4'); // outside every drop's window
+    assert.equal(lotPrice(ms(8.5), t, 3), '4'); // the last drop protects nothing
+});
+
+test('merging outside the affected window stays exact with per-decrease snapshots', () => {
+    const chat = chatWith(
+        [
+            { ...drop('10', '8', at(0)), maturation_days: 1 },
+            drop('8', '12', at(2)),
+            { ...drop('12', '5', at(6)), maturation_days: 10 },
+            drop('5', '3', at(8)), // no snapshot: the current setting
+        ],
+        '3',
+    );
+    const t = priceTimeline(chat, at(40));
+    let seed = 11;
+    const rand = () => {
+        seed = (seed * 1103515245 + 12345) % 2 ** 31;
+        return seed / 2 ** 31;
+    };
+    for (const maturationDays of [0, 2, 12]) {
+        const w = affectedWindow(t, maturationDays);
+        for (let round = 0; round < 30; round++) {
+            const lots = [];
+            for (let i = 0; i < 25; i++) lots.push({ points: 1 + Math.floor(rand() * 5), at: ms(Math.floor(rand() * 40) - 25 + rand()) });
+            lots.push({ points: 2, at: w.from }, { points: 3, at: w.to });
+            const total = lots.reduce((s, l) => s + l.points, 0);
+            const head = lots.filter((l) => l.at <= w.from).reduce((s, l) => s + l.points, 0);
+            const tail = lots.filter((l) => l.at > w.from && l.at >= w.to).reduce((s, l) => s + l.points, 0);
+            const middle = lots.filter((l) => l.at > w.from && l.at < w.to);
+            const merged = [...middle, { points: head, at: w.from }, { points: tail, at: w.to }];
+            const args = { claimed: 0, count: total, timeline: t, maturationDays, decimals: DEC };
+            const a = valueClaim({ ...args, lots: normalizeLots(lots, total) });
+            const b = valueClaim({ ...args, lots: normalizeLots(merged, total) });
+            assert.equal(a.units, b.units, `mat ${maturationDays}`);
+        }
+    }
+});
+
+// --- through the writers: what point-price.js saves ------------------------
+
+// Applies a plan's update the way Mongo would (only what plans use).
+function applyUpdate(chat, update) {
+    const next = { ...chat };
+    for (const [k, v] of Object.entries(update.$set || {})) next[k] = v;
+    for (const k of Object.keys(update.$unset || {})) delete next[k];
+    for (const [k, v] of Object.entries(update.$push || {})) {
+        let list = [...(next[k] || []), ...v.$each];
+        if (v.$slice !== undefined) list = list.slice(v.$slice);
+        next[k] = list;
+    }
+    return next;
+}
+
+function save(chat, price, now) {
+    // as the route calls it
+    const plan = planPointPriceChange(chat, price, { now, noticeDays: 0, by: 1, maturationDays: claimSettingsOf(chat).maturation_days });
+    return plan ? applyUpdate(chat, plan.update) : chat;
+}
+
+test('changing the maturation after a decrease does not re-value existing lots', () => {
+    let chat = { id: 1, point_price: '10', claim_settings: { maturation_days: 3 } };
+    chat = save(chat, '5', at(0)); // due at once, written out by the next save
+    chat = save(chat, '6', at(1));
+    assert.equal(chat.point_price_history[0].maturation_days, 3);
+    const lots = [
+        { points: 4, at: at(-5) },
+        { points: 3, at: at(-2) },
+    ];
+    const valued = (c) => value(c, lots, { maturationDays: claimSettingsOf(c).maturation_days }).units;
+    const before = valued(chat);
+    assert.equal(before, (4n * 6n + 3n * 10n) * U);
+    // the creator shortens, then lengthens the maturation
+    assert.equal(valued({ ...chat, claim_settings: { maturation_days: 1 } }), before);
+    assert.equal(valued({ ...chat, claim_settings: { maturation_days: 30 } }), before);
+});
+
+test('more than 50 price changes: the oldest decrease still protects its lots', () => {
+    let chat = { id: 1, point_price: '10', claim_settings: { maturation_days: 3 } };
+    chat = save(chat, '5', at(0));
+    // 60 more changes long after: up and down between 5 and 6
+    for (let i = 0; i < 60; i++) chat = save(chat, i % 2 === 0 ? '6' : '5', at(10 + i * 0.1));
+    chat = save(chat, '6', at(20));
+    assert.ok(chat.point_price_history.length > 50, `history ${chat.point_price_history.length}`);
+    assert.deepEqual(
+        { old: chat.point_price_history[0].old, new: chat.point_price_history[0].new },
+        { old: '10', new: '5' },
+    );
+    const t = priceTimeline(chat, at(30));
+    assert.equal(t.current, '6');
+    assert.equal(lotPrice(ms(-1), t, 3), '10'); // maturing at the day-0 drop
+    assert.equal(lotPrice(ms(-5), t, 3), '6');
+    const v = value(chat, [{ points: 3, at: at(-1) }], { now: at(30) });
+    assert.equal(v.units, 30n * U);
 });

@@ -1,4 +1,5 @@
 const { getCollection } = require('./mongo');
+const { DATE_MS, dateMatch } = require('./lot-dates');
 
 // Per-chat claim rules, set by the chat creator in the mini app and enforced
 // by the backend: it simply refuses to sign a claim voucher that breaks them.
@@ -72,27 +73,28 @@ function claimGate(settings, nowSec = Math.floor(Date.now() / 1000)) {
 }
 
 // Points still maturing for a member: reaction points and grants younger than
-// the maturation period, plus when the oldest of them matures.
+// the maturation period (dated either way, see lot-dates.js), plus when the
+// oldest of them matures.
 async function maturingPoints(chatId, userId, maturationDays, nowSec = Math.floor(Date.now() / 1000)) {
     if (!maturationDays) return { points: 0, next_at: null };
     const cutoffSec = nowSec - maturationDays * DAY;
     const [reactions, grants] = await Promise.all([
         (await getCollection('reaction_points'))
             .aggregate([
-                { $match: { chat_id: chatId, receiver_id: userId, date: { $gt: new Date(cutoffSec * 1000) } } },
-                { $group: { _id: null, points: { $sum: '$points' }, oldest: { $min: '$date' } } },
+                { $match: { chat_id: chatId, receiver_id: userId, ...dateMatch({ gt: cutoffSec * 1000 }) } },
+                { $group: { _id: null, points: { $sum: '$points' }, oldest: { $min: DATE_MS } } },
             ])
             .toArray(),
         (await getCollection('grants'))
             .aggregate([
-                { $match: { chat_id: chatId, user_id: userId, date: { $gt: cutoffSec * 1000 } } },
-                { $group: { _id: null, points: { $sum: '$points' }, oldest: { $min: '$date' } } },
+                { $match: { chat_id: chatId, user_id: userId, ...dateMatch({ gt: cutoffSec * 1000 }) } },
+                { $group: { _id: null, points: { $sum: '$points' }, oldest: { $min: DATE_MS } } },
             ])
             .toArray(),
     ]);
     const points = (reactions[0]?.points || 0) + (grants[0]?.points || 0);
     const oldestMs = Math.min(
-        reactions[0] ? new Date(reactions[0].oldest).getTime() : Infinity,
+        reactions[0] ? Number(reactions[0].oldest) : Infinity,
         grants[0] ? Number(grants[0].oldest) : Infinity,
     );
     return {

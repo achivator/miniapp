@@ -49,9 +49,18 @@ export async function POST(request) {
     } catch (e) {
       return Response.json({ error: e.message }, { status: 400 });
     }
-    await (await getCollection("chats")).updateOne(
+    const chats = await getCollection("chats");
+    const now = new Date();
+    await chats.updateOne(
       { id: chat.id },
-      { $set: { claim_settings: settings, claim_settings_updated_by: auth.user.id, claim_settings_updated_at: new Date() } },
+      { $set: { claim_settings: settings, claim_settings_updated_by: auth.user.id, claim_settings_updated_at: now } },
+    );
+    // A scheduled decrease protects the points still maturing when it takes
+    // effect, by the maturation in force then (lib/point-price.js): until it
+    // is due, that is this setting. Once due, its snapshot is frozen.
+    await chats.updateOne(
+      { id: chat.id, "point_price_pending.effective_at": { $gt: now } },
+      { $set: { "point_price_pending.maturation_days": settings.maturation_days } },
     );
     return Response.json(view(settings));
   } catch (e) {

@@ -1,10 +1,13 @@
 const { getCollection } = require('./mongo');
 const { affectedWindow, normalizeLots, priceTimeline, valueClaim } = require('./lot-pricing');
 const { claimSettingsOf } = require('./claim-rules');
+const { dateRange, dateMatch } = require('./lot-dates');
 
 // Reads members' point lots (see lot-pricing.js) from the bot's collections:
 //   reaction_points { chat_id, receiver_id, points, date: Date }
 //   grants          { chat_id, user_id, points, date: epoch ms (a number) }
+// Either date type is read in either collection (see lot-dates.js): a lot is
+// dated whichever way it was saved.
 //
 // Only lots earned while a decrease could reach them are read one by one:
 // everything earned at or before (first decrease - maturation) is paid at the
@@ -12,23 +15,6 @@ const { claimSettingsOf } = require('./claim-rules');
 // everything earned at or after the last decrease is paid at the current
 // price and is the newest, so it is summed into another. Without any
 // decrease in the history that is a single sum per member.
-
-const NO_DATE_FILTER = Symbol('none');
-
-// Mongo date conditions for one collection: reactions compare as Dates,
-// grants as numbers (a Date would never match a number and vice versa).
-function dateRange(asDate, { gt = NO_DATE_FILTER, lt = NO_DATE_FILTER, lte = NO_DATE_FILTER, gte = NO_DATE_FILTER }) {
-    const wrap = (ms) => (asDate ? new Date(ms) : ms);
-    const cond = {};
-    if (gt !== NO_DATE_FILTER) cond.$gt = wrap(gt);
-    if (gte !== NO_DATE_FILTER) cond.$gte = wrap(gte);
-    if (lt !== NO_DATE_FILTER) cond.$lt = wrap(lt);
-    if (lte !== NO_DATE_FILTER) cond.$lte = wrap(lte);
-    // an unbounded range still requires a date of the right type, so a lot is
-    // counted in exactly one of the ranges below
-    if (Object.keys(cond).length === 0) cond.$type = asDate ? 'date' : 'number';
-    return cond;
-}
 
 // userIds: an array (those members only) or null (every member of the chat).
 // Returns Map(userId -> raw lots [{ points, at }]); pass each member's list to
@@ -44,18 +30,18 @@ async function loadLots(chatId, userIds, timeline, maturationDays) {
 
     const window = affectedWindow(timeline, maturationDays);
     const sources = [
-        { col: await getCollection('reaction_points'), user: 'receiver_id', asDate: true },
-        { col: await getCollection('grants'), user: 'user_id', asDate: false },
+        { col: await getCollection('reaction_points'), user: 'receiver_id' },
+        { col: await getCollection('grants'), user: 'user_id' },
     ];
 
     const jobs = [];
-    for (const { col, user, asDate } of sources) {
+    for (const { col, user } of sources) {
         const base = { chat_id: chatId };
         if (Array.isArray(userIds)) base[user] = { $in: userIds };
         const sum = (range, at) =>
             col
                 .aggregate([
-                    { $match: { ...base, date: dateRange(asDate, range) } },
+                    { $match: { ...base, ...dateMatch(range) } },
                     { $group: { _id: `$${user}`, points: { $sum: '$points' } } },
                 ])
                 .toArray()
@@ -70,7 +56,7 @@ async function loadLots(chatId, userIds, timeline, maturationDays) {
         jobs.push(
             col
                 .find(
-                    { ...base, date: dateRange(asDate, { gt: window.from, lt: window.to }) },
+                    { ...base, ...dateMatch({ gt: window.from, lt: window.to }) },
                     { projection: { _id: 0, [user]: 1, points: 1, date: 1 } },
                 )
                 .toArray()
@@ -131,4 +117,4 @@ async function chatDebt(chat, decimals, now = new Date(), ctx = null) {
     return { units, points, members: records.length };
 }
 
-module.exports = { loadLots, chatLots, chatDebt, _dateRange: dateRange };
+module.exports = { loadLots, chatLots, chatDebt, _dateRange: dateRange, _dateMatch: dateMatch };

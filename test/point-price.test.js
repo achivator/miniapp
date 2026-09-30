@@ -168,7 +168,7 @@ test('serializePriceHistory lists changes newest first', () => {
 
 const T0 = new Date(NOW * 1000);
 const at = (days) => new Date(T0.getTime() + days * DAY * 1000);
-const OPTS = { now: T0, noticeDays: 7, by: 42, symbol: 'PTS' };
+const OPTS = { now: T0, noticeDays: 7, by: 42, symbol: 'PTS', maturationDays: 3 };
 
 function withEnv(name, value, fn) {
     const saved = process.env[name];
@@ -263,7 +263,11 @@ test('a due but unapplied decrease shows in the history members see', () => {
             point_price_pending: pendingOf('0.005', at(-1), { from: '0.02' }),
         };
         assert.equal(effectivePriceHistory(chat, at(-2)).length, 1);
-        assert.deepEqual(effectivePriceHistory(chat, T0).at(-1), { old: '0.02', new: '0.005', at: at(-1), by: 7 });
+        // a pending scheduled before maturation snapshots: null (valued with
+        // the chat's current setting)
+        assert.deepEqual(effectivePriceHistory(chat, T0).at(-1), { old: '0.02', new: '0.005', at: at(-1), by: 7, maturation_days: null });
+        const snapped = { ...chat, point_price_pending: { ...chat.point_price_pending, maturation_days: 5 } };
+        assert.equal(effectivePriceHistory(snapped, T0).at(-1).maturation_days, 5);
         assert.deepEqual(recentPointPriceChange(chat, NOW), { old: '0.02', new: '0.005', at: NOW - DAY, changes: 1 });
         assert.deepEqual(serializePriceHistory(chat, 10, T0)[0], { old: '0.02', new: '0.005', at: NOW - DAY, by: 7 });
         // not due yet: nothing changed for members
@@ -277,7 +281,8 @@ test('planPointPriceChange: an increase applies at once and is announced', () =>
         assert.deepEqual(plan.filter, { id: 5, point_price: '0.02', point_price_pending: null });
         assert.deepEqual(plan.update, {
             $set: { point_price: '0.03' },
-            $push: { point_price_history: { $each: [{ old: '0.02', new: '0.03', at: T0, by: 42 }], $slice: -50 } },
+            // no $slice: the history is never trimmed
+            $push: { point_price_history: { $each: [{ old: '0.02', new: '0.03', at: T0, by: 42, maturation_days: 3 }] } },
         });
         assert.deepEqual(plan.announcements, [
             {
@@ -311,6 +316,7 @@ test('planPointPriceChange: a decrease is scheduled, not applied', () => {
                     effective_at: at(7),
                     requested_at: T0,
                     by: 42,
+                    maturation_days: 3,
                 },
             },
         });
@@ -413,7 +419,8 @@ test('planPointPriceChange writes out a due decrease the bot has not applied yet
             point_price: '0.02',
             point_price_pending: pendingOf('0.005', at(-1), { from: '0.02' }),
         };
-        const dueEntry = { old: '0.02', new: '0.005', at: at(-1), by: 7 };
+        // scheduled before snapshots: it gets the current setting when written out
+        const dueEntry = { old: '0.02', new: '0.005', at: at(-1), by: 7, maturation_days: 3 };
 
         const decreased = { type: 'price_decreased', params: { from: '0.02', to: '0.005', symbol: 'PTS' } };
 
@@ -424,7 +431,10 @@ test('planPointPriceChange writes out a due decrease the bot has not applied yet
             decreased,
             { type: 'price_increased', params: { from: '0.005', to: '0.008', symbol: 'PTS', cancelled_pending: false } },
         ]);
-        assert.deepEqual(up.update.$push.point_price_history.$each, [dueEntry, { old: '0.005', new: '0.008', at: T0, by: 42 }]);
+        assert.deepEqual(up.update.$push.point_price_history.$each, [
+            dueEntry,
+            { old: '0.005', new: '0.008', at: T0, by: 42, maturation_days: 3 },
+        ]);
         assert.deepEqual(up.update.$unset, { point_price_pending: '' });
 
         // a new decrease: the due one lands in point_price, the new one waits
@@ -441,7 +451,7 @@ test('planPointPriceChange writes out a due decrease the bot has not applied yet
         assert.deepEqual(same.update, {
             $set: { point_price: '0.005' },
             $unset: { point_price_pending: '' },
-            $push: { point_price_history: { $each: [dueEntry], $slice: -50 } },
+            $push: { point_price_history: { $each: [dueEntry] } },
         });
         assert.deepEqual(same.announcements, [decreased]);
 
@@ -467,7 +477,13 @@ test('planPointPriceChange writes out a due decrease the bot has not applied yet
         withRate('0.03', () => {
             const raised = planPointPriceChange(toDefault, '0.04', OPTS);
             assert.deepEqual(raised.announcements.map((a) => a.type), ['price_increased']);
-            assert.deepEqual(raised.update.$push.point_price_history.$each[0], { old: '0.02', new: '0.03', at: at(-1), by: 7 });
+            assert.deepEqual(raised.update.$push.point_price_history.$each[0], {
+                old: '0.02',
+                new: '0.03',
+                at: at(-1),
+                by: 7,
+                maturation_days: 3,
+            });
         });
     });
 });
@@ -520,5 +536,28 @@ test('announcementDoc is the outbox row the bot drains', () => {
         sent_at: null,
         claimed_at: null,
         attempts: 0,
+    });
+});
+
+test('planPointPriceChange snapshots the maturation into history entries and the pending decrease', () => {
+    withRate('0.01', () => {
+        const chat = { id: 5, point_price: '0.02' };
+        const opts = { ...OPTS, maturationDays: 5 };
+        assert.equal(planPointPriceChange(chat, '0.03', opts).update.$push.point_price_history.$each[0].maturation_days, 5);
+        assert.equal(planPointPriceChange(chat, '0.015', opts).update.$set.point_price_pending.maturation_days, 5);
+        assert.equal(planPointPriceChange(chat, '0.015', { ...OPTS, maturationDays: 0 }).update.$set.point_price_pending.maturation_days, 0);
+        // a due decrease keeps the maturation it was scheduled (or last kept in
+        // step) with, not the setting at the time it is written out
+        const due = { ...chat, point_price_pending: pendingOf('0.005', at(-1), { from: '0.02', maturation_days: 10 }) };
+        const plan = planPointPriceChange(due, '0.008', opts);
+        assert.deepEqual(
+            plan.update.$push.point_price_history.$each.map((h) => h.maturation_days),
+            [10, 5],
+        );
+        assert.equal(pendingPointPrice(due).maturation_days, 10);
+        // unreadable snapshots read as none
+        for (const bad of ['3', -1, 1.5, null]) {
+            assert.equal(pendingPointPrice({ point_price_pending: pendingOf('0.005', at(1), { maturation_days: bad }) }).maturation_days, null);
+        }
     });
 });

@@ -227,7 +227,14 @@ export async function POST(request) {
       } catch (e) {
         return Response.json({ error: e.message }, { status: 400 });
       }
-      plan = planPointPriceChange(chat, next, { now, by: auth.user.id, symbol });
+      plan = planPointPriceChange(chat, next, {
+        now,
+        by: auth.user.id,
+        symbol,
+        // snapshotted with the change: lots are valued by the maturation in
+        // force when a decrease took effect (lib/lot-pricing.js)
+        maturationDays: claimSettingsOf(chat).maturation_days,
+      });
     }
     if (!plan) return Response.json(view(chat, jetton, await coverageOf(chat, jetton, new Date(), body?.coverage === true)));
 

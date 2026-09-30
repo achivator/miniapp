@@ -2,6 +2,7 @@ const { Address } = require('@ton/core');
 const { getCollection } = require('./mongo');
 const { getChatMember, getChatMemberStatus } = require('./telegram');
 const { authenticate } = require('./auth');
+const { dateMatch } = require('./lot-dates');
 
 // Read-only views of a chat's reward ledger for its creator (the pool admin
 // in the mini app): who earned what, what was paid out, what is still owed.
@@ -121,13 +122,13 @@ async function maturingByUser(chatId, userIds, maturationDays, nowSec) {
     const [reactions, grants] = await Promise.all([
         (await getCollection('reaction_points'))
             .aggregate([
-                { $match: { chat_id: chatId, receiver_id: { $in: userIds }, date: { $gt: new Date(cutoffSec * 1000) } } },
+                { $match: { chat_id: chatId, receiver_id: { $in: userIds }, ...dateMatch({ gt: cutoffSec * 1000 }) } },
                 { $group: { _id: '$receiver_id', points: { $sum: '$points' } } },
             ])
             .toArray(),
         (await getCollection('grants'))
             .aggregate([
-                { $match: { chat_id: chatId, user_id: { $in: userIds }, date: { $gt: cutoffSec * 1000 } } },
+                { $match: { chat_id: chatId, user_id: { $in: userIds }, ...dateMatch({ gt: cutoffSec * 1000 }) } },
                 { $group: { _id: '$user_id', points: { $sum: '$points' } } },
             ])
             .toArray(),
