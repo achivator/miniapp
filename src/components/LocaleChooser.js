@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { isTelegramLaunch } from "@/lib/launch";
-import { LOCALES, preferredLocale } from "@/lib/locale";
+import { LOCALES, legacyAnchor, preferredLocale } from "@/lib/locale";
 
 const LABELS = { ru: "Русский", en: "English" };
 
@@ -27,7 +27,7 @@ export function LocaleChooser({ page }) {
     search.delete("lang");
     const query = search.toString();
     setLeaving(true);
-    router.replace(`/${preferredLocale()}${page}${query ? `?${query}` : ""}${window.location.hash}`);
+    router.replace(`/${preferredLocale()}${page}${query ? `?${query}` : ""}${legacyAnchor(window.location.hash)}`);
   }, [page, router]);
 
   if (leaving) return null;

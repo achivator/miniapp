@@ -17,13 +17,26 @@ const TELEGRAM_KEY = "achivator-tg-lang";
 // bare path (without a locale) redirects to the visitor's language.
 export const PAGES = ["", "/help"];
 
+// Section anchors carried the locale while one page held both languages
+// (#ru-pricing, #en-wallet); the localized pages use the bare name
+// (#pricing). Old links still arrive with the prefix, on "/" and "/help" and
+// on the pages they redirected to (/ru#ru-pricing): see legacyAnchor().
+const LEGACY_ANCHOR = /^#(ru|en)-/;
+
+// The anchor of a localized page for a `location.hash`, without the old
+// locale prefix; other hashes (including Telegram's launch params) unchanged.
+export function legacyAnchor(hash) {
+  return String(hash || "").replace(LEGACY_ANCHOR, "#");
+}
+
 // Runs before the first paint (see app/document.js, after LAUNCH_SCRIPT) so
 // a redirect never flashes the fallback page and screens that serve both
 // languages (<T>) show one from the start. It sets html[data-lang] only:
 // <html lang> is the served page's own (the route's locale on /ru* and
 // /en*, English elsewhere). On /ru* and /en* the route's locale wins;
 // elsewhere data-lang comes from the preference and, on "/" (browser only)
-// and "/help", the URL is replaced with the localized page. The page is
+// and "/help", the URL is replaced with the localized page (an old
+// locale-prefixed anchor becomes the page's own, so the browser scrolls). The page is
 // hidden while the browser navigates away (globals.css).
 // Keep the preference order in sync with preferredLocale() below.
 export const LOCALE_SCRIPT = `try{
@@ -34,7 +47,7 @@ if(l!=="ru"&&l!=="en"){try{l=sessionStorage.getItem("${TELEGRAM_KEY}")}catch(e){
 if(l!=="ru"&&l!=="en"){l=/^ru\\b/i.test(navigator.language||"")?"ru":"en"}}
 d.dataset.lang=l;
 var t=p==="/help"?"/help":p==="/"&&d.dataset.launch!=="telegram"?"":null;
-if(t!==null){s.delete("lang");s=s.toString();d.dataset.redirect="";location.replace("/"+l+t+(s?"?"+s:"")+location.hash)}
+if(t!==null){s.delete("lang");s=s.toString();d.dataset.redirect="";location.replace("/"+l+t+(s?"?"+s:"")+location.hash.replace(${LEGACY_ANCHOR},"#"))}
 }catch(e){}`;
 
 // The language the visitor asked for: ?lang= in the URL or a saved pick.
