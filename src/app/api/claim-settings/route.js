@@ -56,11 +56,12 @@ export async function POST(request) {
       { $set: { claim_settings: settings, claim_settings_updated_by: auth.user.id, claim_settings_updated_at: now } },
     );
     // A scheduled decrease protects the points still maturing when it takes
-    // effect, by the maturation in force then (lib/point-price.js): until it
-    // is due, that is this setting. Once due, its snapshot is frozen.
+    // effect (lib/point-price.js). Until it is due, a longer maturation widens
+    // that protection; a shorter one doesn't narrow what members were already
+    // told when it was announced. Once due, its snapshot is frozen.
     await chats.updateOne(
       { id: chat.id, "point_price_pending.effective_at": { $gt: now } },
-      { $set: { "point_price_pending.maturation_days": settings.maturation_days } },
+      { $max: { "point_price_pending.maturation_days": settings.maturation_days } },
     );
     return Response.json(view(settings));
   } catch (e) {
