@@ -1,4 +1,6 @@
 import Link from "next/link";
+import Image from "next/image";
+import { BrandMark } from "./brand";
 import { getTonConfig } from "@/lib/ton/config";
 import { subscriptionConfig } from "@/lib/subscription";
 import { GAS } from "@/lib/ton/constants";
@@ -39,17 +41,12 @@ const CREATOR_MULTIPLIER = 10;
 const MATURATION_DAYS = 3;
 const DAILY_LIMIT_PERCENT = 10;
 
-const MEDALS = ["programmer", "night owl", "voicy", "on fire", "santa", "sticker", "telescope", "loved"];
 
-function Eyebrow({ children }) {
-  return <p className="text-[13px] font-semibold uppercase tracking-wide text-accent">{children}</p>;
-}
 
-function Section({ id, eyebrow, title, lead, children }) {
+function Section({ id, title, lead, children }) {
   return (
-    <section id={id} className="scroll-mt-20 space-y-6 py-10 md:py-14">
+    <section id={id} className="landing-section scroll-mt-24 space-y-6 py-10 md:py-14">
       <div className="max-w-2xl space-y-2">
-        {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
         <h2 className="text-[26px] font-bold leading-tight tracking-tight text-balance md:text-[32px]">{title}</h2>
         {lead && <p className="text-[16px] leading-relaxed text-hint">{lead}</p>}
       </div>
@@ -60,7 +57,7 @@ function Section({ id, eyebrow, title, lead, children }) {
 
 function Panel({ className = "", children }) {
   return (
-    <div className={`rounded-card bg-surface p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${className}`}>{children}</div>
+    <div className={`landing-panel rounded-card bg-surface p-5 ${className}`}>{children}</div>
   );
 }
 
@@ -325,19 +322,20 @@ export function Landing({ locale }) {
   const trust = <Info className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--gold-text)]" />;
 
   return (
-    <div className="pb-safe overflow-x-clip">
+    <div className="brand-landing pb-safe overflow-x-clip">
       <header
         className="sticky top-0 z-20 backdrop-blur-md"
         style={{ background: "color-mix(in srgb, var(--bg) 85%, transparent)" }}
       >
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 md:px-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 md:px-6">
           <Link href={`/${locale}`} className="flex items-center gap-2" aria-label="Achivator">
-            <span className="hero-gradient flex h-8 w-8 items-center justify-center rounded-[10px]">
-              <Medal className="h-[18px] w-[18px]" />
-            </span>
+            <BrandMark />
             <span className="text-[17px] font-bold tracking-tight">Achivator</span>
           </Link>
           <nav className="flex items-center gap-3 text-[14px] font-medium sm:gap-4">
+            <a href="#achievements" className="hidden text-hint hover:text-fg md:inline">
+              {L("Ачивки", "Achievements")}
+            </a>
             <a href="#how" className="hidden text-hint hover:text-fg md:inline">
               {L("Как работает", "How it works")}
             </a>
@@ -355,42 +353,44 @@ export function Landing({ locale }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 md:px-6">
-        {/* Hero */}
-        <section className="grid items-center gap-10 pb-6 pt-8 md:grid-cols-[1.15fr_1fr] md:gap-12 md:pb-10 md:pt-16">
-          <div className="space-y-5">
-            <Eyebrow>{L("Система лояльности для Telegram-чатов", "A loyalty system for Telegram chats")}</Eyebrow>
-            <h1 className="text-[34px] font-bold leading-[1.1] tracking-tight text-balance md:text-[48px]">
-              {L("Благодарите участников не только лайком", "Thank your members with more than a like")}
-            </h1>
-            <p className="text-[17px] leading-relaxed text-hint md:text-[18px]">
-              {L(
-                "Achivator превращает реакции на полезные сообщения в баллы, а баллы — в жетоны вашего сообщества. Участник забирает их в свой кошелёк сам. Бюджет, правила выплат и защита от накруток — у вас.",
-                "Achivator turns reactions to helpful messages into points, and points into your community's own jetton. Members claim them to their wallets themselves. The budget, the payout rules and the anti-cheating controls stay with you.",
-              )}
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <PrimaryCta href={help}>{L("Подключить свой чат", "Connect your chat")}</PrimaryCta>
-              <SecondaryCta href="#how">{L("Как это работает", "How it works")}</SecondaryCta>
+      <main className="mx-auto max-w-6xl px-4 md:px-6">
+        <section className="brand-hero">
+          <div className="hero-copy">
+            <h1>{L("У каждого чата", "Every chat has")}<br />{L("свои герои.", "its characters.")}<br /><span>{L("И свои ачивки.", "Give them achievements.")}</span></h1>
+            <p className="hero-description">{L("Ночные совы, мастера реакций и авторы голосовых на семь минут. Achivator замечает всех. И выдаёт за это ачивки.", "Night owls. Reaction dealers. That person with the seven-minute voice notes. Achivator notices everyone. And has an achievement for it.")}</p>
+            <div className="hero-actions">
+              <PrimaryCta href={ADD_TO_GROUP_URL}>{L("Добавить в свой чат", "Add to your chat")} <span aria-hidden="true" className="ml-3">↗</span></PrimaryCta>
+              <SecondaryCta href="#achievements">{L("Посмотреть ачивки", "Meet the achievements")} <span aria-hidden="true" className="ml-2">↓</span></SecondaryCta>
             </div>
-            <ul className="flex flex-wrap gap-x-5 gap-y-2 text-[14px] text-hint">
-              <li className="flex items-center gap-1.5">
-                <Check className="h-4 w-4 text-success" />{" "}
-                {L("Жетоны лежат в контракте чата, не у нас", "Jettons sit in the chat's contract, not with us")}
-              </li>
-              <li className="flex items-center gap-1.5">
-                <Check className="h-4 w-4 text-success" /> {L("Открытый код", "Open source")}
-              </li>
-              <li className="flex items-center gap-1.5">
-                <Check className="h-4 w-4 text-success" /> {L("Ачивки — бесплатно", "Achievements are free")}
-              </li>
-            </ul>
+            <p className="hero-note"><span aria-hidden="true">✓</span> {L("Ачивки бесплатные. Жетоны — когда будете готовы.", "Free achievements. Jetton rewards whenever you’re ready.")}</p>
           </div>
-          <ChatMock L={L} fmt={fmt} rate={rate} />
+          <div className="hero-stage">
+            <Image src="/brand/achivator-hero-generated.png" alt={L("Achivator: кремовый робот с янтарными боками, пиксельными глазами, дисководом и одним колесом", "Achivator: a cream robot with amber sides, pixel eyes, a disk drive and one wheel")} width={1280} height={1280} priority sizes="(max-width: 767px) 100vw, 560px" className="hero-character" />
+          </div>
         </section>
-
+        <div className="brand-strip" aria-label={L("Возможности", "Features")}>
+          <span>01 / {L("ОБЩАЙТЕСЬ", "CHAT")}</span><span className="strip-star" aria-hidden="true">✳</span>
+          <span>02 / {L("СОБИРАЙТЕ АЧИВКИ", "COLLECT ACHIEVEMENTS")}</span><span className="strip-star" aria-hidden="true">✳</span>
+          <span>03 / {L("СТАНЬТЕ ЛОКАЛЬНОЙ ЛЕГЕНДОЙ", "BECOME A LOCAL LEGEND")}</span>
+        </div>
+        <Section id="achievements" title={L("Узнали кого-то из чата?", "Looks like someone in your chat?")} lead={L("Тот же бот. Другой повод для гордости. Или для шуток.", "Same bot. A different reason to be proud. Or roasted.")}>
+          <div className="character-collection">
+            {[
+              ["poop", "001", "poop-master", "Poop Master", L("Серьёзный подход к несерьёзному делу.", "You really committed to the bit."), L("100 реакций 💩 другим", "Give 100 💩 reactions"), "EPIC", "✦"],
+              ["night", "002", "night-owl", "Night Owl", L("Сон — в списке будущих обновлений.", "Sleep is a feature request."), L("Сообщение ровно в 00:00:00", "Post at exactly 00:00:00"), "RARE", "✧"],
+              ["clown", "003", "sad-clown", "Sad Clown", L("Ноль сожалений.", "Zero regrets."), L("100 реакций 🤡 другим", "Give 100 🤡 reactions"), "COMMON", "○"],
+            ].map(([kind, edition, image, name, caption, unlock, rarity, glyph]) => <article className={`character-card character-${kind}`} key={kind}>
+              <div className="character-art"><span className="edition">ACH / {edition}</span><Image src={`/brand/${image}.png`} alt="" width={1280} height={1280} sizes="(max-width: 767px) 160px, 360px" className="collection-bot" /><span className="rarity"><span aria-hidden="true">{glyph}</span> {rarity}</span></div>
+              <div className="character-description"><h3>{name}</h3><p>{caption}</p><p className="character-unlock"><span className="sr-only">{L("Как получить: ", "How to unlock: ")}</span>{unlock}</p></div>
+            </article>)}
+            <article className="character-card character-locked">
+              <div className="character-art"><span className="edition">ACH / ???</span><Image src="/brand/locked.png" alt="" width={1280} height={1280} sizes="(max-width: 767px) 160px, 360px" className="collection-bot" /><span className="rarity"><span aria-hidden="true">◌</span> {L("СКРЫТО", "LOCKED")}</span></div>
+              <div className="character-description"><h3>{L("Ещё +18", "+18 more")}</h3><p>{L("Кто-то в вашем чате уже на полпути.", "Someone in your chat is already halfway there.")}</p><a href={APP_URL} className="character-unlock locked-cta">{L("Все условия в мини-приложении", "See every unlock in the mini app")} <span aria-hidden="true">→</span></a></div>
+            </article>
+          </div>
+        </Section>
         {testnet && (
-          <div className="tint-gold flex items-start gap-3 rounded-card px-4 py-3 text-[14px] leading-snug text-[color:var(--gold-text)]">
+          <div className="tint-gold mt-6 flex items-start gap-3 rounded-card px-4 py-3 text-[14px] leading-snug text-[color:var(--gold-text)] md:mt-8">
             <Sparkles className="mt-0.5 h-5 w-5 shrink-0" />
             <p>
               <b>{L("Сейчас Achivator работает в тестовой сети TON.", "Achivator currently runs on the TON testnet.")}</b>{" "}
@@ -405,10 +405,9 @@ export function Landing({ locale }) {
         {/* Why */}
         <Section
           id="why"
-          eyebrow={L("Зачем это владельцу чата", "Why chat owners use it")}
           title={L(
-            "Чат живёт, пока в нём отвечают. Achivator делает так, чтобы отвечать было выгодно",
-            "A chat lives as long as people answer. Achivator makes answering worth it",
+            "Хороший ответ заслуживает большего, чем 👍.",
+            "A good answer deserves more than a 👍.",
           )}
           lead={L(
             "Реакция в Telegram ничего не стоит тому, кто её ставит, и ничего не даёт тому, кто её получил. Achivator даёт ей вес: реакции от реальных участников становятся счётом, который можно забрать.",
@@ -457,13 +456,13 @@ export function Landing({ locale }) {
         {/* How it works */}
         <Section
           id="how"
-          eyebrow={L("Как это работает", "How it works")}
           title={L("Три участника: вы, чат и контракт", "Three parties: you, the chat and the contract")}
           lead={L(
             "Баллы считает бот, деньги хранит смарт-контракт вашего чата, а забирает их участник — своей кнопкой, в свой кошелёк.",
             "The bot counts points, your chat's smart contract holds the funds, and members claim them — with their own tap, to their own wallet.",
           )}
         >
+          <div className="grid items-center gap-8 md:grid-cols-2"><ChatMock L={L} fmt={fmt} rate={rate} /><div className="space-y-4"><p className="text-lg text-hint">{L("Помогли человеку. Получили реакцию. Бот всё записал. Владелец чата задаёт ценность баллов, а участники сами забирают награды.", "Help someone. Get a reaction. The bot keeps count. Chat owners set the value of points, and members claim their own rewards.")}</p></div></div>
           <Scheme L={L} />
 
           <ol className="mx-auto grid max-w-4xl gap-3 pt-4 md:grid-cols-2">
@@ -521,7 +520,6 @@ export function Landing({ locale }) {
         {/* Example */}
         <Section
           id="example"
-          eyebrow={L("Пример", "Example")}
           title={L("Клуб фронтендеров на 800 человек", "A frontend club with 800 members")}
           lead={L(
             "Условный чат и условные цифры — чтобы было понятно, как всё складывается.",
@@ -597,7 +595,6 @@ export function Landing({ locale }) {
         {/* Quick start */}
         <Section
           id="start"
-          eyebrow={L("Как подключить", "Getting started")}
           title={L("Четыре шага и 15–20 минут", "Four steps, 15–20 minutes")}
           lead={L(
             "Подключить чат может только его создатель. Нужен TON-кошелёк — например, Tonkeeper.",
@@ -663,7 +660,6 @@ export function Landing({ locale }) {
         {/* Pricing */}
         <Section
           id="pricing"
-          eyebrow={L("Стоимость", "Pricing")}
           title={L("Кто и за что платит", "Who pays for what")}
           lead={
             subs.enabled
@@ -756,7 +752,6 @@ export function Landing({ locale }) {
         {/* Guarantees */}
         <Section
           id="guarantees"
-          eyebrow={L("Гарантии", "Guarantees")}
           title={L("Что зашито в контракт, а что держится на доверии", "What the contract enforces, and what rests on trust")}
           lead={L(
             "Мы не просим верить на слово. Вот честное разделение: что обеспечивает блокчейн, а где вы полагаетесь на наш сервис.",
@@ -848,7 +843,6 @@ export function Landing({ locale }) {
         {/* Anti-farming */}
         <Section
           id="antifraud"
-          eyebrow={L("Защита от накруток", "Anti-cheating")}
           title={L("Почему баллы не накрутить твинками", "Why alt accounts can't farm points")}
           lead={L(
             "Реакции дёшево подделать, поэтому бот платит только за реакции, похожие на настоящие.",
@@ -902,34 +896,8 @@ export function Landing({ locale }) {
           </p>
         </Section>
 
-        {/* Achievements */}
-        <Section
-          id="achievements"
-          eyebrow={L("Бонус", "Bonus")}
-          title={L("Ачивки за стиль общения — с первой минуты", "Achievements for how people chat — from minute one")}
-          lead={L(
-            "Ещё до жетонов бот раздаёт медали: за первый код в чате, голосовое, сообщение ровно в полночь, первую сотню сообщений. Их видно в мини-приложении, а в будущем — можно будет выпустить как NFT.",
-            "Even before any jettons, the bot hands out medals: for the first code snippet, a voice message, a message sent exactly at midnight, the first hundred messages. They show up in the mini app, and later can be minted as NFTs.",
-          )}
-        >
-          <ul className="grid grid-cols-4 gap-3 sm:grid-cols-8">
-            {MEDALS.map((m) => (
-              <li key={m} className="space-y-1.5 text-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/achievements/v1/${encodeURIComponent(m)}.webp`}
-                  alt={m}
-                  loading="lazy"
-                  className="aspect-square w-full rounded-2xl bg-white object-cover ring-1 ring-black/5"
-                />
-                <span className="block text-[11px] font-medium capitalize leading-tight text-hint">{m}</span>
-              </li>
-            ))}
-          </ul>
-        </Section>
-
         {/* FAQ */}
-        <Section id="faq" eyebrow={L("Вопросы", "FAQ")} title={L("Частые вопросы", "Frequently asked questions")}>
+        <Section id="faq" title={L("Частые вопросы", "Frequently asked questions")}>
           <Panel className="py-1">
             <Faq q={L("Это криптоинвестиция? Жетон вырастет в цене?", "Is this a crypto investment? Will the jetton go up?")}>
               <p>
@@ -1005,7 +973,7 @@ export function Landing({ locale }) {
 
         {/* Final CTA */}
         <section className="py-10 md:py-14">
-          <div className="hero-gradient relative overflow-hidden rounded-[26px] p-6 md:p-10">
+          <div className="brand-finale relative overflow-hidden rounded-[26px] p-6 md:p-10">
             <div className="pointer-events-none absolute -right-10 -top-12 h-48 w-48 rounded-full bg-white/10" />
             <div className="pointer-events-none absolute -bottom-16 right-16 h-36 w-36 rounded-full bg-white/10" />
             <div className="relative max-w-xl space-y-4">
@@ -1021,7 +989,7 @@ export function Landing({ locale }) {
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Link
                   href={help}
-                  className="inline-flex h-12 items-center justify-center rounded-xl bg-white px-6 text-[15px] font-semibold text-[#1d4ed8] active:opacity-85"
+                  className="inline-flex h-12 items-center justify-center rounded-xl bg-accent px-6 text-[15px] font-semibold text-accent-fg active:opacity-85"
                 >
                   {L("Подключить свой чат", "Connect your chat")}
                 </Link>
@@ -1037,7 +1005,7 @@ export function Landing({ locale }) {
         </section>
       </main>
 
-      <footer className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 border-t border-[color:var(--separator)] px-4 py-6 text-[14px] text-hint md:px-6">
+      <footer className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 border-t border-[color:var(--separator)] px-4 py-6 text-[14px] text-hint md:px-6">
         <span>{L("Achivator · награды и ачивки для Telegram-чатов", "Achivator · rewards and achievements for Telegram chats")}</span>
         <div className="flex flex-wrap gap-4">
           <Link href={help} className="hover:text-fg">
