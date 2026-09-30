@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { achievementName } from "@/lib/achievements";
 import { useI18n } from "@/lib/use-locale";
 import { Alert, Check, Info } from "./icons";
 
@@ -167,6 +168,7 @@ export function ChatAvatar({ title, id, size = 44 }) {
 // Pixel-art medal from /public, with a neutral fallback for types that have
 // no artwork yet.
 export function AchievementArt({ type, collection = "v1", className }) {
+  const { locale } = useI18n();
   const [broken, setBroken] = useState(false);
   const file = encodeURIComponent(String(type || "").toLowerCase());
   return (
@@ -179,7 +181,7 @@ export function AchievementArt({ type, collection = "v1", className }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={`/achievements/${collection}/${file}.webp`}
-          alt={type}
+          alt={achievementName(type, locale)}
           className="h-full w-full object-cover"
           loading="lazy"
           onError={() => setBroken(true)}
@@ -196,10 +198,6 @@ export function Row({ label, children }) {
       <span className="min-w-0 truncate text-right font-medium tabular">{children}</span>
     </div>
   );
-}
-
-export function titleCase(text) {
-  return String(text || "").replace(/(^|\s)\S/g, (c) => c.toUpperCase());
 }
 
 // iOS-style segmented control; `format` renders each option's label.

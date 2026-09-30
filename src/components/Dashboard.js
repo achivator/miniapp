@@ -18,8 +18,8 @@ import {
   bilingual,
   SectionHeader,
   Skeleton,
-  titleCase,
 } from "@/components/ui";
+import { achievementName } from "@/lib/achievements";
 import { intlLocale } from "@/lib/i18n";
 import { useI18n } from "@/lib/use-locale";
 import { Alert, ChevronRight, Clock, Coins, Medal, Pool, Question, Sparkles } from "@/components/icons";
@@ -327,7 +327,7 @@ function CreatorChats({ chats }) {
 }
 
 function Achievements({ groups }) {
-  const { L } = useI18n();
+  const { L, locale } = useI18n();
   if (groups === null) {
     return (
       <Card className="grid grid-cols-4 gap-3">
@@ -363,7 +363,7 @@ function Achievements({ groups }) {
                 className="aspect-square w-full transition group-active:scale-95"
               />
               <span className="line-clamp-2 text-center text-[11px] font-medium leading-tight text-hint">
-                {titleCase(a.type)}
+                {achievementName(a.type, locale)}
               </span>
             </Link>
           </li>

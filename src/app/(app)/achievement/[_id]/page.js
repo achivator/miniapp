@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { useInitDataRaw } from "@tma.js/sdk-react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
+import { achievementName } from "@/lib/achievements";
 import { apiFetch, sendTonTransaction, sleep } from "@/lib/client-api";
 import { formatDecimal, intlLocale } from "@/lib/i18n";
 import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
-import { AchievementArt, Button, Card, ChatAvatar, Notice, Skeleton, bilingual, titleCase } from "@/components/ui";
+import { AchievementArt, Button, Card, ChatAvatar, Notice, Skeleton, bilingual } from "@/components/ui";
 import { Check, Medal, Sparkles } from "@/components/icons";
 
 function formatTon(nanotons, locale) {
@@ -170,7 +171,7 @@ function AchievementView({ id }) {
           </div>
 
           <div className="space-y-2 text-center">
-            <h1 className="brand-heading text-[30px] leading-tight">{titleCase(achievement.type)}</h1>
+            <h1 className="brand-heading text-[30px] leading-tight">{achievementName(achievement.type, locale)}</h1>
             {achievement.date && (
               <p className="mono-label text-hint">
                 {new Date(achievement.date).toLocaleDateString(intlLocale(locale), {
