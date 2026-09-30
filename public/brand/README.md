@@ -19,4 +19,6 @@ illustrations. All five final PNGs preserve transparency.
 The exact prompts are in `docs/brand/prompts.json`. These are marketing assets;
 existing earned achievement art, backend rarity and trigger rules are unchanged.
 Next Image provides responsive delivery. `.brand-landing` scopes the public
-visual identity; the Telegram dashboard retains its theme semantics.
+visual identity; the Telegram app screens use the same palette through the
+`:root` tokens in `src/app/globals.css` (light or dark follows Telegram's theme),
+with the hero character on the dashboard and on the "open in Telegram" screen.

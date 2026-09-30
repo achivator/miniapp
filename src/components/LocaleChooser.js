@@ -1,11 +1,11 @@
 "use client";
 
 import { useLayoutEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { isTelegramLaunch } from "@/lib/launch";
 import { LOCALES, preferredLocale } from "@/lib/locale";
-import { Medal } from "./icons";
 
 const LABELS = { ru: "Русский", en: "English" };
 
@@ -33,11 +33,17 @@ export function LocaleChooser({ page }) {
   if (leaving) return null;
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 text-center">
-      <div className="hero-gradient flex h-20 w-20 items-center justify-center rounded-[26px] shadow-lg">
-        <Medal className="h-11 w-11" />
-      </div>
+      <Image
+        src="/brand/achivator-hero-generated.png"
+        alt=""
+        width={1280}
+        height={1280}
+        priority
+        sizes="180px"
+        className="h-auto w-[180px] -scale-x-100 drop-shadow-[0_16px_10px_rgba(67,48,30,0.13)]"
+      />
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold">Achivator</h1>
+        <h1 className="brand-heading text-[28px]">Achivator</h1>
         <p className="text-hint text-balance">
           <span lang="ru">Награды и ачивки для Telegram-чатов.</span>{" "}
           <span lang="en">Rewards and achievements for Telegram chats.</span>
@@ -50,7 +56,7 @@ export function LocaleChooser({ page }) {
             href={`/${locale}${page}`}
             hrefLang={locale}
             lang={locale}
-            className="rounded-xl bg-accent px-5 py-3 font-semibold text-accent-fg active:opacity-80"
+            className="inline-flex h-12 items-center rounded-xl bg-button px-6 text-[15px] font-semibold text-accent-fg active:opacity-80"
           >
             {LABELS[locale]}
           </Link>

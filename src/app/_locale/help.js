@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui";
-import { Check, Info, Medal } from "@/components/icons";
+import { BrandMark } from "@/components/brand";
+import { Check, Info } from "@/components/icons";
 import { TelegramBack } from "@/components/TelegramBack";
 import { LangSwitch } from "@/components/LangSwitch";
 import { HomeLink } from "@/components/HomeLink";
@@ -45,8 +46,8 @@ function Cmd({ children }) {
 
 function Done({ label, children }) {
   return (
-    <div className="tint-success flex items-start gap-2 rounded-xl px-3 py-2.5 text-[13px] leading-snug text-success">
-      <Check className="mt-px h-4 w-4 shrink-0" />
+    <div className="tint-success flex items-start gap-2 rounded-xl px-3 py-2.5 text-[13px] leading-snug text-fg">
+      <Check className="mt-px h-4 w-4 shrink-0 text-success" />
       <span>
         <b>{label}</b> {children}
       </span>
@@ -56,7 +57,7 @@ function Done({ label, children }) {
 
 function Tip({ children }) {
   return (
-    <div className="tint-accent flex items-start gap-2 rounded-xl px-3 py-2.5 text-[13px] leading-snug text-accent">
+    <div className="flex items-start gap-2 rounded-xl border border-dashed border-[color:var(--control-border)] px-3 py-2.5 text-[13px] leading-snug">
       <Info className="mt-px h-4 w-4 shrink-0" />
       <span>{children}</span>
     </div>
@@ -67,10 +68,10 @@ function Step({ n, id, title, children }) {
   return (
     <Card id={id} className="scroll-mt-4 space-y-3">
       <div className="flex items-center gap-3">
-        <span className="hero-gradient flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[15px] font-bold tabular">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-button text-[14px] font-bold text-accent-fg tabular">
           {n}
         </span>
-        <h2 className="text-[17px] font-bold leading-tight">{title}</h2>
+        <h2 className="brand-heading text-[18px] leading-tight">{title}</h2>
       </div>
       <div className="space-y-3 text-[15px] leading-relaxed">{children}</div>
     </Card>
@@ -123,13 +124,11 @@ function Guide({ locale }) {
     <main className="pb-safe mx-auto flex min-h-screen max-w-xl flex-col gap-5 px-4">
       <header className="flex items-center justify-between gap-3 py-3">
         <HomeLink locale={locale} className="flex items-center gap-2" aria-label="Achivator">
-          <span className="hero-gradient flex h-8 w-8 items-center justify-center rounded-[10px]">
-            <Medal className="h-[18px] w-[18px]" />
-          </span>
-          <span className="text-[17px] font-bold tracking-tight">Achivator</span>
+          <BrandMark />
+          <span className="brand-heading text-[17px]">Achivator</span>
         </HomeLink>
         <div className="flex items-center gap-2">
-          <span className="tint-gold rounded-full px-2.5 py-1 text-xs font-medium text-[color:var(--gold-text)]">
+          <span className="mono-label rounded-md border border-[color:color-mix(in_srgb,var(--gold)_55%,transparent)] px-2 py-1 text-[color:var(--gold-text)]">
             {L("Тестнет", "Testnet")}
           </span>
           <LangSwitch locale={locale} page="/help" />
@@ -137,7 +136,7 @@ function Guide({ locale }) {
       </header>
 
       <section className="space-y-2">
-        <h1 className="text-[28px] font-bold leading-tight tracking-tight text-balance">
+        <h1 className="brand-heading text-[30px] leading-tight text-balance">
           {L("Как подключить свой чат", "How to connect your chat")}
         </h1>
         <p className="text-[15px] leading-relaxed text-hint">
@@ -149,7 +148,7 @@ function Guide({ locale }) {
       </section>
 
       <Card className="space-y-2">
-        <p className="font-semibold">{L("Что понадобится", "What you need")}</p>
+        <p className="card-title">{L("Что понадобится", "What you need")}</p>
         <ul className="list-disc space-y-1 pl-5 text-[15px] leading-relaxed marker:text-hint">
           <li>
             {L("Telegram-группа, где вы —", "A Telegram group where you are the")} <b>{L("создатель", "creator")}</b>{" "}
@@ -164,8 +163,12 @@ function Guide({ locale }) {
 
       <nav aria-label={L("Шаги", "Steps")} className="flex flex-wrap gap-2">
         {toc.map(([name, label], i) => (
-          <a key={name} href={`#${name}`} className="rounded-full bg-surface px-3 py-1.5 text-[13px] font-medium">
-            <span className="text-hint tabular">{i + 1}.</span> {label}
+          <a
+            key={name}
+            href={`#${name}`}
+            className="rounded-[7px] border border-[color:var(--control-border)] bg-surface px-2.5 py-1.5 text-[13px] font-medium"
+          >
+            <span className="mono-label text-hint">{String(i + 1).padStart(2, "0")}</span> {label}
           </a>
         ))}
       </nav>
@@ -456,7 +459,7 @@ function Guide({ locale }) {
       </Step>
 
       <section className="space-y-2.5">
-        <h2 className="px-1 text-[13px] font-semibold uppercase tracking-wide text-hint">{L("Что дальше", "What's next")}</h2>
+        <h2 className="mono-label px-1 text-hint">{L("Что дальше", "What's next")}</h2>
         <Card className="space-y-3 text-[15px] leading-relaxed">
           <p>
             <b>{L("Баллы за реакции.", "Points for reactions.")}</b>{" "}
@@ -524,7 +527,7 @@ function Guide({ locale }) {
       </section>
 
       <section className="space-y-2.5">
-        <h2 className="px-1 text-[13px] font-semibold uppercase tracking-wide text-hint">
+        <h2 className="mono-label px-1 text-hint">
           {L("Если что-то не так", "Troubleshooting")}
         </h2>
         <Card className="py-1">
@@ -598,7 +601,7 @@ function Guide({ locale }) {
 
       <a
         href={APP_URL}
-        className="flex h-12 items-center justify-center rounded-xl bg-accent px-5 text-[15px] font-semibold text-accent-fg active:opacity-80"
+        className="flex h-12 items-center justify-center rounded-xl bg-button px-5 text-[15px] font-semibold text-accent-fg active:opacity-80"
       >
         {L("Открыть Achivator в Telegram", "Open Achivator in Telegram")}
       </a>

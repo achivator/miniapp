@@ -14,6 +14,7 @@ module.exports = {
         fg: "var(--text)",
         hint: "var(--hint)",
         accent: "var(--accent)",
+        button: "var(--button)",
         "accent-fg": "var(--accent-text)",
         link: "var(--link)",
         danger: "var(--danger)",

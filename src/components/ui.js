@@ -21,7 +21,7 @@ export function Spinner({ className = "h-4 w-4" }) {
 export function Card({ className, flush = false, children, ...rest }) {
   return (
     <div
-      className={cx("rounded-card bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)]", !flush && "p-4", className)}
+      className={cx("brand-panel rounded-card bg-surface", !flush && "p-4", className)}
       {...rest}
     >
       {children}
@@ -33,7 +33,7 @@ export function SectionHeader({ title, hint, action }) {
   return (
     <div className="flex items-end justify-between px-1">
       <div>
-        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-hint">{title}</h2>
+        <h2 className="mono-label text-hint">{title}</h2>
         {hint && <p className="mt-0.5 text-xs text-hint">{hint}</p>}
       </div>
       {action}
@@ -41,11 +41,12 @@ export function SectionHeader({ title, hint, action }) {
   );
 }
 
+// Primary is the landing's blue CTA, secondary its outlined one.
 const BUTTON_VARIANTS = {
-  primary: "bg-accent text-accent-fg",
-  secondary: "tint-accent text-accent",
+  primary: "bg-button text-accent-fg",
+  secondary: "border border-[color:var(--control-border)] bg-transparent text-fg",
   ghost: "text-link",
-  danger: "tint-danger text-danger",
+  danger: "border border-[color:color-mix(in_srgb,var(--danger)_45%,transparent)] text-danger",
 };
 
 export function Button({ variant = "primary", size = "md", busy = false, className, children, disabled, ...rest }) {
@@ -54,7 +55,7 @@ export function Button({ variant = "primary", size = "md", busy = false, classNa
       className={cx(
         "inline-flex select-none items-center justify-center gap-2 rounded-xl font-semibold transition",
         "active:scale-[0.98] active:opacity-85 disabled:cursor-not-allowed disabled:opacity-45",
-        size === "sm" ? "h-9 px-3.5 text-[14px]" : "h-12 px-5 text-[15px]",
+        size === "sm" ? "min-h-9 px-3.5 py-1.5 text-center text-[14px] leading-tight" : "h-12 px-5 text-[15px]",
         BUTTON_VARIANTS[variant],
         className,
       )}
@@ -67,16 +68,23 @@ export function Button({ variant = "primary", size = "md", busy = false, classNa
   );
 }
 
-export function Chip({ tone = "accent", icon, children }) {
+// A tag like the landing's rarity labels: a hairline frame, square-ish corners.
+// Neutral by default: blue is for things that can be tapped.
+export function Chip({ tone = "neutral", icon, children }) {
   const tones = {
-    accent: "tint-accent text-accent",
-    success: "tint-success text-success",
-    danger: "tint-danger text-danger",
-    gold: "tint-gold text-[color:var(--gold-text)]",
-    neutral: "bg-bg text-hint",
+    accent: "border-[color:color-mix(in_srgb,var(--accent)_40%,transparent)] text-accent",
+    success: "border-[color:color-mix(in_srgb,var(--success)_45%,transparent)] text-success",
+    danger: "border-[color:color-mix(in_srgb,var(--danger)_45%,transparent)] text-danger",
+    gold: "border-[color:color-mix(in_srgb,var(--gold)_55%,transparent)] text-[color:var(--gold-text)]",
+    neutral: "border-[color:var(--control-border)] text-hint",
   };
   return (
-    <span className={cx("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium", tones[tone])}>
+    <span
+      className={cx(
+        "inline-flex items-center gap-1 rounded-[7px] border bg-surface px-2 py-[3px] text-xs font-medium",
+        tones[tone],
+      )}
+    >
       {icon}
       {children}
     </span>
@@ -88,10 +96,12 @@ export function Chip({ tone = "accent", icon, children }) {
 export function Notice({ notice }) {
   const locale = useLocale();
   if (!notice) return null;
+  // Information reads like the landing's dashed "Where the TON goes" note;
+  // outcomes keep their color.
   const map = {
     ok: { cls: "tint-success text-success", Icon: Check },
     err: { cls: "tint-danger text-danger", Icon: Alert },
-    info: { cls: "tint-accent text-accent", Icon: Info },
+    info: { cls: "border border-dashed border-[color:var(--control-border)] text-fg", Icon: Info },
   };
   const { cls, Icon } = map[notice.kind] || map.info;
   return (
@@ -109,8 +119,12 @@ export function Skeleton({ className }) {
 export function EmptyState({ icon, title, children }) {
   return (
     <Card className="flex flex-col items-center gap-2 py-8 text-center">
-      {icon && <div className="tint-accent mb-1 flex h-12 w-12 items-center justify-center rounded-2xl text-accent">{icon}</div>}
-      <p className="font-semibold">{title}</p>
+        {icon && (
+        <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl border border-dashed border-[color:var(--control-border)] text-hint">
+          {icon}
+        </div>
+      )}
+      <p className="brand-heading text-[17px]">{title}</p>
       {children && <p className="max-w-[18rem] text-sm text-hint text-balance">{children}</p>}
     </Card>
   );
@@ -131,7 +145,8 @@ export function ChatAvatar({ title, id, size = 44 }) {
         width: size,
         height: size,
         fontSize: size * 0.42,
-        background: `linear-gradient(135deg, hsl(${hue} 80% 62%), hsl(${hue + 25} 72% 50%))`,
+        // muted, to sit on paper rather than glow on it
+        background: `linear-gradient(135deg, hsl(${hue} 38% 58%), hsl(${hue + 20} 34% 44%))`,
       }}
       aria-hidden="true"
     >
@@ -146,9 +161,9 @@ export function AchievementArt({ type, collection = "v1", className }) {
   const [broken, setBroken] = useState(false);
   const file = encodeURIComponent(String(type || "").toLowerCase());
   return (
-    <div className={cx("overflow-hidden rounded-2xl bg-white ring-1 ring-black/5", className)}>
+    <div className={cx("stage overflow-hidden rounded-[14px] border border-[color:var(--separator)]", className)}>
       {broken ? (
-        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-100 to-amber-300 text-3xl">
+        <div className="flex h-full w-full items-center justify-center text-3xl">
           🏅
         </div>
       ) : (
@@ -181,14 +196,14 @@ export function titleCase(text) {
 // iOS-style segmented control; `format` renders each option's label.
 export function Segmented({ options, value, onChange, format }) {
   return (
-    <div className="flex rounded-xl bg-bg p-1">
+    <div className="flex rounded-xl border border-[color:var(--separator)] bg-bg p-1">
       {options.map((option) => (
         <button
           key={option}
           type="button"
           className={cx(
             "h-9 flex-1 rounded-lg text-[14px] font-semibold transition",
-            value === option ? "bg-surface text-fg shadow-sm" : "text-hint",
+            value === option ? "brand-panel bg-surface text-fg" : "text-hint",
           )}
           onClick={() => onChange(option)}
         >

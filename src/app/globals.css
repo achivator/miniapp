@@ -3,55 +3,91 @@
 @tailwind utilities;
 
 /*
- * Design tokens. Inside Telegram the SDK publishes the user's theme as
- * --tg-theme-* (SDKProvider cssVars); in a plain browser the --fb-* values
- * below stand in, following the system light/dark preference.
+ * Design tokens: the Achivator brand the landing introduced (warm paper,
+ * ink, hardware), for the app screens too. Light or dark follows Telegram's
+ * theme (AppShell sets <html data-theme>), in a plain browser the system
+ * preference. The accent is the landing's blue, not the user's Telegram
+ * button color, so every screen looks the same in every Telegram theme.
+ * .brand-landing (below) keeps its own copy for the public pages.
  */
 :root {
-  --fb-bg: #f1f2f6;
-  --fb-surface: #ffffff;
-  --fb-text: #10131a;
-  --fb-hint: #7d8390;
-  --fb-accent: #2f80ed;
-  --fb-accent-text: #ffffff;
-  --fb-danger: #e5484d;
-  --fb-separator: rgba(16, 19, 26, 0.08);
-
-  --bg: var(--tg-theme-secondary-bg-color, var(--fb-bg));
-  --surface: var(--tg-theme-bg-color, var(--fb-surface));
-  --text: var(--tg-theme-text-color, var(--fb-text));
-  --hint: var(--tg-theme-hint-color, var(--fb-hint));
-  --accent: var(--tg-theme-button-color, var(--fb-accent));
-  --accent-text: var(--tg-theme-button-text-color, var(--fb-accent-text));
-  --link: var(--tg-theme-link-color, var(--accent));
-  --danger: var(--tg-theme-destructive-text-color, var(--fb-danger));
-  --separator: var(--tg-theme-section-separator-color, var(--fb-separator));
-  --success: #22a55a;
+  --bg: #f7f5ef;
+  --surface: #fdfcf8;
+  --text: #292d29;
+  --hint: #686c63;
+  --separator: #dedfd5;
+  /* outlines of secondary buttons, tags and inputs */
+  --control-border: #cbcfc1;
+  --accent: #2f80ed;
+  --accent-text: #ffffff;
+  --link: var(--accent);
+  --danger: #e5484d;
+  --success: #1e8a4c;
   --gold: #f5a524;
   --gold-text: #9a6200;
+  /* primary buttons: the landing's CTA blue in both themes (white on the
+     dark theme's lighter link blue would be too faint) */
+  --button: #2f80ed;
+  /* the dark brand block (landing finale, dashboard balance) */
+  --ink: #272e28;
+  --ink-text: #f5f1e5;
+  --ink-border: #454d40;
+  --brand-amber: #a46425;
+  /* pastel stage behind character and achievement art */
+  --stage-from: #f3e4eb;
+  --stage-to: #e8e2ef;
 
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --fb-bg: #0e1116;
-    --fb-surface: #181c23;
-    --fb-text: #eef1f6;
-    --fb-hint: #8a919e;
-    --fb-accent: #4c9bff;
-    --fb-danger: #ff6b6f;
-    --fb-separator: rgba(255, 255, 255, 0.08);
+  :root:not([data-theme="light"]) {
+    --bg: #171c19;
+    --surface: #202621;
+    --text: #f0eee4;
+    --hint: #a4ae9e;
+    --separator: #364036;
+    --control-border: #505d4e;
+    --accent: #4c9bff;
+    --danger: #ff6b6f;
+    --success: #4cc27a;
     --gold-text: #f5b544;
+    --ink: #272e28;
+    --ink-border: #454d40;
+    --brand-amber: #d6b482;
+    --stage-from: #cfc2d6;
+    --stage-to: #b3a8c0;
+    color-scheme: dark;
   }
 }
 
-/* Telegram's own theme wins over the OS preference (set by AppShell). */
-:root[data-theme="light"] {
-  --gold-text: #9a6200;
-}
+/* Telegram's own light/dark choice wins over the OS preference. */
 :root[data-theme="dark"] {
+  --bg: #171c19;
+  --surface: #202621;
+  --text: #f0eee4;
+  --hint: #a4ae9e;
+  --separator: #364036;
+  --control-border: #505d4e;
+  --accent: #4c9bff;
+  --danger: #ff6b6f;
+  --success: #4cc27a;
   --gold-text: #f5b544;
+  --ink: #272e28;
+  --ink-border: #454d40;
+  --brand-amber: #d6b482;
+  --stage-from: #cfc2d6;
+  --stage-to: #b3a8c0;
+  color-scheme: dark;
+}
+
+/* TON Connect's button in the top bar: flat like the round controls beside it. */
+[data-tc-connect-button],
+[data-tc-dropdown-button] {
+  box-shadow: none !important;
+}
+[data-tc-dropdown-button] {
+  border: 1px solid var(--control-border) !important;
 }
 
 /* A Telegram launch of "/" shows the dashboard, never the web landing. */
@@ -99,6 +135,35 @@ body {
   .tint-gold {
     background: color-mix(in srgb, var(--gold) 16%, transparent);
   }
+  /* Panels: a hairline and a flat 3px "paper" shadow instead of a blur. */
+  .brand-panel {
+    border: 1px solid var(--separator);
+    box-shadow: 0 3px 0 rgba(41, 45, 41, 0.03);
+  }
+  /* Hardware labels: ACH / 001, 01 / CHAT, EPIC. */
+  .mono-label {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .ink-card {
+    background: var(--ink);
+    color: var(--ink-text);
+    border: 1px solid var(--ink-border);
+  }
+  .stage {
+    background: radial-gradient(ellipse at center, var(--stage-from), var(--stage-to));
+  }
+  /* titles of cards: bold with the headings' tight tracking, body size */
+  .card-title {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .brand-heading {
+    font-weight: 750;
+    letter-spacing: -0.035em;
+  }
   .hero-gradient {
     background: linear-gradient(135deg, var(--accent) 0%,
         color-mix(in srgb, var(--accent) 55%, #7b3fe4) 100%);
@@ -145,8 +210,10 @@ body {
   }
 }
 
-/* Public identity: warm paper and hardware. App semantics stay Telegram-native. */
+/* Public identity: warm paper and hardware. The app screens share the palette
+   through the :root tokens above; the landing keeps its own copy here. */
 .brand-landing {
+  --success: #22a55a;
   --bg: #f7f5ef;
   --surface: #fdfcf8;
   --text: #292d29;

@@ -116,8 +116,8 @@ export function ClaimRules({ chatId, initDataRaw }) {
       <Card className="space-y-5">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <p className="font-semibold">{L("Новые баллы дозревают", "New points mature in")}</p>
-            {draft.maturation_days > 0 && <Chip tone="accent">{L("защита от накруток", "anti-farming on")}</Chip>}
+            <p className="card-title">{L("Новые баллы дозревают", "New points mature in")}</p>
+            {draft.maturation_days > 0 && <Chip>{L("защита от накруток", "anti-farming on")}</Chip>}
           </div>
           <Segmented
             options={MATURATION_OPTIONS}
@@ -134,7 +134,7 @@ export function ClaimRules({ chatId, initDataRaw }) {
         </div>
 
         <div className="space-y-2">
-          <p className="font-semibold">{L("Дни вывода", "Claim days")}</p>
+          <p className="card-title">{L("Дни вывода", "Claim days")}</p>
           <div className="grid grid-cols-7 gap-1.5">
             {WEEKDAYS.map(([day, ruLabel, enLabel]) => {
               const on = draft.claim_days.length === 0 || draft.claim_days.includes(day);
@@ -144,8 +144,12 @@ export function ClaimRules({ chatId, initDataRaw }) {
                   type="button"
                   onClick={() => toggleDay(day)}
                   className={cx(
-                    "h-10 rounded-xl text-[13px] font-semibold transition",
-                    draft.claim_days.includes(day) ? "bg-accent text-accent-fg" : on ? "tint-accent text-accent" : "bg-bg text-hint",
+                    "h-10 rounded-xl border text-[13px] font-semibold transition",
+                    draft.claim_days.includes(day)
+                      ? "ink-card"
+                      : on
+                        ? "border-[color:var(--control-border)] bg-surface text-fg"
+                        : "border-dashed border-[color:var(--separator)] text-hint",
                   )}
                 >
                   {L(ruLabel, enLabel)}
@@ -163,7 +167,7 @@ export function ClaimRules({ chatId, initDataRaw }) {
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="font-semibold">{L("Приостановить вывод", "Pause claims")}</p>
+              <p className="card-title">{L("Приостановить вывод", "Pause claims")}</p>
               <p className="text-[13px] leading-snug text-hint">
                 {L("Уезжаете в отпуск? Никто не сможет забрать баллы, пока вы не вернётесь.", "Going on vacation? Nobody can claim until you're back.")}
               </p>

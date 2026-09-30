@@ -33,8 +33,8 @@ function Totals({ data, ledger }) {
 
   return (
     <Card>
-      <p className="text-[13px] text-hint">{L("Причитается участникам", "Owed to members")}</p>
-      <p className="mt-1 text-[30px] font-bold leading-none tracking-tight tabular">
+      <p className="mono-label text-hint">{L("Причитается участникам", "Owed to members")}</p>
+      <p className="brand-heading mt-2 text-[30px] leading-none tabular">
         {t.num(totals.owed_points)}{" "}
         <span className="text-[17px] font-semibold text-hint">
           {L(t.plural(totals.owed_points, ["балл", "балла", "баллов"], []), "pts")}
@@ -320,7 +320,7 @@ function MembersScreen({ chatId }) {
       <div className="flex items-center gap-3">
         <ChatAvatar title={chat?.title} id={chatId} size={48} />
         <div className="min-w-0">
-          <h1 className="truncate text-[20px] font-bold leading-tight">{L("Счета участников", "Member accounts")}</h1>
+          <h1 className="brand-heading truncate text-[24px] leading-tight">{L("Счета участников", "Member accounts")}</h1>
           <p className="truncate text-[13px] text-hint">{chat?.title || L(`Чат ${chatId}`, `Chat ${chatId}`)}</p>
         </div>
       </div>
