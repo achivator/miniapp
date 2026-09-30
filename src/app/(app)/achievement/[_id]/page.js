@@ -35,7 +35,7 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
           <Sparkles className="h-5 w-5" />
         </div>
         <div>
-          <p className="font-semibold">{L("Выпуск NFT — скоро", "Mint as NFT — coming soon")}</p>
+          <p className="card-title">{L("Выпуск NFT — скоро", "Mint as NFT — coming soon")}</p>
           <p className="mt-0.5 text-[14px] leading-snug text-hint">
             {L("Эту медаль пока нельзя выпустить в TON-кошелёк.", "This medal can't be minted to a TON wallet yet.")}
           </p>
@@ -51,7 +51,7 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
           <Check className="h-5 w-5" />
         </div>
         <div>
-          <p className="font-semibold">{L("Выпущено", "Minted")}</p>
+          <p className="card-title">{L("Выпущено", "Minted")}</p>
           <p className="mt-0.5 text-[14px] leading-snug text-hint">
             {L("Эта медаль — NFT в вашем TON-кошельке.", "This medal is an NFT in your TON wallet.")}
           </p>
@@ -109,7 +109,7 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
           <Sparkles className="h-5 w-5" />
         </div>
         <div>
-          <p className="font-semibold">{L("Выпустить как NFT", "Mint as NFT")}</p>
+          <p className="card-title">{L("Выпустить как NFT", "Mint as NFT")}</p>
           <p className="mt-0.5 text-[14px] leading-snug text-hint">
             {L(
               `Храните медаль в TON-кошельке как коллекционный предмет. До ${formatTon(nft.price_ton, locale)} TON, неизрасходованные TON вернутся.`,
@@ -155,7 +155,7 @@ function AchievementView({ id }) {
           {/* The landing's character card: a pastel stage, an edition label
               and a rarity-style tag. */}
           <div className="brand-panel stage relative mx-auto mt-1 w-full max-w-sm overflow-hidden rounded-[22px] px-5 pb-5 pt-11">
-            <span className="mono-label absolute left-4 top-4 text-[#5f566c]">
+            <span className="mono-label absolute left-4 top-4 text-[#4a4257]">
               ACH / {String(achievement.collection || "v1").toUpperCase()}
             </span>
             <AchievementArt

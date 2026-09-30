@@ -169,7 +169,7 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
       <div className="flex items-center gap-3">
         <ChatAvatar title={reward.title} id={reward.chat_id} />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">{reward.title || L(`Чат ${reward.chat_id}`, `Chat ${reward.chat_id}`)}</p>
+          <p className="card-title truncate">{reward.title || L(`Чат ${reward.chat_id}`, `Chat ${reward.chat_id}`)}</p>
           <p className="text-[13px] text-hint tabular">
             <span className="font-semibold text-fg">{t.num(reward.available_points)}</span>{" "}
             {L(t.plural(reward.available_points, ["балл", "балла", "баллов"], []), "pts")}
@@ -193,7 +193,7 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
           )}
           {reward.jetton_master && closed && <Chip tone="neutral">{closed}</Chip>}
           {reward.maturing_points > 0 && (
-            <Chip tone="accent" icon={<Clock className="h-3.5 w-3.5" />}>
+            <Chip icon={<Clock className="h-3.5 w-3.5" />}>
               {L(
                 `+${t.pts(reward.maturing_points)} ${t.plural(reward.maturing_points, ["дозревает", "дозревают", "дозревают"], [])}`,
                 `+${t.pts(reward.maturing_points)} maturing`,
@@ -346,7 +346,7 @@ function Achievements({ groups }) {
   return groups.map(({ chat, achievements }) => (
     <Card key={chat.id} className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="truncate font-semibold tracking-tight">{chat.title || L(`Чат ${chat.id}`, `Chat ${chat.id}`)}</p>
+        <p className="card-title truncate">{chat.title || L(`Чат ${chat.id}`, `Chat ${chat.id}`)}</p>
         <span className="mono-label shrink-0 text-hint">ACH × {String(achievements.length).padStart(2, "0")}</span>
       </div>
       <ul className="grid grid-cols-4 gap-x-3 gap-y-4">
@@ -460,7 +460,7 @@ export function Dashboard() {
         <Card className="flex items-center gap-3 border-dashed active:opacity-80">
           <Image src="/brand/locked.png" alt="" width={1280} height={1280} sizes="52px" className="h-[52px] w-[52px] shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="font-semibold tracking-tight">{L("Награды в вашем чате", "Reward your own chat")}</p>
+            <p className="card-title">{L("Награды в вашем чате", "Reward your own chat")}</p>
             <p className="text-[13px] text-hint">
               {L("Как подключить свой чат — пошаговая инструкция", "Step-by-step setup guide")}
             </p>

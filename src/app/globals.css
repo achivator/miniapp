@@ -22,9 +22,12 @@
   --accent-text: #ffffff;
   --link: var(--accent);
   --danger: #e5484d;
-  --success: #22a55a;
+  --success: #1e8a4c;
   --gold: #f5a524;
   --gold-text: #9a6200;
+  /* primary buttons: the landing's CTA blue in both themes (white on the
+     dark theme's lighter link blue would be too faint) */
+  --button: #2f80ed;
   /* the dark brand block (landing finale, dashboard balance) */
   --ink: #272e28;
   --ink-text: #f5f1e5;
@@ -47,6 +50,7 @@
     --control-border: #505d4e;
     --accent: #4c9bff;
     --danger: #ff6b6f;
+    --success: #4cc27a;
     --gold-text: #f5b544;
     --ink: #272e28;
     --ink-border: #454d40;
@@ -67,6 +71,7 @@
   --control-border: #505d4e;
   --accent: #4c9bff;
   --danger: #ff6b6f;
+  --success: #4cc27a;
   --gold-text: #f5b544;
   --ink: #272e28;
   --ink-border: #454d40;
@@ -74,6 +79,15 @@
   --stage-from: #cfc2d6;
   --stage-to: #b3a8c0;
   color-scheme: dark;
+}
+
+/* TON Connect's button in the top bar: flat like the round controls beside it. */
+[data-tc-connect-button],
+[data-tc-dropdown-button] {
+  box-shadow: none !important;
+}
+[data-tc-dropdown-button] {
+  border: 1px solid var(--control-border) !important;
 }
 
 /* A Telegram launch of "/" shows the dashboard, never the web landing. */
@@ -141,6 +155,11 @@ body {
   .stage {
     background: radial-gradient(ellipse at center, var(--stage-from), var(--stage-to));
   }
+  /* titles of cards: bold with the headings' tight tracking, body size */
+  .card-title {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
   .brand-heading {
     font-weight: 750;
     letter-spacing: -0.035em;
@@ -194,6 +213,7 @@ body {
 /* Public identity: warm paper and hardware. The app screens share the palette
    through the :root tokens above; the landing keeps its own copy here. */
 .brand-landing {
+  --success: #22a55a;
   --bg: #f7f5ef;
   --surface: #fdfcf8;
   --text: #292d29;

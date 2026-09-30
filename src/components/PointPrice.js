@@ -4,10 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Address } from "@ton/core";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { apiFetch, sendTonTransaction, shortenAddress, sleep } from "@/lib/client-api";
-import { formatDate, formatExact, formatUnits as formatAmount } from "@/lib/format";
+import { formatDate, formatExact } from "@/lib/format";
 import { compareDecimal, normalizePointPrice, priceFitsDecimals } from "@/lib/point-price";
 import { formatUnits, pointsToJettons } from "@/lib/ton/amounts";
-import { useL } from "@/lib/use-locale";
+import { useI18n, useL } from "@/lib/use-locale";
 import { Button, Card, Chip, Notice, SectionHeader } from "./ui";
 import { useHaptic } from "./AppShell";
 
@@ -67,6 +67,7 @@ function invalidText(L, message) {
 // in the card so typing a price back and forth does not re-check the chain.
 function PayoutCoverage({ chatId, initDataRaw, symbol, state, setState }) {
   const L = useL();
+  const t = useI18n();
   const haptic = useHaptic();
   const wallet = useTonAddress();
   const [tonConnectUI] = useTonConnectUI();
@@ -102,7 +103,8 @@ function PayoutCoverage({ chatId, initDataRaw, symbol, state, setState }) {
   }
 
   const cDec = coverage.decimals ?? null;
-  const amount = (units) => `${formatAmount(units, cDec)} ${symbol}`;
+  // the same grouping as the rest of the page ("5 230,5" in Russian)
+  const amount = (units) => `${t.units(units, cDec)} ${symbol}`;
   const suggested = formatExact(coverage.suggested_daily_limit, cDec);
   const isAdminWallet = coverage.pool_admin ? sameAddress(coverage.pool_admin, wallet) : false;
   const limitRaisable = !coverage.enough_limit && BigInt(coverage.suggested_daily_limit) > BigInt(coverage.daily_limit);
@@ -449,8 +451,8 @@ export function PointPrice({ chatId, initDataRaw }) {
       <Card className="space-y-4">
         <div className="space-y-2">
           <div className="flex items-baseline justify-between">
-            <p className="font-semibold">{L("1 балл =", "1 point =")}</p>
-            <Chip tone={data.custom ? "accent" : "neutral"}>
+            <p className="card-title">{L("1 балл =", "1 point =")}</p>
+            <Chip>
               {data.custom ? L("ваша цена", "your price") : L("по умолчанию", "platform default")}
             </Chip>
           </div>
@@ -495,7 +497,9 @@ export function PointPrice({ chatId, initDataRaw }) {
           <div className="space-y-2 rounded-xl bg-bg p-3">
             <div className="flex items-baseline justify-between gap-3">
               <p className="text-[13px] font-semibold">{L("Снижение запланировано", "Decrease scheduled")}</p>
-              <Chip tone="gold">{momentText(pending.effective_at * 1000)}</Chip>
+              <span className="shrink-0 whitespace-nowrap">
+                <Chip tone="gold">{momentText(pending.effective_at * 1000)}</Chip>
+              </span>
             </div>
             <p className="text-[13px] leading-snug text-hint tabular">
               {L("1 балл", "1 point")} = {pending.from ?? data.price} →{" "}

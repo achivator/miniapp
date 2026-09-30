@@ -46,8 +46,8 @@ function Cmd({ children }) {
 
 function Done({ label, children }) {
   return (
-    <div className="tint-success flex items-start gap-2 rounded-xl px-3 py-2.5 text-[13px] leading-snug text-success">
-      <Check className="mt-px h-4 w-4 shrink-0" />
+    <div className="tint-success flex items-start gap-2 rounded-xl px-3 py-2.5 text-[13px] leading-snug text-fg">
+      <Check className="mt-px h-4 w-4 shrink-0 text-success" />
       <span>
         <b>{label}</b> {children}
       </span>
@@ -68,7 +68,7 @@ function Step({ n, id, title, children }) {
   return (
     <Card id={id} className="scroll-mt-4 space-y-3">
       <div className="flex items-center gap-3">
-        <span className="ink-card flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[14px] font-bold tabular">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-button text-[14px] font-bold text-accent-fg tabular">
           {n}
         </span>
         <h2 className="brand-heading text-[18px] leading-tight">{title}</h2>
@@ -148,7 +148,7 @@ function Guide({ locale }) {
       </section>
 
       <Card className="space-y-2">
-        <p className="font-semibold">{L("Что понадобится", "What you need")}</p>
+        <p className="card-title">{L("Что понадобится", "What you need")}</p>
         <ul className="list-disc space-y-1 pl-5 text-[15px] leading-relaxed marker:text-hint">
           <li>
             {L("Telegram-группа, где вы —", "A Telegram group where you are the")} <b>{L("создатель", "creator")}</b>{" "}
@@ -163,8 +163,12 @@ function Guide({ locale }) {
 
       <nav aria-label={L("Шаги", "Steps")} className="flex flex-wrap gap-2">
         {toc.map(([name, label], i) => (
-          <a key={name} href={`#${name}`} className="rounded-full bg-surface px-3 py-1.5 text-[13px] font-medium">
-            <span className="text-hint tabular">{i + 1}.</span> {label}
+          <a
+            key={name}
+            href={`#${name}`}
+            className="rounded-[7px] border border-[color:var(--control-border)] bg-surface px-2.5 py-1.5 text-[13px] font-medium"
+          >
+            <span className="mono-label text-hint">{String(i + 1).padStart(2, "0")}</span> {label}
           </a>
         ))}
       </nav>
@@ -597,7 +601,7 @@ function Guide({ locale }) {
 
       <a
         href={APP_URL}
-        className="flex h-12 items-center justify-center rounded-xl bg-accent px-5 text-[15px] font-semibold text-accent-fg active:opacity-80"
+        className="flex h-12 items-center justify-center rounded-xl bg-button px-5 text-[15px] font-semibold text-accent-fg active:opacity-80"
       >
         {L("Открыть Achivator в Telegram", "Open Achivator in Telegram")}
       </a>

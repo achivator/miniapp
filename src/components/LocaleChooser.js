@@ -56,7 +56,7 @@ export function LocaleChooser({ page }) {
             href={`/${locale}${page}`}
             hrefLang={locale}
             lang={locale}
-            className="inline-flex h-12 items-center rounded-xl bg-accent px-6 text-[15px] font-semibold text-accent-fg active:opacity-80"
+            className="inline-flex h-12 items-center rounded-xl bg-button px-6 text-[15px] font-semibold text-accent-fg active:opacity-80"
           >
             {LABELS[locale]}
           </Link>

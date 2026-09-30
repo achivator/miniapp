@@ -262,7 +262,7 @@ function MemberScreen({ chatId, userId }) {
           </p>
           {(hasLeft(member.status) || member.status === "administrator" || member.status === "creator") && (
             <div className="mt-1">
-              <Chip tone={hasLeft(member.status) ? "danger" : "accent"}>
+              <Chip tone={hasLeft(member.status) ? "danger" : "neutral"}>
                 {hasLeft(member.status) ? L("Вышел из чата", "Left the chat") : L(...STATUS_LABELS[member.status])}
               </Chip>
             </div>

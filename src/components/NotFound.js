@@ -63,7 +63,7 @@ function Frame({ children }) {
   );
 }
 
-const primary = "inline-flex h-12 items-center rounded-xl bg-accent px-6 text-[15px] font-semibold text-accent-fg active:opacity-80";
+const primary = "inline-flex h-12 items-center rounded-xl bg-button px-6 text-[15px] font-semibold text-accent-fg active:opacity-80";
 const secondary =
   "inline-flex h-12 items-center rounded-xl border border-[color:var(--control-border)] px-6 text-[15px] font-semibold text-fg active:opacity-80";
 

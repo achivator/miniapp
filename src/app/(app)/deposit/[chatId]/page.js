@@ -264,7 +264,7 @@ function PoolManager({ chatId }) {
             ) : (
               <Chip tone="neutral">{L("Не активирован", "Not activated")}</Chip>
             )}
-            {info.jetton_master && <Chip tone="accent">{symbol}</Chip>}
+            {info.jetton_master && <Chip>{symbol}</Chip>}
           </div>
         </div>
       </div>
@@ -295,7 +295,7 @@ function PoolManager({ chatId }) {
               <Users className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="font-semibold">{L("Счета участников", "Member accounts")}</p>
+              <p className="card-title">{L("Счета участников", "Member accounts")}</p>
               <p className="text-[13px] text-hint">
                 {L("Кто сколько заработал, сколько причитается, история выплат", "Who earned what, what is owed, payout history")}
               </p>
@@ -414,7 +414,7 @@ function PoolManager({ chatId }) {
           <Card className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="font-semibold">
+                <p className="card-title">
                   {info.controls.paused ? L("Вывод приостановлен", "Claims paused") : L("Вывод открыт", "Claims open")}
                 </p>
                 <p className="text-[13px] text-hint">

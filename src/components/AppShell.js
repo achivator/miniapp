@@ -48,7 +48,7 @@ function OpenInTelegram() {
         </p>
       </div>
       <a
-        className="inline-flex h-12 items-center rounded-xl bg-accent px-6 text-[15px] font-semibold text-accent-fg active:opacity-80"
+        className="inline-flex h-12 items-center rounded-xl bg-button px-6 text-[15px] font-semibold text-accent-fg active:opacity-80"
         href="https://t.me/achivator_bot/app"
       >
         {L("Открыть в Telegram", "Open in Telegram")}
@@ -104,7 +104,7 @@ const TON_CONNECT_COLORS = {
     text: { primary: "#292d29", secondary: "#686c63" },
   },
   dark: {
-    connectButton: { background: "#4c9bff", foreground: "#ffffff" },
+    connectButton: { background: "#2f80ed", foreground: "#ffffff" },
     accent: "#4c9bff",
     background: { primary: "#202621", secondary: "#171c19", segment: "#202621", tint: "#2a312b" },
     text: { primary: "#f0eee4", secondary: "#a4ae9e" },

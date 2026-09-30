@@ -320,7 +320,7 @@ function MembersScreen({ chatId }) {
       <div className="flex items-center gap-3">
         <ChatAvatar title={chat?.title} id={chatId} size={48} />
         <div className="min-w-0">
-          <h1 className="brand-heading truncate text-[22px] leading-tight">{L("Счета участников", "Member accounts")}</h1>
+          <h1 className="brand-heading truncate text-[24px] leading-tight">{L("Счета участников", "Member accounts")}</h1>
           <p className="truncate text-[13px] text-hint">{chat?.title || L(`Чат ${chatId}`, `Chat ${chatId}`)}</p>
         </div>
       </div>

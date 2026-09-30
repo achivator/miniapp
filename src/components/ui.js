@@ -43,7 +43,7 @@ export function SectionHeader({ title, hint, action }) {
 
 // Primary is the landing's blue CTA, secondary its outlined one.
 const BUTTON_VARIANTS = {
-  primary: "bg-accent text-accent-fg",
+  primary: "bg-button text-accent-fg",
   secondary: "border border-[color:var(--control-border)] bg-transparent text-fg",
   ghost: "text-link",
   danger: "border border-[color:color-mix(in_srgb,var(--danger)_45%,transparent)] text-danger",
@@ -55,7 +55,7 @@ export function Button({ variant = "primary", size = "md", busy = false, classNa
       className={cx(
         "inline-flex select-none items-center justify-center gap-2 rounded-xl font-semibold transition",
         "active:scale-[0.98] active:opacity-85 disabled:cursor-not-allowed disabled:opacity-45",
-        size === "sm" ? "h-9 px-3.5 text-[14px]" : "h-12 px-5 text-[15px]",
+        size === "sm" ? "min-h-9 px-3.5 py-1.5 text-center text-[14px] leading-tight" : "h-12 px-5 text-[15px]",
         BUTTON_VARIANTS[variant],
         className,
       )}
@@ -69,7 +69,8 @@ export function Button({ variant = "primary", size = "md", busy = false, classNa
 }
 
 // A tag like the landing's rarity labels: a hairline frame, square-ish corners.
-export function Chip({ tone = "accent", icon, children }) {
+// Neutral by default: blue is for things that can be tapped.
+export function Chip({ tone = "neutral", icon, children }) {
   const tones = {
     accent: "border-[color:color-mix(in_srgb,var(--accent)_40%,transparent)] text-accent",
     success: "border-[color:color-mix(in_srgb,var(--success)_45%,transparent)] text-success",
