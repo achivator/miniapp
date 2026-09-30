@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useInvoice } from "@tma.js/sdk-react";
 import { apiFetch, sleep } from "@/lib/client-api";
 import { useI18n } from "@/lib/use-locale";
-import { Button, Card, Chip, Notice, Row, SectionHeader } from "./ui";
+import { Button, Card, Chip, Notice, Row, SectionHeader, bilingual } from "./ui";
 import { useHaptic } from "./AppShell";
 
 // The chat's Achivator subscription in Telegram Stars, for its creator:
@@ -50,11 +50,11 @@ export function Subscription({ chatId, initDataRaw }) {
       const { link } = await apiFetch("/api/subscription", { method: "POST", initDataRaw, body: { chatId } });
       const status = await invoice.open(link, "url");
       if (status !== "paid") {
-        if (status === "failed") setNotice({ kind: "err", text: L("Оплата не прошла.", "The payment failed.") });
+        if (status === "failed") setNotice({ kind: "err", text: bilingual("Оплата не прошла.", "The payment failed.") });
         return;
       }
       haptic("success");
-      setNotice({ kind: "info", text: L("Оплачено. Обновляем статус…", "Paid. Updating the status…") });
+      setNotice({ kind: "info", text: bilingual("Оплачено. Обновляем статус…", "Paid. Updating the status…") });
       // the bot records the payment when Telegram reports it, a moment later
       const before = data.paid_until;
       for (let i = 0; i < 6; i++) {
@@ -62,7 +62,7 @@ export function Subscription({ chatId, initDataRaw }) {
         const res = await load();
         if (res?.paid_until && res.paid_until !== before) break;
       }
-      setNotice({ kind: "ok", text: L("Подписка оформлена. Спасибо!", "Subscribed. Thank you!") });
+      setNotice({ kind: "ok", text: bilingual("Подписка оформлена. Спасибо!", "Subscribed. Thank you!") });
     } catch (e) {
       haptic("error");
       setNotice({ kind: "err", text: e.message });

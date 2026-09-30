@@ -15,6 +15,7 @@ import {
   Chip,
   EmptyState,
   Notice,
+  bilingual,
   SectionHeader,
   Skeleton,
   titleCase,
@@ -118,7 +119,7 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
       return;
     }
     setBusy(true);
-    setNotice({ kind: "info", text: L("Готовим вывод…", "Preparing your claim…") });
+    setNotice({ kind: "info", text: bilingual("Готовим вывод…", "Preparing your claim…") });
     try {
       const voucher = await apiFetch("/api/claim-voucher", {
         method: "POST",
@@ -127,32 +128,35 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
       });
       // The amount is priced when the voucher is signed and may differ from
       // the estimate above if the chat's rate just changed: state it here.
-      const jettons = `${t.decimal(voucher.jettons)} ${symbol}`;
+      // Notice texts are drawn in the language shown at the time (see Notice).
+      const jettons = (t) => `${t.decimal(voucher.jettons)} ${reward.symbol || t.L("жетона", "jetton")}`;
       setNotice({
         kind: "info",
-        text: L(`Подтвердите в кошельке — вы получите ${jettons}.`, `Confirm in your wallet to receive ${jettons}.`),
+        text: (t) => t.L(`Подтвердите в кошельке — вы получите ${jettons(t)}.`, `Confirm in your wallet to receive ${jettons(t)}.`),
       });
       await sendTonTransaction(tonConnectUI, network, [
         { address: voucher.to, amount: voucher.amount, payload: voucher.payload_b64 },
       ]);
-      setNotice({ kind: "info", text: L("Отправлено — ждём выплату из пула…", "Sent — waiting for the pool to pay out…") });
+      setNotice({ kind: "info", text: bilingual("Отправлено — ждём выплату из пула…", "Sent — waiting for the pool to pay out…") });
       const status = await pollClaimStatus(reward.chat_id, voucher.nonce, initDataRaw);
       if (status?.status === "claimed") {
         haptic("success");
-        const rest = voucher.remaining_points
-          ? L(
-              ` Ещё ${t.pts(voucher.remaining_points)} останутся на потом: у пула чата дневной лимит выплат.`,
-              ` ${t.pts(voucher.remaining_points)} stay for later: the chat pool has a daily payout limit.`,
-            )
-          : "";
+        const rest = (t) =>
+          voucher.remaining_points
+            ? t.L(
+                ` Ещё ${t.pts(voucher.remaining_points)} останутся на потом: у пула чата дневной лимит выплат.`,
+                ` ${t.pts(voucher.remaining_points)} stay for later: the chat pool has a daily payout limit.`,
+              )
+            : "";
         setNotice({
           kind: "ok",
-          text: L(`${jettons} уже в пути к вашему кошельку.${rest}`, `${jettons} are on their way to your wallet.${rest}`),
+          text: (t) =>
+            t.L(`${jettons(t)} уже в пути к вашему кошельку.${rest(t)}`, `${jettons(t)} are on their way to your wallet.${rest(t)}`),
         });
       } else {
         setNotice({
           kind: "info",
-          text: L("Транзакция ещё подтверждается в сети. Загляните через минуту.", "Still confirming on-chain. Check back in a minute."),
+          text: bilingual("Транзакция ещё подтверждается в сети. Загляните через минуту.", "Still confirming on-chain. Check back in a minute."),
         });
       }
       onRefresh();

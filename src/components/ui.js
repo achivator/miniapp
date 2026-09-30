@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { translateError } from "@/lib/i18n";
-import { useLocale } from "@/lib/use-locale";
+import { useI18n } from "@/lib/use-locale";
 import { Alert, Check, Info } from "./icons";
 
 export function cx(...parts) {
@@ -92,9 +91,13 @@ export function Chip({ tone = "neutral", icon, children }) {
 }
 
 // Inline status line under an action (info / ok / err). Errors usually come
-// from the API in English: known ones are shown in the app's language.
+// from the API in English: known ones are shown in the app's language. A
+// notice kept in state outlives a switch of language (the TopBar's), so its
+// own text is a function of the screen's i18n helpers (useI18n), called when
+// the notice is drawn: bilingual(ru, en), or (t) => t.L(...) when the text
+// formats numbers. A plain string is shown as is.
 export function Notice({ notice }) {
-  const locale = useLocale();
+  const t = useI18n();
   if (!notice) return null;
   // Information reads like the landing's dashed "Where the TON goes" note;
   // outcomes keep their color.
@@ -107,9 +110,15 @@ export function Notice({ notice }) {
   return (
     <div className={cx("flex items-start gap-2 rounded-xl px-3 py-2.5 text-[13px] leading-snug", cls)} role="status">
       <Icon className="mt-px h-4 w-4 shrink-0" />
-      <span>{notice.kind === "err" ? translateError(notice.text, locale) : notice.text}</span>
+      <span>{typeof notice.text === "function" ? notice.text(t) : notice.kind === "err" ? t.error(notice.text) : notice.text}</span>
     </div>
   );
+}
+
+// A notice text in both languages, picked when the notice is drawn (see
+// Notice): setNotice({ kind: "ok", text: bilingual("Сохранено.", "Saved.") }).
+export function bilingual(ru, en) {
+  return ({ L }) => L(ru, en);
 }
 
 export function Skeleton({ className }) {

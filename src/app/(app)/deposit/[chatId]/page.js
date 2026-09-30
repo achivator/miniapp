@@ -9,7 +9,7 @@ import { apiFetch, sendTonTransaction, shortenAddress, sleep } from "@/lib/clien
 import { formatExact } from "@/lib/format";
 import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
-import { Button, Card, ChatAvatar, Chip, Notice, Row, SectionHeader, Skeleton } from "@/components/ui";
+import { Button, Card, ChatAvatar, Chip, Notice, Row, SectionHeader, Skeleton, bilingual } from "@/components/ui";
 import { ArrowDown, ArrowUp, Check, ChevronRight, Refresh, Shield, Users } from "@/components/icons";
 import { ClaimRules } from "@/components/ClaimRules";
 import { PointPrice } from "@/components/PointPrice";
@@ -103,6 +103,7 @@ function PoolManager({ chatId }) {
   }
 
   // Polls pool-status until `done(status)` holds, for up to ~2 minutes.
+  // `pending` and `success` are notice texts (bilingual(), see Notice).
   async function waitFor(done, pending, success) {
     setNotice({ kind: "info", text: pending });
     for (let i = 0; i < 24; i++) {
@@ -116,24 +117,24 @@ function PoolManager({ chatId }) {
     }
     setNotice({
       kind: "info",
-      text: L("Транзакция ещё подтверждается в сети — нажмите «Обновить» через минуту.", "Still confirming on-chain — pull Refresh in a minute."),
+      text: bilingual("Транзакция ещё подтверждается в сети — нажмите «Обновить» через минуту.", "Still confirming on-chain — pull Refresh in a minute."),
     });
   }
 
   const activate = () =>
     run("activate", async () => {
-      setNotice({ kind: "info", text: L("Подтвердите активацию в кошельке.", "Confirm the activation in your wallet.") });
+      setNotice({ kind: "info", text: bilingual("Подтвердите активацию в кошельке.", "Confirm the activation in your wallet.") });
       await send({ to: info.master_address, amount: info.create_pool_ton, payload_b64: info.create_pool_body });
       await waitFor(
         (s) => s.active,
-        L("Разворачиваем пул…", "Deploying the pool…"),
-        L("Пул работает. Пополните его, чтобы начать награждать.", "The pool is live. Top it up to start rewarding."),
+        bilingual("Разворачиваем пул…", "Deploying the pool…"),
+        bilingual("Пул работает. Пополните его, чтобы начать награждать.", "The pool is live. Top it up to start rewarding."),
       );
     });
 
   const deposit = () =>
     run("deposit", async () => {
-      setNotice({ kind: "info", text: L("Готовим перевод…", "Preparing the transfer…") });
+      setNotice({ kind: "info", text: bilingual("Готовим перевод…", "Preparing the transfer…") });
       const tx = await apiFetch("/api/deposit-voucher", {
         method: "POST",
         initDataRaw,
@@ -141,31 +142,32 @@ function PoolManager({ chatId }) {
       });
       setNotice({
         kind: "info",
-        text: L(
-          `Подтвердите в кошельке. ${formatTon(tx.amount)} TON — это газ сети, неизрасходованное вернётся.`,
-          `Confirm in your wallet. The ${formatTon(tx.amount)} TON is network gas; what is not spent comes back.`,
-        ),
+        text: (t) =>
+          t.L(
+            `Подтвердите в кошельке. ${t.units(tx.amount, 9)} TON — это газ сети, неизрасходованное вернётся.`,
+            `Confirm in your wallet. The ${t.units(tx.amount, 9)} TON is network gas; what is not spent comes back.`,
+          ),
       });
       await send(tx);
       const before = BigInt(info.ledger ?? 0);
       setAmount("");
       await waitFor(
         (s) => s.ledger !== null && BigInt(s.ledger) > before,
-        L("Отправлено — ждём зачисления в пул…", "Sent — waiting for the pool to credit it…"),
-        L("Пул пополнен.", "Pool topped up."),
+        bilingual("Отправлено — ждём зачисления в пул…", "Sent — waiting for the pool to credit it…"),
+        bilingual("Пул пополнен.", "Pool topped up."),
       );
     });
 
   const claimAdmin = () =>
     run("admin", async () => {
-      setNotice({ kind: "info", text: L("Готовим чек админа…", "Preparing the admin voucher…") });
+      setNotice({ kind: "info", text: bilingual("Готовим чек админа…", "Preparing the admin voucher…") });
       const tx = await apiFetch("/api/admin-voucher", { method: "POST", initDataRaw, body: { chatId, wallet } });
-      setNotice({ kind: "info", text: L("Подтвердите в кошельке.", "Confirm in your wallet.") });
+      setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await send(tx);
       await waitFor(
         (s) => sameAddress(s.pool_admin, wallet),
-        L("Назначаем этот кошелёк админом пула…", "Registering this wallet as pool admin…"),
-        L("Теперь вывод из пула управляется этим кошельком.", "This wallet now controls withdrawals."),
+        bilingual("Назначаем этот кошелёк админом пула…", "Registering this wallet as pool admin…"),
+        bilingual("Теперь вывод из пула управляется этим кошельком.", "This wallet now controls withdrawals."),
       );
     });
 
@@ -174,42 +176,42 @@ function PoolManager({ chatId }) {
   const setPaused = (paused) =>
     run("pause", async () => {
       const tx = await adminTx({ action: paused ? "pause" : "resume" });
-      setNotice({ kind: "info", text: L("Подтвердите в кошельке.", "Confirm in your wallet.") });
+      setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await send(tx);
       await waitFor(
         (s) => s.controls?.paused === paused,
-        paused ? L("Приостанавливаем вывод…", "Pausing claims…") : L("Возобновляем вывод…", "Resuming claims…"),
+        paused ? bilingual("Приостанавливаем вывод…", "Pausing claims…") : bilingual("Возобновляем вывод…", "Resuming claims…"),
         paused
-          ? L("Вывод приостановлен. Никто не сможет забрать баллы, пока вы его не возобновите.", "Claims are paused. Nobody can claim until you resume.")
-          : L("Вывод снова открыт.", "Claims are open again."),
+          ? bilingual("Вывод приостановлен. Никто не сможет забрать баллы, пока вы его не возобновите.", "Claims are paused. Nobody can claim until you resume.")
+          : bilingual("Вывод снова открыт.", "Claims are open again."),
       );
     });
 
   const saveLimit = (value) =>
     run("limit", async () => {
       const tx = await adminTx({ action: "limit", amount: value });
-      setNotice({ kind: "info", text: L("Подтвердите в кошельке.", "Confirm in your wallet.") });
+      setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await send(tx);
       setLimitAmount("");
       const before = info.controls?.limit;
       await waitFor(
         (s) => s.controls && s.controls.limit !== before,
-        L("Меняем дневной лимит…", "Updating the daily limit…"),
-        L("Дневной лимит изменён.", "Daily limit updated."),
+        bilingual("Меняем дневной лимит…", "Updating the daily limit…"),
+        bilingual("Дневной лимит изменён.", "Daily limit updated."),
       );
     });
 
   const withdraw = () =>
     run("withdraw", async () => {
       const tx = await adminTx({ action: "withdraw", amount: withdrawAmount, to: wallet });
-      setNotice({ kind: "info", text: L("Подтвердите вывод в кошельке.", "Confirm the withdrawal in your wallet.") });
+      setNotice({ kind: "info", text: bilingual("Подтвердите вывод в кошельке.", "Confirm the withdrawal in your wallet.") });
       await send(tx);
       const before = BigInt(info.ledger ?? 0);
       setWithdrawAmount("");
       await waitFor(
         (s) => s.ledger !== null && BigInt(s.ledger) < before,
-        L("Выводим…", "Withdrawing…"),
-        L("Жетоны уже в пути к вашему кошельку.", "Jettons are on their way to your wallet."),
+        bilingual("Выводим…", "Withdrawing…"),
+        bilingual("Жетоны уже в пути к вашему кошельку.", "Jettons are on their way to your wallet."),
       );
     });
 

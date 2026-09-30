@@ -8,7 +8,7 @@ import { formatDate, formatExact } from "@/lib/format";
 import { compareDecimal, normalizePointPrice, priceFitsDecimals } from "@/lib/point-price";
 import { formatUnits, pointsToJettons } from "@/lib/ton/amounts";
 import { useI18n, useL } from "@/lib/use-locale";
-import { Button, Card, Chip, Notice, SectionHeader } from "./ui";
+import { Button, Card, Chip, Notice, SectionHeader, bilingual } from "./ui";
 import { useHaptic } from "./AppShell";
 
 const EXAMPLE_POINTS = 100;
@@ -126,11 +126,11 @@ function PayoutCoverage({ chatId, initDataRaw, symbol, state, setState }) {
         initDataRaw,
         body: { chatId, action: "limit", amount: suggested },
       });
-      setNotice({ kind: "info", text: L("Подтвердите в кошельке.", "Confirm in your wallet.") });
+      setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await sendTonTransaction(tonConnectUI, coverage.network, [
         { address: tx.to, amount: tx.amount, payload: tx.payload_b64 },
       ]);
-      setNotice({ kind: "info", text: L("Меняем дневной лимит…", "Updating the daily limit…") });
+      setNotice({ kind: "info", text: bilingual("Меняем дневной лимит…", "Updating the daily limit…") });
       for (let i = 0; i < 24; i++) {
         await sleep(5000);
         const res = await apiFetch(`/api/point-price?chatId=${chatId}&coverage=1`, { initDataRaw }).catch(() => null);
@@ -139,17 +139,18 @@ function PayoutCoverage({ chatId, initDataRaw, symbol, state, setState }) {
           haptic("success");
           setNotice({
             kind: "ok",
-            text: L(
-              `Дневной лимит выплат: ${amount(target)}. После снижения цены его можно вернуть на пульте пула.`,
-              `Daily payout limit is now ${amount(target)}. You can set it back on the pool page after the decrease.`,
-            ),
+            text: (t) =>
+              t.L(
+                `Дневной лимит выплат: ${t.units(target, cDec)} ${symbol}. После снижения цены его можно вернуть на пульте пула.`,
+                `Daily payout limit is now ${t.units(target, cDec)} ${symbol}. You can set it back on the pool page after the decrease.`,
+              ),
           });
           return;
         }
       }
       setNotice({
         kind: "info",
-        text: L(
+        text: bilingual(
           "Ещё подтверждается в сети — обновите страницу через минуту.",
           "Still confirming on-chain — reload in a minute.",
         ),
@@ -386,7 +387,9 @@ export function PointPrice({ chatId, initDataRaw }) {
   // Can members claim everything before the decrease?
   const showCoverage = (lowering && noticeDays > 0) || Boolean(pending);
 
-  function savedText(res, lowered, next) {
+  // The notice after a save, drawn in the language shown at the time (see
+  // Notice): called with that language's L.
+  function savedText(L, res, lowered, next) {
     const unsent =
       res.announced === false
         ? L(
@@ -405,6 +408,7 @@ export function PointPrice({ chatId, initDataRaw }) {
     return L(`Цена балла сохранена.${unsent}`, `Point price saved.${unsent}`);
   }
 
+  // `onDone(res)` gives the success notice's text (see Notice).
   async function post(body, action, onDone) {
     setBusy(action);
     setNotice(null);
@@ -422,17 +426,17 @@ export function PointPrice({ chatId, initDataRaw }) {
   }
 
   function save(next, action, lowered) {
-    return post({ price: next }, action, (res) => savedText(res, lowered, next));
+    return post({ price: next }, action, (res) => ({ L }) => savedText(L, res, lowered, next));
   }
 
   function cancelPending() {
     return post({ cancelPending: true }, "cancel", (res) =>
       res.announced === false
-        ? L(
+        ? bilingual(
             "Снижение отменено. Бот не смог получить задание: сообщите чату сами.",
             "Decrease cancelled. The bot could not be told: let the chat know yourself.",
           )
-        : L(
+        : bilingual(
             "Снижение отменено. Бот сообщит чату, что цена остаётся.",
             "Decrease cancelled. The bot tells the chat the price stays.",
           ),

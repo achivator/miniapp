@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/client-api";
 import { useI18n } from "@/lib/use-locale";
-import { Button, Card, Chip, Notice, SectionHeader, Segmented, cx } from "./ui";
+import { Button, Card, Chip, Notice, SectionHeader, Segmented, bilingual, cx } from "./ui";
 import { useHaptic } from "./AppShell";
 
 const MATURATION_OPTIONS = [0, 1, 3, 7, 14];
@@ -95,7 +95,7 @@ export function ClaimRules({ chatId, initDataRaw }) {
       setSaved(res.settings);
       setDraft(res.settings);
       haptic("success");
-      setNotice({ kind: "ok", text: L("Правила вывода сохранены.", "Claim rules saved.") });
+      setNotice({ kind: "ok", text: bilingual("Правила вывода сохранены.", "Claim rules saved.") });
     } catch (e) {
       haptic("error");
       setNotice({ kind: "err", text: e.message });
