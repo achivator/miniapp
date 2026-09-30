@@ -7,7 +7,7 @@ import { apiFetch, sendTonTransaction, sleep } from "@/lib/client-api";
 import { formatDecimal, intlLocale } from "@/lib/i18n";
 import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
-import { AchievementArt, Button, Card, ChatAvatar, Chip, Notice, Skeleton, titleCase } from "@/components/ui";
+import { AchievementArt, Button, Card, ChatAvatar, Notice, Skeleton, titleCase } from "@/components/ui";
 import { Check, Medal, Sparkles } from "@/components/icons";
 
 function formatTon(nanotons, locale) {
@@ -31,7 +31,7 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
   if (!nft?.mintable) {
     return (
       <Card className="flex gap-3">
-        <div className="tint-accent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-accent">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--control-border)] text-fg">
           <Sparkles className="h-5 w-5" />
         </div>
         <div>
@@ -47,7 +47,7 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
   if (nft.minted) {
     return (
       <Card className="flex items-center gap-3">
-        <div className="tint-success flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-success">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:color-mix(in_srgb,var(--success)_45%,transparent)] text-success">
           <Check className="h-5 w-5" />
         </div>
         <div>
@@ -105,7 +105,7 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
   return (
     <Card className="space-y-3">
       <div className="flex gap-3">
-        <div className="tint-gold flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[color:var(--gold-text)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--control-border)] text-[color:var(--brand-amber)]">
           <Sparkles className="h-5 w-5" />
         </div>
         <div>
@@ -152,25 +152,27 @@ function AchievementView({ id }) {
       )}
       {achievement && (
         <>
-          <div className="relative mx-auto w-full max-w-sm pt-2">
-            <div
-              className="absolute inset-6 -z-0 rounded-full blur-3xl"
-              style={{ background: "color-mix(in srgb, var(--gold) 35%, transparent)" }}
-            />
+          {/* The landing's character card: a pastel stage, an edition label
+              and a rarity-style tag. */}
+          <div className="brand-panel stage relative mx-auto mt-1 w-full max-w-sm overflow-hidden rounded-[22px] px-5 pb-5 pt-11">
+            <span className="mono-label absolute left-4 top-4 text-[#5f566c]">
+              ACH / {String(achievement.collection || "v1").toUpperCase()}
+            </span>
             <AchievementArt
               type={achievement.type}
               collection={achievement.collection}
-              className="relative aspect-square w-full rounded-[28px] shadow-xl"
+              className="aspect-square w-full rounded-[16px]"
             />
+            <span className="mono-label mt-4 inline-flex items-center gap-1.5 rounded-md border border-[#c9bdd8] bg-white/70 px-2 py-1 font-semibold text-[#57407a]">
+              <Medal className="h-3.5 w-3.5" />
+              {L("Получена", "Unlocked")}
+            </span>
           </div>
 
           <div className="space-y-2 text-center">
-            <Chip tone="gold" icon={<Medal className="h-3.5 w-3.5" />}>
-              {L("Ачивка получена", "Achievement unlocked")}
-            </Chip>
-            <h1 className="text-[28px] font-bold leading-tight tracking-tight">{titleCase(achievement.type)}</h1>
+            <h1 className="brand-heading text-[30px] leading-tight">{titleCase(achievement.type)}</h1>
             {achievement.date && (
-              <p className="text-[14px] text-hint">
+              <p className="mono-label text-hint">
                 {new Date(achievement.date).toLocaleDateString(intlLocale(locale), {
                   year: "numeric",
                   month: "long",

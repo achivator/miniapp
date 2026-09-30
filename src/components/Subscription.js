@@ -152,7 +152,7 @@ export function Subscription({ chatId, initDataRaw }) {
         </p>
         {data.has_jetton && !renewsForYou && (
           <Button className="w-full" busy={busy} disabled={busy} onClick={subscribe}>
-            {L(`Оформить подписку — ${stars} в месяц`, `Subscribe — ${stars} a month`)}
+            {L(`Подписаться · ${stars} в мес.`, `Subscribe · ${stars} a month`)}
           </Button>
         )}
         <Notice notice={notice} />

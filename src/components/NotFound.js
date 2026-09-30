@@ -1,9 +1,9 @@
+import Image from "next/image";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { MISSING_HEADER } from "@/lib/not-found";
 import { HomeLink } from "./HomeLink";
-import { Medal } from "./icons";
 
 // The site's 404, served with status 404 for unknown URLs: localized under
 // /ru… and /en…, bilingual anywhere else, where the visitor's language is not
@@ -48,17 +48,24 @@ export function MissingPage({ locale }) {
 function Frame({ children }) {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 py-10 text-center">
-      <div className="hero-gradient flex h-20 w-20 items-center justify-center rounded-[26px] shadow-lg">
-        <Medal className="h-11 w-11" />
-      </div>
-      <p className="text-[13px] font-semibold uppercase tracking-wide text-hint">404 · Achivator</p>
+      <Image
+        src="/brand/achivator-hero-generated.png"
+        alt=""
+        width={1280}
+        height={1280}
+        priority
+        sizes="180px"
+        className="h-auto w-[180px] -scale-x-100 drop-shadow-[0_16px_10px_rgba(67,48,30,0.13)]"
+      />
+      <p className="mono-label text-hint">404 / Achivator</p>
       {children}
     </main>
   );
 }
 
-const primary = "rounded-xl bg-accent px-5 py-3 font-semibold text-accent-fg active:opacity-80";
-const secondary = "tint-accent rounded-xl px-5 py-3 font-semibold text-accent active:opacity-80";
+const primary = "inline-flex h-12 items-center rounded-xl bg-accent px-6 text-[15px] font-semibold text-accent-fg active:opacity-80";
+const secondary =
+  "inline-flex h-12 items-center rounded-xl border border-[color:var(--control-border)] px-6 text-[15px] font-semibold text-fg active:opacity-80";
 
 export function LocaleNotFound({ locale }) {
   const t = TEXTS[locale];

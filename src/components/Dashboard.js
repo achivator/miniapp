@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useInitDataRaw } from "@tma.js/sdk-react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
@@ -52,31 +53,39 @@ function Hero({ dashboard, achievementsCount }) {
   const chats = dashboard?.rewards?.length;
   const totalPoints = dashboard?.rewards?.reduce((sum, r) => sum + (r.available_points || 0), 0) ?? null;
   return (
-    <section className="hero-gradient relative overflow-hidden rounded-[22px] p-5 shadow-lg">
-      <div className="pointer-events-none absolute -right-8 -top-10 h-40 w-40 rounded-full bg-white/10" />
-      <div className="pointer-events-none absolute -bottom-12 right-10 h-28 w-28 rounded-full bg-white/10" />
-      <p className="text-[13px] font-medium opacity-80">{L("Можно забрать", "Available to claim")}</p>
-      <div className="mt-1 flex items-baseline gap-2">
-        {totalPoints === null ? (
-          <div className="h-9 w-28 animate-pulse rounded-lg bg-white/25" />
-        ) : (
-          <span className="text-[36px] font-bold leading-none tracking-tight tabular">
-            {t.num(totalPoints)}
+    // The landing's dark finale block, with the character looking in.
+    <section className="ink-card relative overflow-hidden rounded-[22px] p-5">
+      <Image
+        src="/brand/achivator-hero-generated.png"
+        alt=""
+        width={1280}
+        height={1280}
+        priority
+        sizes="150px"
+        className="pointer-events-none absolute -bottom-7 -right-5 h-auto w-[150px] -scale-x-100 drop-shadow-[0_12px_10px_rgba(0,0,0,0.35)]"
+      />
+      <div className="relative max-w-[62%]">
+        <p className="mono-label opacity-70">{L("Можно забрать", "Available to claim")}</p>
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-2">
+          {totalPoints === null ? (
+            <div className="h-9 w-28 animate-pulse rounded-lg bg-white/15" />
+          ) : (
+            <span className="brand-heading text-[38px] leading-none tabular">{t.num(totalPoints)}</span>
+          )}
+          <span className="text-[15px] font-semibold opacity-75">
+            {t.plural(totalPoints ?? 0, ["балл", "балла", "баллов"], ["point", "points"])}
           </span>
-        )}
-        <span className="text-[15px] font-semibold opacity-80">
-          {t.plural(totalPoints ?? 0, ["балл", "балла", "баллов"], ["point", "points"])}
-        </span>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2 text-[12px] font-medium">
-        <span className="rounded-full bg-white/20 px-2.5 py-1">
-          {chats === undefined ? `– ${L("чатов", "chats")}` : t.count(chats, ["чат", "чата", "чатов"], ["chat", "chats"])}
-        </span>
-        <span className="rounded-full bg-white/20 px-2.5 py-1">
-          {achievementsCount === null
-            ? `– ${L("ачивок", "achievements")}`
-            : t.count(achievementsCount, ["ачивка", "ачивки", "ачивок"], ["achievement", "achievements"])}
-        </span>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="mono-label rounded-md border border-[color:var(--ink-border)] px-2 py-1">
+            {chats === undefined ? `– ${L("чатов", "chats")}` : t.count(chats, ["чат", "чата", "чатов"], ["chat", "chats"])}
+          </span>
+          <span className="mono-label rounded-md border border-[color:var(--ink-border)] px-2 py-1">
+            {achievementsCount === null
+              ? `– ${L("ачивок", "achievements")}`
+              : t.count(achievementsCount, ["ачивка", "ачивки", "ачивок"], ["achievement", "achievements"])}
+          </span>
+        </div>
       </div>
     </section>
   );
@@ -337,8 +346,8 @@ function Achievements({ groups }) {
   return groups.map(({ chat, achievements }) => (
     <Card key={chat.id} className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="truncate font-semibold">{chat.title || L(`Чат ${chat.id}`, `Chat ${chat.id}`)}</p>
-        <Chip tone="gold">{achievements.length}</Chip>
+        <p className="truncate font-semibold tracking-tight">{chat.title || L(`Чат ${chat.id}`, `Chat ${chat.id}`)}</p>
+        <span className="mono-label shrink-0 text-hint">ACH × {String(achievements.length).padStart(2, "0")}</span>
       </div>
       <ul className="grid grid-cols-4 gap-x-3 gap-y-4">
         {achievements.map((a) => (
@@ -447,12 +456,11 @@ export function Dashboard() {
       </section>
 
       <Link href={`/${t.locale}/help`} className="block">
-        <Card className="flex items-center gap-3 active:opacity-80">
-          <div className="tint-accent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-accent">
-            <Question className="h-5 w-5" />
-          </div>
+        {/* the landing's locked "+18 more" card */}
+        <Card className="flex items-center gap-3 border-dashed active:opacity-80">
+          <Image src="/brand/locked.png" alt="" width={1280} height={1280} sizes="52px" className="h-[52px] w-[52px] shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="font-semibold">{L("Награды в вашем чате", "Reward your own chat")}</p>
+            <p className="font-semibold tracking-tight">{L("Награды в вашем чате", "Reward your own chat")}</p>
             <p className="text-[13px] text-hint">
               {L("Как подключить свой чат — пошаговая инструкция", "Step-by-step setup guide")}
             </p>

@@ -27,8 +27,8 @@ function Balance({ data }) {
   const owedParts = Array.isArray(balance.owed_breakdown) && balance.owed_breakdown.length > 1 ? balance.owed_breakdown : [];
   return (
     <Card>
-      <p className="text-[13px] text-hint">{L("Причитается участнику", "Owed to this member")}</p>
-      <p className="mt-1 text-[30px] font-bold leading-none tracking-tight tabular">
+      <p className="mono-label text-hint">{L("Причитается участнику", "Owed to this member")}</p>
+      <p className="brand-heading mt-2 text-[30px] leading-none tabular">
         {t.num(balance.owed_points)}{" "}
         <span className="text-[17px] font-semibold text-hint">
           {L(t.plural(balance.owed_points, ["балл", "балла", "баллов"], []), "pts")}
@@ -255,7 +255,7 @@ function MemberScreen({ chatId, userId }) {
       <div className="flex items-center gap-3">
         <ChatAvatar title={memberLabel(member, L)} id={member.user_id} size={56} />
         <div className="min-w-0">
-          <h1 className="truncate text-[22px] font-bold leading-tight">{memberLabel(member, L)}</h1>
+          <h1 className="brand-heading truncate text-[24px] leading-tight">{memberLabel(member, L)}</h1>
           <p className="truncate text-[13px] text-hint">
             {member.username && member.name ? `@${member.username} · ` : ""}id {member.user_id} ·{" "}
             {data.title || L(`Чат ${data.chat_id}`, `Chat ${data.chat_id}`)}

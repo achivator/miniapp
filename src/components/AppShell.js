@@ -1,13 +1,23 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { SDKProvider, useBackButton, useHapticFeedback, useSDKContext, useSettingsButton, useThemeParams } from "@tma.js/sdk-react";
+import Image from "next/image";
+import {
+  SDKProvider,
+  useBackButton,
+  useHapticFeedback,
+  useMiniApp,
+  useSDKContext,
+  useSettingsButton,
+  useThemeParams,
+} from "@tma.js/sdk-react";
 import { TonConnectButton, TonConnectUIProvider, useTonConnectUI } from "@tonconnect/ui-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LOCALES } from "@/lib/locale";
 import { applyTelegramLocale, setAppLocale, useI18n, useLocale } from "@/lib/use-locale";
-import { Medal, Question } from "./icons";
+import { BrandMark } from "./brand";
+import { Question } from "./icons";
 import { Spinner } from "./ui";
 
 const MANIFEST_URL = "https://achivator.cc/ton-connect.json";
@@ -19,11 +29,17 @@ function OpenInTelegram() {
       <div className="absolute right-4 top-4">
         <AppLangSwitch />
       </div>
-      <div className="hero-gradient flex h-20 w-20 items-center justify-center rounded-[26px] shadow-lg">
-        <Medal className="h-11 w-11" />
-      </div>
+      <Image
+        src="/brand/achivator-hero-generated.png"
+        alt=""
+        width={1280}
+        height={1280}
+        priority
+        sizes="200px"
+        className="h-auto w-[200px] -scale-x-100 drop-shadow-[0_16px_10px_rgba(67,48,30,0.13)]"
+      />
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold">Achivator</h1>
+        <h1 className="brand-heading text-[28px]">Achivator</h1>
         <p className="text-hint text-balance">
           {L(
             "Награды и ачивки для Telegram-чатов. Это мини-приложение Telegram — откройте его из бота, чтобы продолжить.",
@@ -32,7 +48,7 @@ function OpenInTelegram() {
         </p>
       </div>
       <a
-        className="rounded-xl bg-accent px-5 py-3 font-semibold text-accent-fg active:opacity-80"
+        className="inline-flex h-12 items-center rounded-xl bg-accent px-6 text-[15px] font-semibold text-accent-fg active:opacity-80"
         href="https://t.me/achivator_bot/app"
       >
         {L("Открыть в Telegram", "Open in Telegram")}
@@ -75,13 +91,45 @@ function TonConnectLanguage() {
   return null;
 }
 
-// Mirrors Telegram's light/dark choice onto <html data-theme>.
+// The brand paper behind Telegram's own header and overscroll, per theme
+// (the --bg values of globals.css).
+const BRAND_BG = { light: "#f7f5ef", dark: "#171c19" };
+
+// TON Connect's button and modal in the brand colors (globals.css tokens).
+const TON_CONNECT_COLORS = {
+  light: {
+    connectButton: { background: "#2f80ed", foreground: "#ffffff" },
+    accent: "#2f80ed",
+    background: { primary: "#fdfcf8", secondary: "#f7f5ef", segment: "#fdfcf8", tint: "#eceae2" },
+    text: { primary: "#292d29", secondary: "#686c63" },
+  },
+  dark: {
+    connectButton: { background: "#4c9bff", foreground: "#ffffff" },
+    accent: "#4c9bff",
+    background: { primary: "#202621", secondary: "#171c19", segment: "#202621", tint: "#2a312b" },
+    text: { primary: "#f0eee4", secondary: "#a4ae9e" },
+  },
+};
+
+// Mirrors Telegram's light/dark choice onto <html data-theme>, and paints
+// Telegram's header and TON Connect in the brand colors of that theme.
 function ThemeSync() {
   const themeParams = useThemeParams();
-  const isDark = themeParams.isDark;
+  const miniApp = useMiniApp();
+  const [, setTonConnectOptions] = useTonConnectUI();
+  const theme = themeParams.isDark ? "dark" : "light";
   useEffect(() => {
-    document.documentElement.dataset.theme = isDark ? "dark" : "light";
-  }, [isDark]);
+    document.documentElement.dataset.theme = theme;
+    safely(() => miniApp.supports("setHeaderColor") && miniApp.setHeaderColor(BRAND_BG[theme]));
+    safely(() => miniApp.supports("setBackgroundColor") && miniApp.setBackgroundColor(BRAND_BG[theme]));
+    setTonConnectOptions({
+      uiPreferences: {
+        theme: theme === "dark" ? "DARK" : "LIGHT",
+        borderRadius: "m",
+        colorsSet: { LIGHT: TON_CONNECT_COLORS.light, DARK: TON_CONNECT_COLORS.dark },
+      },
+    });
+  }, [theme, miniApp, setTonConnectOptions]);
   return null;
 }
 
@@ -201,7 +249,7 @@ export function AppLangSwitch() {
       onClick={() => setAppLocale(other)}
       aria-label={other === "ru" ? "Переключить на русский" : "Switch to English"}
       title={other === "ru" ? "Русский" : "English"}
-      className="tint-accent flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold uppercase text-accent active:opacity-80"
+      className="mono-label flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[color:var(--control-border)] font-semibold text-fg active:opacity-80"
     >
       {other}
     </button>
@@ -223,16 +271,14 @@ export function TopBar() {
         className="flex shrink-0 items-center gap-2 max-[379px]:hidden"
         aria-label={L("Achivator — на главную", "Achivator home")}
       >
-        <span className="hero-gradient flex h-8 w-8 items-center justify-center rounded-[10px]">
-          <Medal className="h-[18px] w-[18px]" />
-        </span>
-        <span className="text-[17px] font-bold tracking-tight max-[439px]:hidden">Achivator</span>
+        <BrandMark />
+        <span className="brand-heading text-[17px] max-[439px]:hidden">Achivator</span>
       </Link>
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <AppLangSwitch />
         <Link
           href={`/${locale}/help`}
-          className="tint-accent flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-accent active:opacity-80"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[color:var(--control-border)] text-fg active:opacity-80"
           aria-label={L("Как подключить чат", "Setup guide")}
         >
           <Question className="h-5 w-5" />

@@ -253,7 +253,7 @@ function PoolManager({ chatId }) {
       <div className="flex items-center gap-3">
         <ChatAvatar title={info.title} id={info.chat_id} size={56} />
         <div className="min-w-0">
-          <h1 className="truncate text-[22px] font-bold leading-tight">
+          <h1 className="brand-heading truncate text-[24px] leading-tight">
             {info.title || L(`Чат ${info.chat_id}`, `Chat ${info.chat_id}`)}
           </h1>
           <div className="mt-1 flex flex-wrap gap-1.5">
@@ -270,8 +270,8 @@ function PoolManager({ chatId }) {
       </div>
 
       <Card>
-        <p className="text-[13px] text-hint">{L("Пул наград", "Reward pool")}</p>
-        <p className="mt-1 text-[30px] font-bold leading-none tracking-tight tabular">
+        <p className="mono-label text-hint">{L("Пул наград", "Reward pool")}</p>
+        <p className="brand-heading mt-2 text-[32px] leading-none tabular">
           {info.active ? t.units(info.ledger, decimals) : "0"}{" "}
           <span className="text-[17px] font-semibold text-hint">{symbol}</span>
         </p>
@@ -291,7 +291,7 @@ function PoolManager({ chatId }) {
       {info.is_creator && (
         <Link href={`/deposit/${chatId}/members`} className="block">
           <Card className="flex items-center gap-3 active:opacity-80">
-            <div className="tint-accent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-accent">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--control-border)] text-fg">
               <Users className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
@@ -346,7 +346,7 @@ function PoolManager({ chatId }) {
           />
           <Card className="space-y-3">
             <div className="flex gap-3">
-              <div className="tint-accent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-accent">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--control-border)] text-fg">
                 <Shield className="h-5 w-5" />
               </div>
               <p className="text-[14px] leading-snug text-hint">
