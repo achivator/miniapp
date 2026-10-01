@@ -1,5 +1,6 @@
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
+import { missingTitles } from "@/lib/chat-photo";
 
 export const dynamic = "force-dynamic";
 
@@ -24,10 +25,11 @@ export async function GET(request) {
     list.push(achievement);
     byChat.set(achievement.chat_id, list);
   }
-  const chats = byChat.size
-    ? await (await getCollection("chats")).find({ id: { $in: [...byChat.keys()] } }).toArray()
-    : [];
-  const titles = new Map(chats.map((chat) => [chat.id, chat.title || null]));
+  const chatsCol = await getCollection("chats");
+  const chats = byChat.size ? await chatsCol.find({ id: { $in: [...byChat.keys()] } }).toArray() : [];
+  // Telegram's title (cached) for a chat the bot stored none for
+  const fetched = await missingTitles(chats, chatsCol);
+  const titles = new Map(chats.map((chat) => [chat.id, chat.title || fetched.get(chat.id) || null]));
 
   return Response.json(
     [...byChat.entries()].map(([chatId, list]) => ({
