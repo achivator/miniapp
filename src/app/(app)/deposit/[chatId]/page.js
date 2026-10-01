@@ -9,7 +9,7 @@ import { apiFetch, sendTonTransaction, shortenAddress, sleep } from "@/lib/clien
 import { formatExact } from "@/lib/format";
 import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
-import { Button, Card, ChatAvatar, Chip, Notice, Row, SectionHeader, Skeleton } from "@/components/ui";
+import { Button, Card, ChatAvatar, Chip, Notice, Row, SectionHeader, Skeleton, bilingual } from "@/components/ui";
 import { ArrowDown, ArrowUp, Check, ChevronRight, Refresh, Shield, Users } from "@/components/icons";
 import { ClaimRules } from "@/components/ClaimRules";
 import { PointPrice } from "@/components/PointPrice";
@@ -42,6 +42,51 @@ function AmountField({ value, onChange, symbol, onMax, disabled }) {
       )}
       <span className="text-[15px] font-medium text-hint">{symbol}</span>
     </div>
+  );
+}
+
+// "Set the daily limit back": the limit was raised from the price card so
+// members could claim before a decrease, which is now in effect. Restoring
+// is the pool admin's own "limit" transaction, like "Set limit" below.
+function LimitRestoreBanner({ restore, symbol, decimals, poolAdmin, wallet, busy, onRestore, onDismiss }) {
+  const t = useI18n();
+  const { L } = t;
+  const limitText = (units) => (units === "0" ? L("10% пула", "10% of pool") : `${t.units(units, decimals)} ${symbol}`);
+  const isAdminWallet = sameAddress(poolAdmin, wallet);
+  return (
+    <Card className="space-y-3">
+      <p className="card-title">{L(`Верните дневной лимит: ${limitText(restore.from)}`, `Restore the daily limit to ${limitText(restore.from)}`)}</p>
+      <p className="text-[13px] leading-snug text-hint">
+        {L(
+          `Для снижения цены балла (${t.moment(restore.effective_at)}) дневной лимит выплат подняли до ${limitText(restore.to)}, чтобы все успели забрать баллы. Снижение уже действует, а лимит — защита на случай утечки ключа бота: верните прежний.`,
+          `The daily payout limit was raised to ${limitText(restore.to)} so everyone could claim before the point price decrease (${t.moment(restore.effective_at)}). The decrease is in effect now, and the limit is the safety cap for a leaked bot key: set it back.`,
+        )}
+      </p>
+      <div className="flex gap-2">
+        <Button
+          variant="secondary"
+          className="flex-1"
+          busy={busy === "limit"}
+          disabled={Boolean(busy) || (Boolean(wallet) && !isAdminWallet)}
+          onClick={onRestore}
+        >
+          {wallet
+            ? L(`Вернуть ${limitText(restore.from)}`, `Restore ${limitText(restore.from)}`)
+            : L("Подключить кошелёк администратора пула", "Connect the pool admin wallet")}
+        </Button>
+        <Button variant="ghost" busy={busy === "dismiss"} disabled={Boolean(busy)} onClick={onDismiss}>
+          {L("Оставить как есть", "Keep it")}
+        </Button>
+      </div>
+      {poolAdmin && wallet && !isAdminWallet && (
+        <p className="text-[12px] leading-snug text-danger">
+          {L(
+            `Лимит меняет только кошелёк администратора пула ${shortenAddress(poolAdmin, 5)}. Подключите его.`,
+            `Only the pool admin wallet ${shortenAddress(poolAdmin, 5)} can change the limit. Connect it.`,
+          )}
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -103,6 +148,7 @@ function PoolManager({ chatId }) {
   }
 
   // Polls pool-status until `done(status)` holds, for up to ~2 minutes.
+  // `pending` and `success` are notice texts (bilingual(), see Notice).
   async function waitFor(done, pending, success) {
     setNotice({ kind: "info", text: pending });
     for (let i = 0; i < 24; i++) {
@@ -116,24 +162,24 @@ function PoolManager({ chatId }) {
     }
     setNotice({
       kind: "info",
-      text: L("Транзакция ещё подтверждается в сети — нажмите «Обновить» через минуту.", "Still confirming on-chain — pull Refresh in a minute."),
+      text: bilingual("Транзакция ещё подтверждается в сети — нажмите «Обновить» через минуту.", "Still confirming on-chain — pull Refresh in a minute."),
     });
   }
 
   const activate = () =>
     run("activate", async () => {
-      setNotice({ kind: "info", text: L("Подтвердите активацию в кошельке.", "Confirm the activation in your wallet.") });
+      setNotice({ kind: "info", text: bilingual("Подтвердите активацию в кошельке.", "Confirm the activation in your wallet.") });
       await send({ to: info.master_address, amount: info.create_pool_ton, payload_b64: info.create_pool_body });
       await waitFor(
         (s) => s.active,
-        L("Разворачиваем пул…", "Deploying the pool…"),
-        L("Пул работает. Пополните его, чтобы начать награждать.", "The pool is live. Top it up to start rewarding."),
+        bilingual("Разворачиваем пул…", "Deploying the pool…"),
+        bilingual("Пул работает. Пополните его, чтобы начать награждать.", "The pool is live. Top it up to start rewarding."),
       );
     });
 
   const deposit = () =>
     run("deposit", async () => {
-      setNotice({ kind: "info", text: L("Готовим перевод…", "Preparing the transfer…") });
+      setNotice({ kind: "info", text: bilingual("Готовим перевод…", "Preparing the transfer…") });
       const tx = await apiFetch("/api/deposit-voucher", {
         method: "POST",
         initDataRaw,
@@ -141,31 +187,32 @@ function PoolManager({ chatId }) {
       });
       setNotice({
         kind: "info",
-        text: L(
-          `Подтвердите в кошельке. ${formatTon(tx.amount)} TON — это газ сети, неизрасходованное вернётся.`,
-          `Confirm in your wallet. The ${formatTon(tx.amount)} TON is network gas; what is not spent comes back.`,
-        ),
+        text: (t) =>
+          t.L(
+            `Подтвердите в кошельке. ${t.units(tx.amount, 9)} TON — это газ сети, неизрасходованное вернётся.`,
+            `Confirm in your wallet. The ${t.units(tx.amount, 9)} TON is network gas; what is not spent comes back.`,
+          ),
       });
       await send(tx);
       const before = BigInt(info.ledger ?? 0);
       setAmount("");
       await waitFor(
         (s) => s.ledger !== null && BigInt(s.ledger) > before,
-        L("Отправлено — ждём зачисления в пул…", "Sent — waiting for the pool to credit it…"),
-        L("Пул пополнен.", "Pool topped up."),
+        bilingual("Отправлено — ждём зачисления в пул…", "Sent — waiting for the pool to credit it…"),
+        bilingual("Пул пополнен.", "Pool topped up."),
       );
     });
 
   const claimAdmin = () =>
     run("admin", async () => {
-      setNotice({ kind: "info", text: L("Готовим чек админа…", "Preparing the admin voucher…") });
+      setNotice({ kind: "info", text: bilingual("Готовим чек админа…", "Preparing the admin voucher…") });
       const tx = await apiFetch("/api/admin-voucher", { method: "POST", initDataRaw, body: { chatId, wallet } });
-      setNotice({ kind: "info", text: L("Подтвердите в кошельке.", "Confirm in your wallet.") });
+      setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await send(tx);
       await waitFor(
         (s) => sameAddress(s.pool_admin, wallet),
-        L("Назначаем этот кошелёк админом пула…", "Registering this wallet as pool admin…"),
-        L("Теперь вывод из пула управляется этим кошельком.", "This wallet now controls withdrawals."),
+        bilingual("Назначаем этот кошелёк админом пула…", "Registering this wallet as pool admin…"),
+        bilingual("Теперь вывод из пула управляется этим кошельком.", "This wallet now controls withdrawals."),
       );
     });
 
@@ -174,42 +221,60 @@ function PoolManager({ chatId }) {
   const setPaused = (paused) =>
     run("pause", async () => {
       const tx = await adminTx({ action: paused ? "pause" : "resume" });
-      setNotice({ kind: "info", text: L("Подтвердите в кошельке.", "Confirm in your wallet.") });
+      setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await send(tx);
       await waitFor(
         (s) => s.controls?.paused === paused,
-        paused ? L("Приостанавливаем вывод…", "Pausing claims…") : L("Возобновляем вывод…", "Resuming claims…"),
+        paused ? bilingual("Приостанавливаем вывод…", "Pausing claims…") : bilingual("Возобновляем вывод…", "Resuming claims…"),
         paused
-          ? L("Вывод приостановлен. Никто не сможет забрать баллы, пока вы его не возобновите.", "Claims are paused. Nobody can claim until you resume.")
-          : L("Вывод снова открыт.", "Claims are open again."),
+          ? bilingual("Вывод приостановлен. Никто не сможет забрать баллы, пока вы его не возобновите.", "Claims are paused. Nobody can claim until you resume.")
+          : bilingual("Вывод снова открыт.", "Claims are open again."),
       );
     });
 
   const saveLimit = (value) =>
     run("limit", async () => {
       const tx = await adminTx({ action: "limit", amount: value });
-      setNotice({ kind: "info", text: L("Подтвердите в кошельке.", "Confirm in your wallet.") });
+      setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await send(tx);
       setLimitAmount("");
       const before = info.controls?.limit;
       await waitFor(
         (s) => s.controls && s.controls.limit !== before,
-        L("Меняем дневной лимит…", "Updating the daily limit…"),
-        L("Дневной лимит изменён.", "Daily limit updated."),
+        bilingual("Меняем дневной лимит…", "Updating the daily limit…"),
+        bilingual("Дневной лимит изменён.", "Daily limit updated."),
       );
     });
+
+  // The daily limit raised from the price card for a decrease that is now
+  // behind (pool-status `limit_restore`): back to what it was, or keep it.
+  const restoreLimit = (restore) =>
+    saveLimit(restore.from === "0" ? "0" : formatExact(restore.from, info.jetton?.decimals ?? null));
+
+  const dismissRestore = async () => {
+    setBusy("dismiss");
+    try {
+      await apiFetch("/api/limit-restore", { method: "POST", initDataRaw, body: { chatId } });
+      await load();
+    } catch (e) {
+      haptic("error");
+      setNotice({ kind: "err", text: e.message });
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const withdraw = () =>
     run("withdraw", async () => {
       const tx = await adminTx({ action: "withdraw", amount: withdrawAmount, to: wallet });
-      setNotice({ kind: "info", text: L("Подтвердите вывод в кошельке.", "Confirm the withdrawal in your wallet.") });
+      setNotice({ kind: "info", text: bilingual("Подтвердите вывод в кошельке.", "Confirm the withdrawal in your wallet.") });
       await send(tx);
       const before = BigInt(info.ledger ?? 0);
       setWithdrawAmount("");
       await waitFor(
         (s) => s.ledger !== null && BigInt(s.ledger) < before,
-        L("Выводим…", "Withdrawing…"),
-        L("Жетоны уже в пути к вашему кошельку.", "Jettons are on their way to your wallet."),
+        bilingual("Выводим…", "Withdrawing…"),
+        bilingual("Жетоны уже в пути к вашему кошельку.", "Jettons are on their way to your wallet."),
       );
     });
 
@@ -287,6 +352,50 @@ function PoolManager({ chatId }) {
           )}
         </div>
       </Card>
+
+      {info.is_creator && info.bot_cannot_post && (
+        <Notice
+          notice={{
+            kind: "err",
+            text: info.bot_cannot_post.reason
+              ? L(
+                  `Бот не может писать в ваш чат: ${info.bot_cannot_post.reason}. Объявления о цене балла и смене жетона туда не доходят — верните бота в чат и дайте ему право писать.`,
+                  `The bot can't post in your chat: ${info.bot_cannot_post.reason}. Announcements about the point price and the jetton don't reach it — add the bot back and let it post.`,
+                )
+              : L(
+                  "Бот не может писать в ваш чат. Объявления о цене балла и смене жетона туда не доходят — верните бота в чат и дайте ему право писать.",
+                  "The bot can't post in your chat. Announcements about the point price and the jetton don't reach it — add the bot back and let it post.",
+                ),
+          }}
+        />
+      )}
+
+      {info.is_creator && info.migrated && (
+        <Notice
+          notice={{
+            kind: "info",
+            text: L(
+              "Чат стал супергруппой (у него новый id). Бот пишет туда, а баллы, пул и настройки остаются за прежним чатом" +
+                (info.migrated.needs_review ? " — это должен проверить оператор платформы." : "."),
+              "The chat was upgraded to a supergroup (it has a new id). The bot posts there, but its points, pool and settings stay with the old chat" +
+                (info.migrated.needs_review ? " — a platform operator needs to review it." : "."),
+            ),
+          }}
+        />
+      )}
+
+      {info.is_creator && info.limit_restore && (
+        <LimitRestoreBanner
+          restore={info.limit_restore}
+          symbol={symbol}
+          decimals={decimals}
+          poolAdmin={info.pool_admin}
+          wallet={wallet}
+          busy={busy}
+          onRestore={() => restoreLimit(info.limit_restore)}
+          onDismiss={dismissRestore}
+        />
+      )}
 
       {info.is_creator && (
         <Link href={`/deposit/${chatId}/members`} className="block">

@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useInitDataRaw } from "@tma.js/sdk-react";
+import { achievementName } from "@/lib/achievements";
 import { apiFetch } from "@/lib/client-api";
 import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useTelegramBack } from "@/components/AppShell";
-import { AchievementArt, Card, ChatAvatar, Chip, Notice, Row, SectionHeader, Skeleton, titleCase } from "@/components/ui";
+import { AchievementArt, Card, ChatAvatar, Chip, Notice, Row, SectionHeader, Skeleton } from "@/components/ui";
 import { Refresh, Sparkles } from "@/components/icons";
 import { PayoutRow, hasLeft, memberLabel, stateHint, stateLabel } from "@/components/PoolAdmin";
 
@@ -179,7 +180,7 @@ function Grants({ grants }) {
 }
 
 function Achievements({ achievements }) {
-  const { L } = useI18n();
+  const { L, locale } = useI18n();
   if (!achievements.length) return null;
   return (
     <section className="space-y-2.5">
@@ -190,7 +191,7 @@ function Achievements({ achievements }) {
             <li key={a._id} className="flex flex-col items-center gap-1.5">
               <AchievementArt type={a.type} collection={a.collection} className="aspect-square w-full" />
               <span className="line-clamp-2 text-center text-[11px] font-medium leading-tight text-hint">
-                {titleCase(a.type)}
+                {achievementName(a.type, locale)}
               </span>
             </li>
           ))}

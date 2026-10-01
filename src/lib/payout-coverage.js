@@ -18,10 +18,17 @@ const DEFAULT_LIMIT_PERCENT = 10n;
 // UTC midnights strictly between now and then (a budget that starts at the
 // moment the decrease applies is of no use). Today's remaining budget is not
 // counted: it may be spent already, and the estimate must not be optimistic.
-function budgetDays(nowMs, effectiveAtMs) {
+// `isClaimDay(dayStartMs)`, when given, keeps only the days members can
+// claim on (the claim rules' weekdays and pause): a closed day's budget
+// goes unused.
+function budgetDays(nowMs, effectiveAtMs, isClaimDay = null) {
     const firstMidnight = Math.floor(nowMs / DAY_MS) * DAY_MS + DAY_MS;
     if (!(effectiveAtMs > firstMidnight)) return 0;
-    return Math.floor((effectiveAtMs - 1 - firstMidnight) / DAY_MS) + 1;
+    const days = Math.floor((effectiveAtMs - 1 - firstMidnight) / DAY_MS) + 1;
+    if (!isClaimDay) return days;
+    let open = 0;
+    for (let i = 0; i < days; i++) if (isClaimDay(firstMidnight + i * DAY_MS)) open++;
+    return open;
 }
 
 function defaultDailyBudget(balance) {
@@ -85,6 +92,83 @@ function payoutCoverage({ debt, poolBalance, limit, days }) {
     };
 }
 
+// ---- Setting a raised daily limit back ----
+//
+// The price card offers the pool admin to raise the daily limit so everyone
+// can claim before a decrease. The limit is the pool's safety cap for a
+// leaked bot key, so once the decrease is behind it should go back. The app
+// cannot see whether the admin's wallet sent the transaction, so the request
+// is recorded when the admin asks pool-admin-tx for it, in
+// chats.claim_limit_raise:
+//   { jetton_master, from, to, effective_at, requested_at, by }
+// from/to: the daily limit before and as requested, jetton units as decimal
+// strings ("0" = the contract's default 10% of the balance); effective_at:
+// the decrease it was for (Date). The pool page then shows a "set it back"
+// banner (limitRestore) until the on-chain limit is back at or below `from`
+// or the creator dismisses it (the record is removed either way).
+
+// Whether an on-chain limit is above `from`. 0 is the default share of the
+// balance, not comparable with an amount: away from the default counts as
+// raised, and so does going from an amount to the default.
+function limitAbove(limit, from) {
+    if (from === 0n) return limit !== 0n;
+    return limit === 0n || limit > from;
+}
+
+function unitsOf(value) {
+    try {
+        const n = BigInt(String(value));
+        return n >= 0n ? n : null;
+    } catch {
+        return null;
+    }
+}
+
+// The record to store when the admin requests a limit of `target` (units)
+// for a decrease at `effectiveAt`, or null when that is no raise. A second
+// raise while the first is still in force keeps the first one's `from`: the
+// limit to go back to is the one before any of them.
+function limitRaiseRecord(existing, { jettonMaster, currentLimit, target, effectiveAt, now = new Date(), by = null }) {
+    let from = currentLimit;
+    const prior = existing && existing.jetton_master === jettonMaster ? unitsOf(existing.from) : null;
+    if (prior !== null && limitAbove(currentLimit, prior)) from = prior;
+    if (!limitAbove(target, from)) return null;
+    return {
+        jetton_master: jettonMaster,
+        from: from.toString(),
+        to: target.toString(),
+        effective_at: effectiveAt,
+        requested_at: now,
+        by,
+    };
+}
+
+// What the pool page does with a recorded raise:
+//   null      nothing recorded;
+//   'clear'   remove the record: the limit is back at or below `from` after
+//             the decrease (or the raise never landed), or it is for another
+//             jetton, or unreadable;
+//   'waiting' the decrease is still ahead (the record's date, or a pending
+//             decrease that replaced it): the raised limit is still needed;
+//   'due'     show the banner: set the limit back to `from`.
+// Before the decrease the record is kept even when the limit is not raised
+// yet: the admin's transaction may still be confirming. `limit` is the
+// on-chain daily limit (BigInt units), null when it cannot be read (then
+// nothing is decided). `upcoming`: a decrease is pending now.
+function limitRestore(record, { jettonMaster, limit, now = new Date(), upcoming = false }) {
+    if (!record) return null;
+    const from = unitsOf(record.from);
+    const to = unitsOf(record.to);
+    const effectiveAt = record.effective_at instanceof Date ? record.effective_at : new Date(NaN);
+    if (from === null || to === null || Number.isNaN(effectiveAt.getTime())) return { state: 'clear' };
+    if (record.jetton_master !== jettonMaster) return { state: 'clear' };
+    const base = { from: from.toString(), to: to.toString(), effective_at: Math.floor(effectiveAt.getTime() / 1000) };
+    if (upcoming || now.getTime() < effectiveAt.getTime() || limit === null || limit === undefined) {
+        return { state: 'waiting', ...base };
+    }
+    return { state: limitAbove(limit, from) ? 'due' : 'clear', ...base };
+}
+
 // JSON-safe (amounts as unit strings).
 function serializeCoverage(coverage, extra = {}) {
     const out = {};
@@ -99,4 +183,7 @@ module.exports = {
     readableCeil,
     payoutCoverage,
     serializeCoverage,
+    limitAbove,
+    limitRaiseRecord,
+    limitRestore,
 };

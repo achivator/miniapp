@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { translateError } from "@/lib/i18n";
-import { useLocale } from "@/lib/use-locale";
+import { achievementName } from "@/lib/achievements";
+import { useI18n } from "@/lib/use-locale";
 import { Alert, Check, Info } from "./icons";
 
 export function cx(...parts) {
@@ -92,9 +92,13 @@ export function Chip({ tone = "neutral", icon, children }) {
 }
 
 // Inline status line under an action (info / ok / err). Errors usually come
-// from the API in English: known ones are shown in the app's language.
+// from the API in English: known ones are shown in the app's language. A
+// notice kept in state outlives a switch of language (the TopBar's), so its
+// own text is a function of the screen's i18n helpers (useI18n), called when
+// the notice is drawn: bilingual(ru, en), or (t) => t.L(...) when the text
+// formats numbers. A plain string is shown as is.
 export function Notice({ notice }) {
-  const locale = useLocale();
+  const t = useI18n();
   if (!notice) return null;
   // Information reads like the landing's dashed "Where the TON goes" note;
   // outcomes keep their color.
@@ -107,9 +111,15 @@ export function Notice({ notice }) {
   return (
     <div className={cx("flex items-start gap-2 rounded-xl px-3 py-2.5 text-[13px] leading-snug", cls)} role="status">
       <Icon className="mt-px h-4 w-4 shrink-0" />
-      <span>{notice.kind === "err" ? translateError(notice.text, locale) : notice.text}</span>
+      <span>{typeof notice.text === "function" ? notice.text(t) : notice.kind === "err" ? t.error(notice.text) : notice.text}</span>
     </div>
   );
+}
+
+// A notice text in both languages, picked when the notice is drawn (see
+// Notice): setNotice({ kind: "ok", text: bilingual("Сохранено.", "Saved.") }).
+export function bilingual(ru, en) {
+  return ({ L }) => L(ru, en);
 }
 
 export function Skeleton({ className }) {
@@ -158,6 +168,7 @@ export function ChatAvatar({ title, id, size = 44 }) {
 // Pixel-art medal from /public, with a neutral fallback for types that have
 // no artwork yet.
 export function AchievementArt({ type, collection = "v1", className }) {
+  const { locale } = useI18n();
   const [broken, setBroken] = useState(false);
   const file = encodeURIComponent(String(type || "").toLowerCase());
   return (
@@ -170,7 +181,7 @@ export function AchievementArt({ type, collection = "v1", className }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={`/achievements/${collection}/${file}.webp`}
-          alt={type}
+          alt={achievementName(type, locale)}
           className="h-full w-full object-cover"
           loading="lazy"
           onError={() => setBroken(true)}
@@ -187,10 +198,6 @@ export function Row({ label, children }) {
       <span className="min-w-0 truncate text-right font-medium tabular">{children}</span>
     </div>
   );
-}
-
-export function titleCase(text) {
-  return String(text || "").replace(/(^|\s)\S/g, (c) => c.toUpperCase());
 }
 
 // iOS-style segmented control; `format` renders each option's label.

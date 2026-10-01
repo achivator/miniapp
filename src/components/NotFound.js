@@ -38,8 +38,8 @@ export function notFoundMetadata(locale) {
 }
 
 // A catch-all page: the 404 of `locale` (null: bilingual) when the middleware
-// marked the request; otherwise (a path it let through, e.g. with a dot)
-// notFound(), which also answers 404.
+// marked the request; otherwise (a path it let through as a file, e.g. a
+// missing /brand/*.png) notFound(), which also answers 404.
 export function MissingPage({ locale }) {
   if (!headers().get(MISSING_HEADER)) notFound();
   return locale ? <LocaleNotFound locale={locale} /> : <BilingualNotFound />;

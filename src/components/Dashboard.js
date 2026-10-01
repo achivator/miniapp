@@ -15,10 +15,11 @@ import {
   Chip,
   EmptyState,
   Notice,
+  bilingual,
   SectionHeader,
   Skeleton,
-  titleCase,
 } from "@/components/ui";
+import { achievementName } from "@/lib/achievements";
 import { intlLocale } from "@/lib/i18n";
 import { useI18n } from "@/lib/use-locale";
 import { Alert, ChevronRight, Clock, Coins, Medal, Pool, Question, Sparkles } from "@/components/icons";
@@ -118,7 +119,7 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
       return;
     }
     setBusy(true);
-    setNotice({ kind: "info", text: L("Готовим вывод…", "Preparing your claim…") });
+    setNotice({ kind: "info", text: bilingual("Готовим вывод…", "Preparing your claim…") });
     try {
       const voucher = await apiFetch("/api/claim-voucher", {
         method: "POST",
@@ -127,32 +128,35 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
       });
       // The amount is priced when the voucher is signed and may differ from
       // the estimate above if the chat's rate just changed: state it here.
-      const jettons = `${t.decimal(voucher.jettons)} ${symbol}`;
+      // Notice texts are drawn in the language shown at the time (see Notice).
+      const jettons = (t) => `${t.decimal(voucher.jettons)} ${reward.symbol || t.L("жетона", "jetton")}`;
       setNotice({
         kind: "info",
-        text: L(`Подтвердите в кошельке — вы получите ${jettons}.`, `Confirm in your wallet to receive ${jettons}.`),
+        text: (t) => t.L(`Подтвердите в кошельке — вы получите ${jettons(t)}.`, `Confirm in your wallet to receive ${jettons(t)}.`),
       });
       await sendTonTransaction(tonConnectUI, network, [
         { address: voucher.to, amount: voucher.amount, payload: voucher.payload_b64 },
       ]);
-      setNotice({ kind: "info", text: L("Отправлено — ждём выплату из пула…", "Sent — waiting for the pool to pay out…") });
+      setNotice({ kind: "info", text: bilingual("Отправлено — ждём выплату из пула…", "Sent — waiting for the pool to pay out…") });
       const status = await pollClaimStatus(reward.chat_id, voucher.nonce, initDataRaw);
       if (status?.status === "claimed") {
         haptic("success");
-        const rest = voucher.remaining_points
-          ? L(
-              ` Ещё ${t.pts(voucher.remaining_points)} останутся на потом: у пула чата дневной лимит выплат.`,
-              ` ${t.pts(voucher.remaining_points)} stay for later: the chat pool has a daily payout limit.`,
-            )
-          : "";
+        const rest = (t) =>
+          voucher.remaining_points
+            ? t.L(
+                ` Ещё ${t.pts(voucher.remaining_points)} останутся на потом: у пула чата дневной лимит выплат.`,
+                ` ${t.pts(voucher.remaining_points)} stay for later: the chat pool has a daily payout limit.`,
+              )
+            : "";
         setNotice({
           kind: "ok",
-          text: L(`${jettons} уже в пути к вашему кошельку.${rest}`, `${jettons} are on their way to your wallet.${rest}`),
+          text: (t) =>
+            t.L(`${jettons(t)} уже в пути к вашему кошельку.${rest(t)}`, `${jettons(t)} are on their way to your wallet.${rest(t)}`),
         });
       } else {
         setNotice({
           kind: "info",
-          text: L("Транзакция ещё подтверждается в сети. Загляните через минуту.", "Still confirming on-chain. Check back in a minute."),
+          text: bilingual("Транзакция ещё подтверждается в сети. Загляните через минуту.", "Still confirming on-chain. Check back in a minute."),
         });
       }
       onRefresh();
@@ -244,20 +248,28 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
       )}
 
       {/* The creator can re-price points already earned: say so for a week. */}
+      {/* A jetton switch is no rate change: the old price was in another
+          jetton, so "old → new" would compare different coins. */}
       {reward.jetton_master && priceChange && (
         <Notice
           notice={{
             kind: "info",
-            text: L(
-              `Курс изменён ${shortDate(priceChange.at, t.locale)}: 1 балл = ${t.decimal(priceChange.old)} → ${t.decimal(priceChange.new)} ${symbol}${
-                priceChange.changes > 1
-                  ? ` (${t.count(priceChange.changes, ["изменение", "изменения", "изменений"], [])} за 7 дней)`
-                  : ""
-              }`,
-              `Rate changed on ${shortDate(priceChange.at, t.locale)}: 1 pt = ${t.decimal(priceChange.old)} → ${t.decimal(priceChange.new)} ${symbol}${
-                priceChange.changes > 1 ? ` (${priceChange.changes} changes in 7 days)` : ""
-              }`,
-            ),
+            text:
+              priceChange.reason === "jetton_changed"
+                ? L(
+                    `Жетон наград сменился ${shortDate(priceChange.at, t.locale)}: незабранные баллы теперь выплачиваются в ${symbol}, 1 балл = ${t.decimal(priceChange.new)} ${symbol}.`,
+                    `Reward jetton changed on ${shortDate(priceChange.at, t.locale)}: unclaimed points are now paid in ${symbol}, 1 pt = ${t.decimal(priceChange.new)} ${symbol}.`,
+                  )
+                : L(
+                    `${priceChange.reason === "platform_default" ? "Курс платформы по умолчанию изменён" : "Курс изменён"} ${shortDate(priceChange.at, t.locale)}: 1 балл = ${t.decimal(priceChange.old)} → ${t.decimal(priceChange.new)} ${symbol}${
+                      priceChange.changes > 1
+                        ? ` (${t.count(priceChange.changes, ["изменение", "изменения", "изменений"], [])} за 7 дней)`
+                        : ""
+                    }`,
+                    `${priceChange.reason === "platform_default" ? "Platform default rate changed" : "Rate changed"} on ${shortDate(priceChange.at, t.locale)}: 1 pt = ${t.decimal(priceChange.old)} → ${t.decimal(priceChange.new)} ${symbol}${
+                      priceChange.changes > 1 ? ` (${priceChange.changes} changes in 7 days)` : ""
+                    }`,
+                  ),
           }}
         />
       )}
@@ -277,7 +289,26 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
       )}
 
       <Notice notice={notice} />
+
+      <RatingLink chatId={reward.chat_id} />
     </Card>
+  );
+}
+
+// The foot of a chat's card: its achievement rating (app/(app)/rating/[chatId]).
+function RatingLink({ chatId }) {
+  const { L } = useI18n();
+  return (
+    <Link
+      href={`/rating/${chatId}`}
+      className="flex items-center justify-between gap-2 border-t border-[color:var(--separator)] pt-3 text-[13px] font-medium text-link active:opacity-80"
+    >
+      <span className="flex items-center gap-1.5">
+        <Medal className="h-4 w-4" />
+        {L("Рейтинг чата", "Chat rating")}
+      </span>
+      <ChevronRight className="h-4 w-4" />
+    </Link>
   );
 }
 
@@ -323,7 +354,7 @@ function CreatorChats({ chats }) {
 }
 
 function Achievements({ groups }) {
-  const { L } = useI18n();
+  const { L, locale } = useI18n();
   if (groups === null) {
     return (
       <Card className="grid grid-cols-4 gap-3">
@@ -359,12 +390,13 @@ function Achievements({ groups }) {
                 className="aspect-square w-full transition group-active:scale-95"
               />
               <span className="line-clamp-2 text-center text-[11px] font-medium leading-tight text-hint">
-                {titleCase(a.type)}
+                {achievementName(a.type, locale)}
               </span>
             </Link>
           </li>
         ))}
       </ul>
+      <RatingLink chatId={chat.id} />
     </Card>
   ));
 }

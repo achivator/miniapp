@@ -13,23 +13,34 @@ import {
 import { chatDebt } from "@/lib/lots";
 import { budgetDays, payoutCoverage, serializeCoverage } from "@/lib/payout-coverage";
 import { sameAddress } from "@/lib/pool-members";
+import { reconcileAnnouncementsQuietly, writeAnnouncements } from "@/lib/announcements";
 import { claimGate, claimSettingsOf } from "@/lib/claim-rules";
 import {
   FALLBACK_DECIMALS,
   MAX_POINT_PRICE,
   announcementDoc,
+  claimWindows,
   decreaseEffectiveAt,
+  decreasePreview,
   hasCustomPointPrice,
   normalizePointPrice,
   planPointPriceCancel,
   planPointPriceChange,
   platformPointPrice,
+  platformTargetPrice,
   pointPriceFor,
   pointPriceNoticeDays,
+  noticeEffectiveAt,
+  serializeClaimWindows,
   serializePendingPrice,
   serializePriceHistory,
+  upcomingPlatformDecrease,
   upcomingPointPrice,
 } from "@/lib/point-price";
+import { loadPlatformDefault } from "@/lib/platform-price";
+import { queryInt } from "@/lib/query";
+
+const DAY_MS = 86400 * 1000;
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +51,8 @@ async function creatorChat(request, chatId) {
   if (!Number.isSafeInteger(chatId)) return { error: Response.json({ error: "chatId is required" }, { status: 400 }) };
   const chat = await (await getCollection("chats")).findOne({ id: chatId });
   if (!chat) return { error: Response.json({ error: "chat not found" }, { status: 404 }) };
+  // the platform default its price builds on (lib/platform-price.js)
+  await loadPlatformDefault();
   if (chat.creator !== auth.user.id) {
     return { error: Response.json({ error: "only the chat creator can change the point price" }, { status: 403 }) };
   }
@@ -111,12 +124,19 @@ async function coverageOf(chat, jetton, now, force = false) {
     } catch {
       pending = null;
     }
-    const effectiveAt = pending ? pending.effective_at : decreaseEffectiveAt(now);
+    // a decrease requested now waits for a claim window too (and with claims
+    // paused for good there is none: its notice then gives 0 budget days)
+    const settings = claimSettingsOf(chat);
+    const noticeEnds = decreaseEffectiveAt(now);
+    const effectiveAt = pending ? pending.effective_at : noticeEffectiveAt(settings, now, noticeEnds) ?? noticeEnds;
+    const effMs = effectiveAt.getTime();
+    // only the budgets of days members can claim on are of use
+    const claimDay = (dayMs) => claimWindows(settings, dayMs, Math.min(dayMs + DAY_MS, effMs)).length > 0;
     const coverage = payoutCoverage({
       debt: debt.units + issued,
       poolBalance: ledger,
       limit: controls.limit,
-      days: budgetDays(now.getTime(), effectiveAt.getTime()),
+      days: budgetDays(now.getTime(), effMs, claimDay),
     });
     let admin = null;
     try {
@@ -147,6 +167,22 @@ async function coverageOf(chat, jetton, now, force = false) {
   }
 }
 
+function serializePlatformDecrease(decrease) {
+  if (!decrease) return null;
+  return { price: decrease.price, from: decrease.from, effective_at: Math.floor(decrease.effective_at.getTime() / 1000) };
+}
+
+function serializeConfirm(flag) {
+  if (!flag) return null;
+  return {
+    reason: flag.reason ?? null,
+    at: flag.at ? Math.floor(new Date(flag.at).getTime() / 1000) : null,
+    old_jetton: flag.old_jetton ?? null,
+    new_jetton: flag.new_jetton ?? null,
+    old_price: flag.old_price ?? null,
+  };
+}
+
 function view(chat, jetton, extra = {}) {
   const now = new Date();
   let price = null;
@@ -155,9 +191,14 @@ function view(chat, jetton, extra = {}) {
   } catch {
     // a corrupted stored price: show none, the creator can save a new one
   }
+  const settings = claimSettingsOf(chat);
   let pending = null;
   try {
-    pending = serializePendingPrice(upcomingPointPrice(chat, now));
+    const upcoming = upcomingPointPrice(chat, now);
+    // when members can claim before it (the claim rules as they are now)
+    pending = upcoming
+      ? { ...serializePendingPrice(upcoming), ...serializeClaimWindows(settings, now, upcoming.effective_at) }
+      : null;
   } catch {
     // a malformed pending: the price above is null too, saving clears it
   }
@@ -165,20 +206,31 @@ function view(chat, jetton, extra = {}) {
     ok: true,
     price,
     custom: hasCustomPointPrice(chat, now),
-    platform_price: platformPointPrice(),
+    // the platform default in force, where it is heading ("Use default" is
+    // scheduled to that), and its decrease ahead if any
+    platform_price: platformPointPrice(now),
+    platform_target: platformTargetPrice(),
+    platform_pending: serializePlatformDecrease(upcomingPlatformDecrease(now)),
     max_price: MAX_POINT_PRICE,
     // a decrease waiting for its notice period, or null
     pending,
     // how long a decrease requested now would wait
     notice_days: pointPriceNoticeDays(),
+    // ...and exactly when it would apply, extended to hold a full claim
+    // window, with the windows members get before it (effective_at null:
+    // claims are paused with no end date, it cannot be scheduled)
+    next_decrease: decreasePreview(settings, now),
     // members cannot claim at the old price while claims are paused, which
     // defeats the notice: the card warns the creator
-    claim_gate: claimGate(claimSettingsOf(chat)),
+    claim_gate: claimGate(settings),
     jetton,
     // what the price is validated against
     decimals: jetton?.decimals ?? FALLBACK_DECIMALS,
     decimals_known: Number.isInteger(jetton?.decimals),
     history: serializePriceHistory(chat, 10, now),
+    // the bot's /jetton switched the reward jetton and reset the price: the
+    // card asks for a price in the new jetton, or to keep the default
+    confirm_required: serializeConfirm(chat.point_price_confirm_required),
     ...extra,
   };
 }
@@ -186,9 +238,11 @@ function view(chat, jetton, extra = {}) {
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const chatId = Number(searchParams.get("chatId"));
+    const chatId = queryInt(searchParams, "chatId");
     const { chat, error } = await creatorChat(request, chatId);
     if (error) return error;
+    // a decrease whose announcement its save could not queue is queued now
+    await reconcileAnnouncementsQuietly([chat]);
     const jetton = await jettonOf(chat);
     const force = searchParams.get("coverage") === "1";
     return Response.json(view(chat, jetton, await coverageOf(chat, jetton, new Date(), force)));
@@ -199,7 +253,9 @@ export async function GET(request) {
 
 // Body: { chatId, price } where price is a decimal string of jettons per
 // point, or null to go back to the platform default; or { chatId,
-// cancelPending: true } to cancel a scheduled decrease. Off-chain and free,
+// cancelPending: true } to cancel a scheduled decrease; or { chatId,
+// confirmDefault: true } to keep the platform default after a jetton switch
+// (point_price_confirm_required, which any saved price clears too). Off-chain and free,
 // like the claim rules. A higher (or equal) price applies to the next claim;
 // a lower one waits the notice period (see planPointPriceChange) and the bot
 // announces it in the chat.
@@ -212,10 +268,23 @@ export async function POST(request) {
     if ((await getChatMemberStatus(chat.id, auth.user.id)) !== "creator") {
       return Response.json({ error: "Telegram does not confirm you as the chat creator" }, { status: 403 });
     }
+    // what an earlier save could not queue goes first, in its own place
+    await reconcileAnnouncementsQuietly([chat]);
 
     const jetton = await jettonOf(chat);
     const now = new Date();
     const symbol = jetton?.symbol ?? null;
+    const chats = await getCollection("chats");
+    // After a jetton switch: keep the platform default (the price the switch
+    // left) and stop asking.
+    if (body?.confirmDefault === true) {
+      const res = await chats.findOneAndUpdate(
+        { id: chat.id },
+        { $unset: { point_price_confirm_required: "" } },
+        { returnDocument: "after" },
+      );
+      return Response.json(view(res ?? chat, jetton, await coverageOf(res ?? chat, jetton, new Date(), false)));
+    }
     let plan;
     if (body?.cancelPending === true) {
       // 409 when there is nothing to cancel or it already took effect
@@ -227,34 +296,65 @@ export async function POST(request) {
       } catch (e) {
         return Response.json({ error: e.message }, { status: 400 });
       }
-      plan = planPointPriceChange(chat, next, { now, by: auth.user.id, symbol });
+      plan = planPointPriceChange(chat, next, {
+        now,
+        by: auth.user.id,
+        symbol,
+        // snapshotted with the change: lots are valued by the maturation in
+        // force when a decrease took effect (lib/lot-pricing.js)
+        maturationDays: claimSettingsOf(chat).maturation_days,
+        // a decrease waits for a full claim window (409 while claims are
+        // paused with no end date)
+        claimSettings: claimSettingsOf(chat),
+      });
     }
-    if (!plan) return Response.json(view(chat, jetton, await coverageOf(chat, jetton, new Date(), body?.coverage === true)));
+    // Any price saved answers the jetton switch's question; a cancellation
+    // sets no price, so it does not.
+    const answers = body?.cancelPending !== true && Boolean(chat.point_price_confirm_required);
+    if (!plan) {
+      // the price asked for is already in force (e.g. the default again)
+      const res = answers
+        ? await chats.findOneAndUpdate(
+            { id: chat.id },
+            { $unset: { point_price_confirm_required: "" } },
+            { returnDocument: "after" },
+          )
+        : null;
+      return Response.json(view(res ?? chat, jetton, await coverageOf(res ?? chat, jetton, new Date(), body?.coverage === true)));
+    }
+    if (answers) plan.update.$unset = { ...plan.update.$unset, point_price_confirm_required: "" };
 
     // Conditional on the price and the pending decrease we read, so two
     // concurrent saves cannot both log a change from the same "old" price
     // (the history must chain), and a save cannot race the bot applying a
     // due decrease.
-    const res = await (await getCollection("chats")).findOneAndUpdate(plan.filter, plan.update, {
+    // A new decrease's date was fitted to the claim rules read here: not to
+    // rules saved meanwhile.
+    const schedules = Boolean(plan.update.$set?.point_price_pending);
+    const filter = schedules
+      ? { ...plan.filter, claim_settings_updated_at: chat.claim_settings_updated_at ?? null }
+      : plan.filter;
+    const res = await chats.findOneAndUpdate(filter, plan.update, {
       returnDocument: "after",
     });
     if (!res) {
-      return Response.json({ error: "the price was changed meanwhile; reload and try again" }, { status: 409 });
+      const error = schedules
+        ? "the claim rules or the price were changed meanwhile; reload and try again"
+        : "the price was changed meanwhile; reload and try again";
+      return Response.json({ error }, { status: 409 });
     }
 
     // Only after the chat write succeeded, so the bot never announces a
     // change that did not happen. Without a replica set there is no
-    // transaction to share: if this insert fails the change stands and the
-    // creator is told the chat was not notified.
+    // transaction to share: if this write fails the change stands, the
+    // creator is told (announced: false), and a scheduled decrease's "will
+    // drop" row is queued later - by the next read of the chat here, or by
+    // the bot's pass - under the same key (see point-price.js). Ordered: a
+    // written-out due decrease is announced before what the creator just did.
     let announced = null;
     if (plan.announcements.length > 0) {
       try {
-        // ordered: a written-out due decrease is announced before what the
-        // creator just did
-        await (await getCollection("announcements")).insertMany(
-          plan.announcements.map((a) => announcementDoc(chat.id, a, now)),
-          { ordered: true },
-        );
+        await writeAnnouncements(plan.announcements.map((a) => announcementDoc(chat.id, a, now)));
         announced = true;
       } catch (e) {
         console.error("point-price: announcement insert failed", chat.id, e);

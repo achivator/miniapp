@@ -14,6 +14,8 @@ import {
   serializeSummary,
   summarizeClaims,
 } from "@/lib/pool-members";
+import { loadPlatformDefault } from "@/lib/platform-price";
+import { queryInt } from "@/lib/query";
 
 export const dynamic = "force-dynamic";
 
@@ -25,10 +27,12 @@ const WEEK = 7 * 86400;
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const chatId = Number(searchParams.get("chatId"));
-    const userId = Number(searchParams.get("userId"));
+    const chatId = queryInt(searchParams, "chatId");
+    const userId = queryInt(searchParams, "userId");
     const { chat } = await requireChatCreator(request, chatId);
     if (!Number.isSafeInteger(userId)) throw httpError(400, "userId is required");
+    // the platform default its prices build on (lib/platform-price.js)
+    await loadPlatformDefault();
 
     // Same reconciliation the member's own screen runs: settles lapsed
     // vouchers against the chain so "unconfirmed" payouts become paid or

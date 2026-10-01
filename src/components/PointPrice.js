@@ -5,10 +5,11 @@ import { Address } from "@ton/core";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { apiFetch, sendTonTransaction, shortenAddress, sleep } from "@/lib/client-api";
 import { formatDate, formatExact } from "@/lib/format";
+import { intlLocale } from "@/lib/i18n";
 import { compareDecimal, normalizePointPrice, priceFitsDecimals } from "@/lib/point-price";
 import { formatUnits, pointsToJettons } from "@/lib/ton/amounts";
 import { useI18n, useL } from "@/lib/use-locale";
-import { Button, Card, Chip, Notice, SectionHeader } from "./ui";
+import { Button, Card, Chip, Notice, SectionHeader, bilingual } from "./ui";
 import { useHaptic } from "./AppShell";
 
 const EXAMPLE_POINTS = 100;
@@ -33,6 +34,49 @@ function daysText(L, n) {
   const ru =
     mod10 === 1 && mod100 !== 11 ? "день" : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? "дня" : "дней";
   return L(`${n} ${ru}`, `${n} ${n === 1 ? "day" : "days"}`);
+}
+
+// One stretch of open claims before a decrease, in UTC like the claim rules:
+// "Mon, Oct 5 00:00–23:59", "now – Wed, Oct 7 23:59". A window ending at a
+// midnight is open through the day before's 23:59.
+function windowText(t, w, nowSec) {
+  const day = (sec) =>
+    new Date(sec * 1000).toLocaleDateString(intlLocale(t.locale), {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    });
+  const hm = (sec) => new Date(sec * 1000).toISOString().slice(11, 16);
+  const last = w.end % 86400 === 0 ? w.end - 60 : w.end;
+  // the server clipped it at its "now": open already
+  const openNow = w.start % 86400 !== 0 && w.start <= nowSec + 60;
+  if (openNow) return `${t.L("сейчас", "now")} – ${day(last)} ${hm(last)}`;
+  if (Math.floor(w.start / 86400) === Math.floor(last / 86400)) return `${day(w.start)} ${hm(w.start)}–${hm(last)}`;
+  return `${day(w.start)} ${hm(w.start)} – ${day(last)} ${hm(last)}`;
+}
+
+const MAX_WINDOWS_SHOWN = 6;
+
+// "Claims open: Mon, Oct 5 00:00–23:59, Thu, Oct 8 00:00–23:59 UTC" - exactly
+// when members can claim at the current price (`windows` from the API, epoch
+// seconds).
+function ClaimWindows({ windows }) {
+  const t = useI18n();
+  const nowSec = Math.floor(Date.now() / 1000);
+  const more = windows.length - MAX_WINDOWS_SHOWN;
+  return (
+    <p className="text-[13px] leading-snug text-hint tabular">
+      {t.L("Вывод до снижения открыт:", "Claims open before then:")}{" "}
+      <span className="font-semibold text-fg">
+        {windows
+          .slice(0, MAX_WINDOWS_SHOWN)
+          .map((w) => windowText(t, w, nowSec))
+          .join(", ")}
+        {more > 0 ? t.L(` и ещё ${more}`, ` and ${more} more`) : ""} UTC
+      </span>
+    </p>
+  );
 }
 
 function sameAddress(a, b) {
@@ -124,13 +168,14 @@ function PayoutCoverage({ chatId, initDataRaw, symbol, state, setState }) {
       const tx = await apiFetch("/api/pool-admin-tx", {
         method: "POST",
         initDataRaw,
-        body: { chatId, action: "limit", amount: suggested },
+        // recorded, so the pool page reminds the admin to set it back
+        body: { chatId, action: "limit", amount: suggested, purpose: "price_notice" },
       });
-      setNotice({ kind: "info", text: L("Подтвердите в кошельке.", "Confirm in your wallet.") });
+      setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await sendTonTransaction(tonConnectUI, coverage.network, [
         { address: tx.to, amount: tx.amount, payload: tx.payload_b64 },
       ]);
-      setNotice({ kind: "info", text: L("Меняем дневной лимит…", "Updating the daily limit…") });
+      setNotice({ kind: "info", text: bilingual("Меняем дневной лимит…", "Updating the daily limit…") });
       for (let i = 0; i < 24; i++) {
         await sleep(5000);
         const res = await apiFetch(`/api/point-price?chatId=${chatId}&coverage=1`, { initDataRaw }).catch(() => null);
@@ -139,17 +184,18 @@ function PayoutCoverage({ chatId, initDataRaw, symbol, state, setState }) {
           haptic("success");
           setNotice({
             kind: "ok",
-            text: L(
-              `Дневной лимит выплат: ${amount(target)}. После снижения цены его можно вернуть на пульте пула.`,
-              `Daily payout limit is now ${amount(target)}. You can set it back on the pool page after the decrease.`,
-            ),
+            text: (t) =>
+              t.L(
+                `Дневной лимит выплат: ${t.units(target, cDec)} ${symbol}. После снижения цены пульт пула напомнит вернуть прежний.`,
+                `Daily payout limit is now ${t.units(target, cDec)} ${symbol}. After the decrease the pool page reminds you to set it back.`,
+              ),
           });
           return;
         }
       }
       setNotice({
         kind: "info",
-        text: L(
+        text: bilingual(
           "Ещё подтверждается в сети — обновите страницу через минуту.",
           "Still confirming on-chain — reload in a minute.",
         ),
@@ -198,8 +244,14 @@ function PayoutCoverage({ chatId, initDataRaw, symbol, state, setState }) {
       </ul>
       <p className="text-[12px] leading-snug text-hint">
         {L(
-          "Считаем все невыплаченные баллы по текущей цене, в том числе ещё созревающие: их всё равно выплатят позже по цене до снижения. С лимитом 10% считаем, что пул каждый день выплачивает весь лимит и тает.",
-          "All unclaimed points at the current price, maturing ones included: they will be paid later at the pre-decrease price anyway. With the 10% default we assume the pool pays its full budget every day and shrinks.",
+          "Это оценка с запасом: пополнения пула за это время не учтены, а с лимитом 10% считаем, что пул каждый день выплачивает весь лимит и тает, — на деле обычно выйдет больше.",
+          "A cautious estimate: top-ups during the notice are not counted, and with the 10% default the pool is assumed to pay its full budget every day and shrink — in practice more usually gets out.",
+        )}
+      </p>
+      <p className="text-[12px] leading-snug text-hint">
+        {L(
+          "Считаем все невыплаченные баллы по текущей цене, в том числе ещё созревающие: их всё равно выплатят позже по цене до снижения. Учитываем только дни, когда вывод открыт.",
+          "All unclaimed points at the current price, maturing ones included: they will be paid later at the pre-decrease price anyway. Only days with claims open count.",
         )}
       </p>
 
@@ -273,8 +325,8 @@ function PayoutCoverage({ chatId, initDataRaw, symbol, state, setState }) {
               )}
               <p className="text-[12px] leading-snug text-hint">
                 {L(
-                  "Дневной лимит — защита на случай утечки ключа бота: чем он выше, тем больше можно вывести из пула за день. После снижения цены лимит можно вернуть на пульте пула.",
-                  "The daily limit is the safety cap for a leaked bot key: the higher it is, the more could be moved out of the pool per day. You can set it back on the pool page after the decrease.",
+                  "Дневной лимит — защита на случай утечки ключа бота: чем он выше, тем больше можно вывести из пула за день. После снижения цены пульт пула напомнит вернуть прежний лимит.",
+                  "The daily limit is the safety cap for a leaked bot key: the higher it is, the more could be moved out of the pool per day. After the decrease the pool page reminds you to set it back.",
                 )}
               </p>
             </>
@@ -355,29 +407,43 @@ export function PointPrice({ chatId, initDataRaw }) {
   const alreadyScheduled = pending && !pending.to_default && price === pending.price;
   const dirty = price !== null && price !== data.price && !alreadyScheduled;
   const lowering = dirty && data.price !== null && compareDecimal(price, data.price) < 0;
-  // "Use default" is a decrease too when the default is lower.
-  const resetLowers = data.custom && data.price !== null && compareDecimal(data.platform_price, data.price) < 0;
+  // "Use default" is a decrease too when the default is (or is heading)
+  // lower: it is scheduled to where the default is heading.
+  const platformTarget = data.platform_target ?? data.platform_price;
+  const resetLowers = data.custom && data.price !== null && compareDecimal(platformTarget, data.price) < 0;
   const example =
     price !== null ? formatUnits(pointsToJettons(EXAMPLE_POINTS, price, data.decimals), data.decimals) : null;
-  const gate = data.claim_gate;
-  const paused = gate && !gate.open && gate.reason === "paused";
-  const pausedText = paused
-    ? L(
-        `Выплаты в этом чате приостановлены${gate.until ? ` до ${momentText(gate.until * 1000)}` : ""}: пока они на паузе, участники не могут забрать баллы по текущей цене, и срок предупреждения им не поможет. Сначала возобновите выплаты в «Правилах выплат» ниже.`,
-        `Claims are paused in this chat${gate.until ? ` until ${momentText(gate.until * 1000)}` : ""}: members cannot claim at the current price while paused, so the notice does not help them. Resume claims in Claim rules below first.`,
-      )
-    : null;
-  // Client clock: an estimate for the explanation, the server sets the date.
-  const scheduledFor = momentText(Date.now() + noticeDays * DAY_MS);
+  // A decrease requested now (the server's preview): when it would apply,
+  // extended so members get a full claim day under the claim rules, and the
+  // windows they get; effective_at null: claims are paused with no end date.
+  const next = data.next_decrease ?? null;
+  const blocked = noticeDays > 0 && next !== null && next.effective_at === null;
+  const blockedText = L(
+    "Вывод в этом чате приостановлен без даты возобновления: до снижения участники не смогли бы забрать баллы по текущей цене, поэтому запланировать его нельзя. Возобновите вывод или задайте дату возобновления в «Правилах вывода» ниже.",
+    "Claims in this chat are paused with no end date: members could not claim at the current price before a decrease, so none can be scheduled. Resume claims or set a resume date in Claim rules below.",
+  );
+  // The server's date when known; else the client clock's estimate.
+  const scheduledFor = next?.effective_at
+    ? momentText(next.effective_at * 1000)
+    : momentText(Date.now() + noticeDays * DAY_MS);
   const replaces = pending
     ? L(" Оно заменит уже запланированное снижение.", " It replaces the decrease already scheduled.")
     : "";
+  const when = next?.extended
+    ? L(
+        `Более низкая цена вступит в силу ${scheduledFor}: срок предупреждения — ${daysText(L, noticeDays)}, но по правилам вывода (дни вывода по UTC или пауза) в этот срок не попадает ни одного полного дня вывода, поэтому снижение ждёт, пока он у участников будет.`,
+        `A lower price takes effect on ${scheduledFor}: the notice is ${daysText(L, noticeDays)}, but the claim rules (claim days in UTC, or a pause) leave no full claim day in it, so it waits until members have had one.`,
+      )
+    : L(
+        `Более низкая цена вступит в силу через ${daysText(L, noticeDays)}, примерно ${scheduledFor}.`,
+        `A lower price takes effect after ${daysText(L, noticeDays)}, on about ${scheduledFor}.`,
+      );
   const decreaseText =
     noticeDays > 0
-      ? L(
-          `Более низкая цена вступит в силу через ${daysText(L, noticeDays)}, примерно ${scheduledFor}. До тех пор участники могут забрать баллы по цене 1 балл = ${data.price} ${symbol}; бот объявит о снижении в чате сейчас и ещё раз, когда оно вступит в силу. Баллы, которые к тому моменту ещё не созреют, будут выплачены по текущей цене.${replaces}`,
-          `A lower price takes effect after ${daysText(L, noticeDays)}, on about ${scheduledFor}. Until then members can still claim at 1 point = ${data.price} ${symbol}; the bot announces the decrease in the chat now and again when it applies. Points still maturing by then will be paid at the current price.${replaces}`,
-        )
+      ? `${when} ${L(
+          `До тех пор участники могут забрать баллы по цене 1 балл = ${data.price} ${symbol}; бот объявит о снижении в чате сейчас и ещё раз, когда оно вступит в силу. Баллы, которые к тому моменту ещё не созреют, будут выплачены по текущей цене.${replaces}`,
+          `Until then members can still claim at 1 point = ${data.price} ${symbol}; the bot announces the decrease in the chat now and again when it applies. Points still maturing by then will be paid at the current price.${replaces}`,
+        )}`
       : L(
           "Более низкая цена уменьшит и стоимость баллов, которые у участников уже есть. Она вступит в силу сразу, бот объявит об этом в чате.",
           "A lower price also lowers the value of points members already hold. It applies right away and the bot announces it in the chat.",
@@ -386,7 +452,9 @@ export function PointPrice({ chatId, initDataRaw }) {
   // Can members claim everything before the decrease?
   const showCoverage = (lowering && noticeDays > 0) || Boolean(pending);
 
-  function savedText(res, lowered, next) {
+  // The notice after a save, drawn in the language shown at the time (see
+  // Notice): called with that language's L.
+  function savedText(L, res, lowered, next) {
     const unsent =
       res.announced === false
         ? L(
@@ -395,9 +463,18 @@ export function PointPrice({ chatId, initDataRaw }) {
           )
         : "";
     if (lowered && res.pending) {
+      // the "will drop" announcement is queued again on the next read, and
+      // by the bot itself within minutes
+      const late =
+        res.announced === false
+          ? L(
+              " Бот получит задание с задержкой, в течение нескольких минут.",
+              " The bot gets it with a delay, within a few minutes.",
+            )
+          : "";
       return L(
-        `Снижение запланировано на ${momentText(res.pending.effective_at * 1000)}. Бот объявит о нём в чате.${unsent}`,
-        `Decrease scheduled for ${momentText(res.pending.effective_at * 1000)}. The bot announces it in the chat.${unsent}`,
+        `Снижение запланировано на ${momentText(res.pending.effective_at * 1000)}. Бот объявит о нём в чате.${late}`,
+        `Decrease scheduled for ${momentText(res.pending.effective_at * 1000)}. The bot announces it in the chat.${late}`,
       );
     }
     if (next === null)
@@ -405,6 +482,7 @@ export function PointPrice({ chatId, initDataRaw }) {
     return L(`Цена балла сохранена.${unsent}`, `Point price saved.${unsent}`);
   }
 
+  // `onDone(res)` gives the success notice's text (see Notice).
   async function post(body, action, onDone) {
     setBusy(action);
     setNotice(null);
@@ -422,17 +500,23 @@ export function PointPrice({ chatId, initDataRaw }) {
   }
 
   function save(next, action, lowered) {
-    return post({ price: next }, action, (res) => savedText(res, lowered, next));
+    return post({ price: next }, action, (res) => ({ L }) => savedText(L, res, lowered, next));
+  }
+
+  function confirmDefault() {
+    return post({ confirmDefault: true }, "confirm", () =>
+      bilingual("Остаётся цена платформы по умолчанию.", "The platform default stays."),
+    );
   }
 
   function cancelPending() {
     return post({ cancelPending: true }, "cancel", (res) =>
       res.announced === false
-        ? L(
+        ? bilingual(
             "Снижение отменено. Бот не смог получить задание: сообщите чату сами.",
             "Decrease cancelled. The bot could not be told: let the chat know yourself.",
           )
-        : L(
+        : bilingual(
             "Снижение отменено. Бот сообщит чату, что цена остаётся.",
             "Decrease cancelled. The bot tells the chat the price stays.",
           ),
@@ -485,6 +569,11 @@ export function PointPrice({ chatId, initDataRaw }) {
           <p className="text-[13px] leading-snug text-hint tabular">
             {L("По умолчанию на платформе:", "Platform default:")} {L("1 балл", "1 point")} = {data.platform_price}{" "}
             {symbol}
+            {data.platform_pending &&
+              L(
+                `, с ${momentText(data.platform_pending.effective_at * 1000)} — ${data.platform_pending.price} ${symbol}`,
+                `, ${data.platform_pending.price} ${symbol} from ${momentText(data.platform_pending.effective_at * 1000)}`,
+              )}
             {!data.decimals_known &&
               L(
                 " · знаков после запятой у жетона пока не узнать, проверим при выплате",
@@ -493,10 +582,29 @@ export function PointPrice({ chatId, initDataRaw }) {
           </p>
         </div>
 
+        {data.confirm_required && (
+          <div className="space-y-2 rounded-xl bg-bg p-3">
+            <p className="text-[13px] font-semibold">{L("Жетон наград сменился", "The reward jetton changed")}</p>
+            <p className="text-[13px] leading-snug text-hint tabular">
+              {L(
+                `Прежняя цена${data.confirm_required.old_price ? ` (${data.confirm_required.old_price} за балл)` : ""} была в старом жетоне, поэтому теперь действует цена платформы по умолчанию. Задайте цену в новом жетоне или оставьте цену по умолчанию.`,
+                `The old price${data.confirm_required.old_price ? ` (${data.confirm_required.old_price} per point)` : ""} was in the old jetton, so the platform default applies now. Set a price in the new jetton, or keep the platform default.`,
+              )}
+            </p>
+            <Button variant="ghost" size="sm" busy={busy === "confirm"} disabled={Boolean(busy)} onClick={confirmDefault}>
+              {L("Оставить по умолчанию", "Keep the default")}
+            </Button>
+          </div>
+        )}
+
         {pending && (
           <div className="space-y-2 rounded-xl bg-bg p-3">
             <div className="flex items-baseline justify-between gap-3">
-              <p className="text-[13px] font-semibold">{L("Снижение запланировано", "Decrease scheduled")}</p>
+              <p className="text-[13px] font-semibold">
+                {pending.platform
+                  ? L("Платформа снижает цену по умолчанию", "The platform default goes down")
+                  : L("Снижение запланировано", "Decrease scheduled")}
+              </p>
               <span className="shrink-0 whitespace-nowrap">
                 <Chip tone="gold">{momentText(pending.effective_at * 1000)}</Chip>
               </span>
@@ -505,14 +613,24 @@ export function PointPrice({ chatId, initDataRaw }) {
               {L("1 балл", "1 point")} = {pending.from ?? data.price} →{" "}
               <span className="font-semibold text-fg">{pending.price}</span> {symbol}
               {pending.to_default ? L(" (цена по умолчанию)", " (platform default)") : ""}.{" "}
-              {L(
-                "Участники видят это на своём экране, бот объявил об этом в чате; до этого момента они забирают баллы по текущей цене.",
-                "Members see it on their dashboard and the bot announced it in the chat; until then they claim at the current price.",
-              )}
+              {pending.platform
+                ? L(
+                    "Чат на цене по умолчанию, поэтому снижение касается и его. Участники видят это на своём экране, бот объявляет об этом в чате; до этого момента они забирают баллы по текущей цене. Чтобы цена не менялась, задайте свою.",
+                    "The chat is on the platform default, so the decrease applies to it too. Members see it on their dashboard and the bot announces it in the chat; until then they claim at the current price. Set your own price to keep it.",
+                  )
+                : L(
+                    "Участники видят это на своём экране, бот объявил об этом в чате; до этого момента они забирают баллы по текущей цене.",
+                    "Members see it on their dashboard and the bot announced it in the chat; until then they claim at the current price.",
+                  )}
             </p>
-            <Button variant="ghost" size="sm" busy={busy === "cancel"} disabled={Boolean(busy)} onClick={cancelPending}>
-              {L("Отменить снижение", "Cancel decrease")}
-            </Button>
+            {!pending.claims_open_throughout && pending.claim_windows?.length > 0 && (
+              <ClaimWindows windows={pending.claim_windows} />
+            )}
+            {!pending.platform && (
+              <Button variant="ghost" size="sm" busy={busy === "cancel"} disabled={Boolean(busy)} onClick={cancelPending}>
+                {L("Отменить снижение", "Cancel decrease")}
+              </Button>
+            )}
           </div>
         )}
 
@@ -528,8 +646,12 @@ export function PointPrice({ chatId, initDataRaw }) {
           />
         )}
 
-        {lowering && <Notice notice={{ kind: "info", text: decreaseText }} />}
-        {pending && dirty && !lowering && (
+        {lowering && !blocked && <Notice notice={{ kind: "info", text: decreaseText }} />}
+        {lowering && !blocked && noticeDays > 0 && next && !next.claims_open_throughout && next.claim_windows.length > 0 && (
+          <ClaimWindows windows={next.claim_windows} />
+        )}
+        {lowering && blocked && <Notice notice={{ kind: "err", text: blockedText }} />}
+        {pending && !pending.platform && dirty && !lowering && (
           <p className="text-[13px] leading-snug text-hint">
             {L(
               "Если сохранить эту цену, запланированное снижение отменится.",
@@ -542,7 +664,17 @@ export function PointPrice({ chatId, initDataRaw }) {
             {L("Это снижение уже запланировано.", "This decrease is already scheduled.")}
           </p>
         )}
-        {(lowering || pending) && pausedText && <Notice notice={{ kind: "err", text: pausedText }} />}
+        {pending && pending.claim_windows?.length === 0 && (
+          <Notice
+            notice={{
+              kind: "err",
+              text: L(
+                "До снижения вывод в этом чате больше не откроется: участники не смогут забрать баллы по текущей цене. Откройте вывод в «Правилах вывода» ниже или отмените снижение.",
+                "Claims in this chat don't open again before the decrease: members can't claim at the current price. Open claims in Claim rules below or cancel the decrease.",
+              ),
+            }}
+          />
+        )}
 
         {showCoverage && (
           <PayoutCoverage
@@ -559,7 +691,7 @@ export function PointPrice({ chatId, initDataRaw }) {
             variant="secondary"
             className="flex-1"
             busy={busy === "save"}
-            disabled={Boolean(busy) || !dirty}
+            disabled={Boolean(busy) || !dirty || (lowering && blocked)}
             onClick={() => save(price, "save", lowering)}
           >
             {lowering && noticeDays > 0
@@ -570,7 +702,7 @@ export function PointPrice({ chatId, initDataRaw }) {
             <Button
               variant="ghost"
               busy={busy === "reset"}
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || (resetLowers && blocked)}
               onClick={() => save(null, "reset", resetLowers)}
             >
               {L("По умолчанию", "Use default")}
@@ -580,8 +712,8 @@ export function PointPrice({ chatId, initDataRaw }) {
         {data.custom && resetLowers && noticeDays > 0 && !pending?.to_default && (
           <p className="text-[13px] leading-snug text-hint">
             {L(
-              `Цена по умолчанию (${data.platform_price} ${symbol}) ниже вашей, так что возврат к ней — тоже снижение: оно тоже ждёт ${daysText(L, noticeDays)}.`,
-              `The default (${data.platform_price} ${symbol}) is lower than your price, so going back to it is a decrease: it waits ${daysText(L, noticeDays)} too.`,
+              `Цена по умолчанию (${platformTarget} ${symbol}) ниже вашей, так что возврат к ней — тоже снижение: оно тоже ждёт ${daysText(L, noticeDays)}.`,
+              `The default (${platformTarget} ${symbol}) is lower than your price, so going back to it is a decrease: it waits ${daysText(L, noticeDays)} too.`,
             )}
           </p>
         )}
@@ -595,9 +727,15 @@ export function PointPrice({ chatId, initDataRaw }) {
               {data.history.slice(0, 3).map((h, i) => (
                 <li key={i} className="flex justify-between gap-3">
                   <span className="text-hint">{formatDate(h.at)}</span>
-                  <span>
-                    {h.old} → {h.new} {symbol}
-                  </span>
+                  {/* the old price was in the old jetton: no "old → new" */}
+                  {h.reason === "jetton_changed" ? (
+                    <span>{L("Жетон наград сменился", "Reward jetton changed")}</span>
+                  ) : (
+                    <span>
+                      {h.old} → {h.new} {symbol}
+                      {h.reason === "platform_default" ? L(" · платформа", " · platform default") : ""}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

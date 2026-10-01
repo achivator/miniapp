@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { useInitDataRaw } from "@tma.js/sdk-react";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
+import { achievementName } from "@/lib/achievements";
 import { apiFetch, sendTonTransaction, sleep } from "@/lib/client-api";
 import { formatDecimal, intlLocale } from "@/lib/i18n";
 import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
-import { AchievementArt, Button, Card, ChatAvatar, Notice, Skeleton, titleCase } from "@/components/ui";
+import { AchievementArt, Button, Card, ChatAvatar, Notice, Skeleton, bilingual } from "@/components/ui";
 import { Check, Medal, Sparkles } from "@/components/icons";
 
 function formatTon(nanotons, locale) {
@@ -66,18 +67,18 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
       return;
     }
     setBusy(true);
-    setNotice({ kind: "info", text: L("Готовим выпуск…", "Preparing the mint…") });
+    setNotice({ kind: "info", text: bilingual("Готовим выпуск…", "Preparing the mint…") });
     try {
       const tx = await apiFetch("/api/mint-voucher", {
         method: "POST",
         initDataRaw,
         body: { achievementId: achievement._id, wallet },
       });
-      setNotice({ kind: "info", text: L("Подтвердите в кошельке.", "Confirm in your wallet.") });
+      setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await sendTonTransaction(tonConnectUI, nft.network, [
         { address: tx.to, amount: tx.amount, payload: tx.payload_b64 },
       ]);
-      setNotice({ kind: "info", text: L("Выпускаем в сети…", "Minting on-chain…") });
+      setNotice({ kind: "info", text: bilingual("Выпускаем в сети…", "Minting on-chain…") });
       for (let i = 0; i < 24; i++) {
         await sleep(5000);
         const fresh = await apiFetch(`/api/achievement?_id=${encodeURIComponent(achievement._id)}`, { initDataRaw }).catch(
@@ -92,7 +93,7 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
       }
       setNotice({
         kind: "info",
-        text: L("Ещё подтверждается — проверьте кошелёк через минуту.", "Still confirming — check your wallet in a minute."),
+        text: bilingual("Ещё подтверждается — проверьте кошелёк через минуту.", "Still confirming — check your wallet in a minute."),
       });
     } catch (e) {
       haptic("error");
@@ -170,7 +171,7 @@ function AchievementView({ id }) {
           </div>
 
           <div className="space-y-2 text-center">
-            <h1 className="brand-heading text-[30px] leading-tight">{titleCase(achievement.type)}</h1>
+            <h1 className="brand-heading text-[30px] leading-tight">{achievementName(achievement.type, locale)}</h1>
             {achievement.date && (
               <p className="mono-label text-hint">
                 {new Date(achievement.date).toLocaleDateString(intlLocale(locale), {

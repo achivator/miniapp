@@ -32,13 +32,16 @@ export function stateLabel(state, L) {
   return L(...(STATES[state] || STATES.unconfirmed).label);
 }
 
+// What a claim state means, shown after its name and a colon ("Ожидает: чек
+// выписан…"): lower case in Russian, where a colon does not start a
+// sentence; English capitalizes the clause as usual.
 const STATE_HINTS = {
-  pending: ["Чек выписан, участник его ещё не отправил.", "Voucher issued, the member has not sent it yet."],
+  pending: ["чек выписан, участник его ещё не отправил.", "Voucher issued, the member has not sent it yet."],
   unconfirmed: [
-    "Срок чека истёк; сеть проверяется, когда участник (или вы) открывает этот счёт.",
+    "срок чека истёк; сеть проверяется, когда участник (или вы) открывает этот счёт.",
     "Voucher lapsed; the chain is checked when the member (or you) opens this account.",
   ],
-  expired: ["Чек истёк неиспользованным; баллы вернулись участнику.", "Voucher lapsed unused; the points went back to the member."],
+  expired: ["чек истёк неиспользованным; баллы вернулись участнику.", "Voucher lapsed unused; the points went back to the member."],
 };
 
 export function stateHint(state, L) {

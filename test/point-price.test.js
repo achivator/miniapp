@@ -26,6 +26,7 @@ const {
     planPointPriceChange,
     planPointPriceCancel,
     announcementDoc,
+    scheduledAnnouncement,
 } = require('../src/lib/point-price');
 
 const NOW = 1_800_000_000;
@@ -137,7 +138,7 @@ test('recentPointPriceChange reports the latest change of the last 7 days', () =
             { old: '0.005', new: '0.01', at: new Date((NOW - DAY) * 1000), by: 1 },
         ],
     };
-    assert.deepEqual(recentPointPriceChange(chat, NOW), { old: '0.005', new: '0.01', at: NOW - DAY, changes: 2 });
+    assert.deepEqual(recentPointPriceChange(chat, NOW), { old: '0.005', new: '0.01', at: NOW - DAY, changes: 2, reason: null });
     // only the old change: nothing to warn about
     assert.equal(recentPointPriceChange({ point_price_history: chat.point_price_history.slice(0, 1) }, NOW), null);
     assert.equal(recentPointPriceChange({}, NOW), null);
@@ -157,10 +158,16 @@ test('serializePriceHistory lists changes newest first', () => {
         ],
     };
     assert.deepEqual(serializePriceHistory(chat), [
-        { old: '0.02', new: '0.03', at: 2000, by: 7 },
-        { old: '0.01', new: '0.02', at: 1000, by: 7 },
+        { old: '0.02', new: '0.03', at: 2000, by: 7, reason: null },
+        { old: '0.01', new: '0.02', at: 1000, by: 7, reason: null },
     ]);
-    assert.deepEqual(serializePriceHistory(chat, 1), [{ old: '0.02', new: '0.03', at: 2000, by: 7 }]);
+    assert.deepEqual(serializePriceHistory(chat, 1), [{ old: '0.02', new: '0.03', at: 2000, by: 7, reason: null }]);
+    // a switch to or from the default at the same price is kept for lot
+    // pricing, not shown; a jetton switch is shown even at the same price
+    const quiet = { point_price_history: [...chat.point_price_history, { old: '0.03', new: '0.03', at: new Date(3000 * 1000), by: 7 }] };
+    assert.equal(serializePriceHistory(quiet).length, 2);
+    const jetton = { old: '0.03', new: '0.03', at: new Date(3000 * 1000), by: 7, reason: 'jetton_changed' };
+    assert.deepEqual(serializePriceHistory({ point_price_history: [jetton] })[0].reason, 'jetton_changed');
     assert.deepEqual(serializePriceHistory({}), []);
 });
 
@@ -168,7 +175,7 @@ test('serializePriceHistory lists changes newest first', () => {
 
 const T0 = new Date(NOW * 1000);
 const at = (days) => new Date(T0.getTime() + days * DAY * 1000);
-const OPTS = { now: T0, noticeDays: 7, by: 42, symbol: 'PTS' };
+const OPTS = { now: T0, noticeDays: 7, by: 42, symbol: 'PTS', maturationDays: 3 };
 
 function withEnv(name, value, fn) {
     const saved = process.env[name];
@@ -230,17 +237,21 @@ test('pointPriceFor: a pending decrease counts only from its effective_at, appli
             from: '0.02',
             symbol: 'PTS',
             effective_at: NOW + 3 * DAY,
+            platform: false,
         });
 
-        // back to the default: once due, the live default pays (what the chat
-        // gets once the bot unsets point_price), even if it moved since
+        // back to the default: once due, the price it was scheduled to pays,
+        // and the chat is on the default when that is the default in force
         const toDefault = { id: 1, point_price: '0.02', point_price_pending: pendingOf('0.01', at(3), { to_default: true }) };
         assert.equal(pointPriceFor(toDefault, at(4)), '0.01');
         assert.equal(hasCustomPointPrice(toDefault, at(4)), false);
         assert.equal(hasCustomPointPrice(toDefault, T0), true);
+        // the default moved since: still that price (the bot logs the same
+        // one), kept as the chat's own rather than moving it unannounced
         withRate('0.008', () => {
-            assert.equal(pointPriceFor(toDefault, at(4)), '0.008');
-            assert.equal(serializePendingPrice(upcomingPointPrice(toDefault, T0)).price, '0.008');
+            assert.equal(pointPriceFor(toDefault, at(4)), '0.01');
+            assert.equal(serializePendingPrice(upcomingPointPrice(toDefault, T0)).price, '0.01');
+            assert.equal(hasCustomPointPrice(toDefault, at(4)), true);
         });
     });
 });
@@ -263,9 +274,20 @@ test('a due but unapplied decrease shows in the history members see', () => {
             point_price_pending: pendingOf('0.005', at(-1), { from: '0.02' }),
         };
         assert.equal(effectivePriceHistory(chat, at(-2)).length, 1);
-        assert.deepEqual(effectivePriceHistory(chat, T0).at(-1), { old: '0.02', new: '0.005', at: at(-1), by: 7 });
-        assert.deepEqual(recentPointPriceChange(chat, NOW), { old: '0.02', new: '0.005', at: NOW - DAY, changes: 1 });
-        assert.deepEqual(serializePriceHistory(chat, 10, T0)[0], { old: '0.02', new: '0.005', at: NOW - DAY, by: 7 });
+        // a pending scheduled before maturation snapshots: null (valued with
+        // the chat's current setting)
+        assert.deepEqual(effectivePriceHistory(chat, T0).at(-1), {
+            old: '0.02',
+            new: '0.005',
+            at: at(-1),
+            by: 7,
+            maturation_days: null,
+            from_default: false,
+        });
+        const snapped = { ...chat, point_price_pending: { ...chat.point_price_pending, maturation_days: 5 } };
+        assert.equal(effectivePriceHistory(snapped, T0).at(-1).maturation_days, 5);
+        assert.deepEqual(recentPointPriceChange(chat, NOW), { old: '0.02', new: '0.005', at: NOW - DAY, changes: 1, reason: null });
+        assert.deepEqual(serializePriceHistory(chat, 10, T0)[0], { old: '0.02', new: '0.005', at: NOW - DAY, by: 7, reason: null });
         // not due yet: nothing changed for members
         assert.equal(recentPointPriceChange(chat, NOW - 2 * DAY), null);
     });
@@ -277,23 +299,36 @@ test('planPointPriceChange: an increase applies at once and is announced', () =>
         assert.deepEqual(plan.filter, { id: 5, point_price: '0.02', point_price_pending: null });
         assert.deepEqual(plan.update, {
             $set: { point_price: '0.03' },
-            $push: { point_price_history: { $each: [{ old: '0.02', new: '0.03', at: T0, by: 42 }], $slice: -50 } },
+            // no $slice: the history is never trimmed
+            $push: {
+                point_price_history: { $each: [{ old: '0.02', new: '0.03', at: T0, by: 42, maturation_days: 3, from_default: false }] },
+            },
         });
         assert.deepEqual(plan.announcements, [
             {
                 type: 'price_increased',
                 params: { from: '0.02', to: '0.03', symbol: 'PTS', cancelled_pending: false },
+                ref: T0.getTime(),
             },
         ]);
         assert.equal(plan.after, '0.03');
         // same price: nothing to do
         assert.equal(planPointPriceChange({ id: 5, point_price: '0.02' }, '0.02', OPTS), null);
         assert.equal(planPointPriceChange({ id: 5 }, null, OPTS), null);
-        // custom price equal to the default -> default: stored changes, the
-        // effective price does not, so no history and no announcement
+        // custom price equal to the default -> default: the effective price
+        // does not move, so nothing is announced, but the switch to the
+        // default is logged (which platform changes reach the chat's points
+        // depends on it)
         const same = planPointPriceChange({ id: 5, point_price: '0.01' }, null, OPTS);
-        assert.deepEqual(same.update, { $unset: { point_price: '' } });
+        assert.deepEqual(same.update, {
+            $unset: { point_price: '' },
+            $push: { point_price_history: { $each: [{ old: '0.01', new: '0.01', at: T0, by: 42, maturation_days: 3, from_default: false }] } },
+        });
         assert.deepEqual(same.announcements, []);
+        assert.equal(
+            planPointPriceChange({ id: 5 }, '0.01', OPTS).update.$push.point_price_history.$each[0].from_default,
+            true,
+        );
     });
 });
 
@@ -311,6 +346,8 @@ test('planPointPriceChange: a decrease is scheduled, not applied', () => {
                     effective_at: at(7),
                     requested_at: T0,
                     by: 42,
+                    maturation_days: 3,
+                    from_default: false,
                 },
             },
         });
@@ -318,6 +355,8 @@ test('planPointPriceChange: a decrease is scheduled, not applied', () => {
             {
                 type: 'price_decrease_scheduled',
                 params: { from: '0.02', to: '0.015', symbol: 'PTS', effective_at: at(7) },
+                // the outbox key: the decrease's requested_at
+                ref: T0.getTime(),
             },
         ]);
         assert.equal(plan.after, '0.02');
@@ -391,6 +430,7 @@ test('planPointPriceChange: an equal price or an increase cancels the pending de
             {
                 type: 'price_decrease_cancelled',
                 params: { from: '0.02', to: '0.015', symbol: 'PTS' },
+                ref: at(-1).getTime(),
             },
         ]);
 
@@ -401,6 +441,7 @@ test('planPointPriceChange: an equal price or an increase cancels the pending de
             {
                 type: 'price_increased',
                 params: { from: '0.02', to: '0.05', symbol: 'PTS', cancelled_pending: true },
+                ref: T0.getTime(),
             },
         ]);
     });
@@ -413,18 +454,26 @@ test('planPointPriceChange writes out a due decrease the bot has not applied yet
             point_price: '0.02',
             point_price_pending: pendingOf('0.005', at(-1), { from: '0.02' }),
         };
-        const dueEntry = { old: '0.02', new: '0.005', at: at(-1), by: 7 };
+        // scheduled before snapshots: it gets the current setting when written out
+        const dueEntry = { old: '0.02', new: '0.005', at: at(-1), by: 7, maturation_days: 3, from_default: false };
 
-        const decreased = { type: 'price_decreased', params: { from: '0.02', to: '0.005', symbol: 'PTS' } };
+        const decreased = { type: 'price_decreased', params: { from: '0.02', to: '0.005', symbol: 'PTS' }, ref: at(-1).getTime() };
 
         // an increase from the due price: both changes are logged and
         // announced, the written-out drop first
         const up = planPointPriceChange(chat, '0.008', OPTS);
         assert.deepEqual(up.announcements, [
             decreased,
-            { type: 'price_increased', params: { from: '0.005', to: '0.008', symbol: 'PTS', cancelled_pending: false } },
+            {
+                type: 'price_increased',
+                params: { from: '0.005', to: '0.008', symbol: 'PTS', cancelled_pending: false },
+                ref: T0.getTime(),
+            },
         ]);
-        assert.deepEqual(up.update.$push.point_price_history.$each, [dueEntry, { old: '0.005', new: '0.008', at: T0, by: 42 }]);
+        assert.deepEqual(up.update.$push.point_price_history.$each, [
+            dueEntry,
+            { old: '0.005', new: '0.008', at: T0, by: 42, maturation_days: 3, from_default: false },
+        ]);
         assert.deepEqual(up.update.$unset, { point_price_pending: '' });
 
         // a new decrease: the due one lands in point_price, the new one waits
@@ -441,7 +490,7 @@ test('planPointPriceChange writes out a due decrease the bot has not applied yet
         assert.deepEqual(same.update, {
             $set: { point_price: '0.005' },
             $unset: { point_price_pending: '' },
-            $push: { point_price_history: { $each: [dueEntry], $slice: -50 } },
+            $push: { point_price_history: { $each: [dueEntry] } },
         });
         assert.deepEqual(same.announcements, [decreased]);
 
@@ -456,18 +505,18 @@ test('planPointPriceChange writes out a due decrease the bot has not applied yet
         const again = planPointPriceChange(toDefault, '0.001', OPTS);
         assert.deepEqual(again.update.$unset, { point_price: '' });
         assert.equal(again.update.$set.point_price_pending.from, '0.01');
-        // `to` is the default actually applied, i.e. the live one
+        assert.equal(again.update.$set.point_price_pending.from_default, true);
+        // `to` is the price it was scheduled to, as the bot logs it; with the
+        // default moved since, the chat keeps that price as its own
         withRate('0.012', () => {
-            assert.deepEqual(planPointPriceChange(toDefault, '0.001', OPTS).announcements[0], {
+            const moved = planPointPriceChange(toDefault, '0.001', OPTS);
+            assert.deepEqual(moved.announcements[0], {
                 type: 'price_decreased',
-                params: { from: '0.02', to: '0.012', symbol: 'PTS' },
+                params: { from: '0.02', to: '0.01', symbol: 'PTS' },
+                ref: at(-1).getTime(),
             });
-        });
-        // a default raised above `from` is no drop: logged, not announced as one
-        withRate('0.03', () => {
-            const raised = planPointPriceChange(toDefault, '0.04', OPTS);
-            assert.deepEqual(raised.announcements.map((a) => a.type), ['price_increased']);
-            assert.deepEqual(raised.update.$push.point_price_history.$each[0], { old: '0.02', new: '0.03', at: at(-1), by: 7 });
+            assert.equal(moved.update.$set.point_price, '0.01');
+            assert.equal(moved.update.$set.point_price_pending.from_default, false);
         });
     });
 });
@@ -498,6 +547,7 @@ test('planPointPriceCancel cancels a pending decrease explicitly', () => {
             {
                 type: 'price_decrease_cancelled',
                 params: { from: '0.02', to: '0.015', symbol: 'PTS' },
+                ref: at(-1).getTime(),
             },
         ]);
 
@@ -510,9 +560,14 @@ test('planPointPriceCancel cancels a pending decrease explicitly', () => {
     });
 });
 
-test('announcementDoc is the outbox row the bot drains', () => {
-    const doc = announcementDoc(-100123, { type: 'price_increased', params: { from: '1', to: '2', symbol: null, cancelled_pending: false } }, T0);
+test('announcementDoc is the outbox row the bot drains, keyed so it is queued once', () => {
+    const doc = announcementDoc(
+        -100123,
+        { type: 'price_increased', params: { from: '1', to: '2', symbol: null, cancelled_pending: false }, ref: at(-1).getTime() },
+        T0,
+    );
     assert.deepEqual(doc, {
+        key: `-100123:price_increased:${at(-1).getTime()}`,
         chat_id: -100123,
         type: 'price_increased',
         params: { from: '1', to: '2', symbol: null, cancelled_pending: false },
@@ -520,5 +575,209 @@ test('announcementDoc is the outbox row the bot drains', () => {
         sent_at: null,
         claimed_at: null,
         attempts: 0,
+    });
+    // without a ref the row is about its own moment
+    assert.equal(announcementDoc(1, { type: 'price_increased', params: {} }, T0).key, `1:price_increased:${T0.getTime()}`);
+});
+
+test('scheduledAnnouncement rebuilds the row a pending decrease was announced with', () => {
+    withRate('0.01', () => {
+        const plan = planPointPriceChange({ id: 5, point_price: '0.02' }, '0.015', OPTS);
+        const chat = { id: 5, point_price: '0.02', point_price_pending: plan.update.$set.point_price_pending };
+        // the same row, under the same key, as the save queued
+        assert.deepEqual(scheduledAnnouncement(chat, T0), plan.announcements[0]);
+        assert.equal(
+            announcementDoc(5, scheduledAnnouncement(chat, at(1)), T0).key,
+            announcementDoc(5, plan.announcements[0], T0).key,
+        );
+        // none once due, without a pending, or for a malformed one
+        assert.equal(scheduledAnnouncement(chat, at(7)), null);
+        assert.equal(scheduledAnnouncement({ id: 5 }, T0), null);
+        assert.equal(scheduledAnnouncement({ id: 5, point_price_pending: { price: 'x' } }, T0), null);
+        // nor for a decrease scheduled with no notice (nothing was announced ahead)
+        const now = planPointPriceChange({ id: 5, point_price: '0.02' }, '0.015', { ...OPTS, noticeDays: 0 });
+        assert.equal(scheduledAnnouncement({ id: 5, point_price_pending: now.update.$set.point_price_pending }, at(-1)), null);
+    });
+});
+
+test('planPointPriceChange snapshots the maturation into history entries and the pending decrease', () => {
+    withRate('0.01', () => {
+        const chat = { id: 5, point_price: '0.02' };
+        const opts = { ...OPTS, maturationDays: 5 };
+        assert.equal(planPointPriceChange(chat, '0.03', opts).update.$push.point_price_history.$each[0].maturation_days, 5);
+        assert.equal(planPointPriceChange(chat, '0.015', opts).update.$set.point_price_pending.maturation_days, 5);
+        assert.equal(planPointPriceChange(chat, '0.015', { ...OPTS, maturationDays: 0 }).update.$set.point_price_pending.maturation_days, 0);
+        // a due decrease keeps the maturation it was scheduled (or last kept in
+        // step) with, not the setting at the time it is written out
+        const due = { ...chat, point_price_pending: pendingOf('0.005', at(-1), { from: '0.02', maturation_days: 10 }) };
+        const plan = planPointPriceChange(due, '0.008', opts);
+        assert.deepEqual(
+            plan.update.$push.point_price_history.$each.map((h) => h.maturation_days),
+            [10, 5],
+        );
+        assert.equal(pendingPointPrice(due).maturation_days, 10);
+        // unreadable snapshots read as none
+        for (const bad of ['3', -1, 1.5, null]) {
+            assert.equal(pendingPointPrice({ point_price_pending: pendingOf('0.005', at(1), { maturation_days: bad }) }).maturation_days, null);
+        }
+    });
+});
+
+// ---- Claim windows during the notice (issue #14) ----
+
+const {
+    claimWindows,
+    noticeEffectiveAt,
+    decreasePreview,
+    serializeClaimWindows,
+    CLAIMS_PAUSED_NO_END,
+} = require('../src/lib/point-price');
+
+const HOUR_MS = 3600 * 1000;
+const DAY_MS = DAY * 1000;
+// Monday 5 Oct 2026, 00:00 UTC
+const MON = Date.UTC(2026, 9, 5);
+const utc = (days, hours = 0) => new Date(MON + days * DAY_MS + hours * HOUR_MS);
+const rules = (extra = {}) => ({ maturation_days: 3, claim_days: [], paused: false, paused_until: null, ...extra });
+
+test('claimWindows lists the open stretches in UTC, consecutive days merged', () => {
+    // Mon and Thu, from Tuesday noon over 9 days
+    const weekly = rules({ claim_days: [1, 4] });
+    assert.deepEqual(claimWindows(weekly, utc(1, 12).getTime(), utc(10, 12).getTime()), [
+        { start: utc(3).getTime(), end: utc(4).getTime() },
+        { start: utc(7).getTime(), end: utc(8).getTime() },
+        { start: utc(10).getTime(), end: utc(10, 12).getTime() },
+    ]);
+    // every day: one stretch, clipped at both ends
+    assert.deepEqual(claimWindows(rules(), utc(0, 5).getTime(), utc(3, 7).getTime()), [
+        { start: utc(0, 5).getTime(), end: utc(3, 7).getTime() },
+    ]);
+    // Mon + Tue merge into one window
+    assert.deepEqual(claimWindows(rules({ claim_days: [1, 2] }), utc(0).getTime(), utc(7).getTime()), [
+        { start: utc(0).getTime(), end: utc(2).getTime() },
+    ]);
+    // a pause until Wednesday noon removes everything before it
+    const paused = rules({ paused: true, paused_until: utc(2, 12).getTime() / 1000 });
+    assert.deepEqual(claimWindows(paused, utc(0).getTime(), utc(4).getTime()), [
+        { start: utc(2, 12).getTime(), end: utc(4).getTime() },
+    ]);
+    // paused with no end date: nothing
+    assert.deepEqual(claimWindows(rules({ paused: true }), utc(0).getTime(), utc(30).getTime()), []);
+    assert.deepEqual(claimWindows(rules(), utc(2).getTime(), utc(1).getTime()), []);
+});
+
+test('noticeEffectiveAt: claims open every day leave the notice unchanged', () => {
+    for (const settings of [rules(), rules({ claim_days: [0, 1, 2, 3, 4, 5, 6] })]) {
+        for (const days of [1, 3, 7]) {
+            const now = utc(0, 13.5);
+            const eff = new Date(now.getTime() + days * DAY_MS);
+            assert.equal(noticeEffectiveAt(settings, now, eff), eff);
+        }
+    }
+    // a pause that already ended counts for nothing
+    const ended = rules({ paused: true, paused_until: utc(-1).getTime() / 1000 });
+    const eff = utc(3, 13);
+    assert.equal(noticeEffectiveAt(ended, utc(0, 13), eff), eff);
+});
+
+test('noticeEffectiveAt: a weekly window and a 3-day notice: extended to the end of the next claim day', () => {
+    const mondays = rules({ claim_days: [1] });
+    // Tuesday 10:00, notice ends Friday 10:00: no Monday in it
+    assert.deepEqual(noticeEffectiveAt(mondays, utc(1, 10), utc(4, 10)), utc(8));
+    // requested on the Monday itself, mid-day: the rest of it is not a full
+    // claim day, so it waits for the next Monday
+    assert.deepEqual(noticeEffectiveAt(mondays, utc(0, 12), utc(3, 12)), utc(8));
+    // ...but from Monday 00:00 sharp the whole day is in the notice
+    const eff = utc(3);
+    assert.equal(noticeEffectiveAt(mondays, utc(0), eff), eff);
+    // a 7-day notice from Tuesday holds the next Monday: unchanged
+    const week = utc(8, 10);
+    assert.equal(noticeEffectiveAt(mondays, utc(1, 10), week), week);
+    // a notice ending inside the claim day is extended to its end
+    assert.deepEqual(noticeEffectiveAt(mondays, utc(1, 10), utc(7, 10)), utc(8));
+});
+
+test('noticeEffectiveAt counts UTC days, not the viewer\'s', () => {
+    // Sunday 23:30 UTC is already Monday in Moscow: not a claim day for a
+    // Monday-only chat until 00:00 UTC
+    const mondays = rules({ claim_days: [1] });
+    assert.deepEqual(noticeEffectiveAt(mondays, utc(-1, 23.5), utc(0, 23.5)), utc(1));
+    // a decrease landing exactly at the end of the claim day is covered
+    const exact = utc(1);
+    assert.equal(noticeEffectiveAt(mondays, utc(-1, 23.5), exact), exact);
+    // one millisecond short of the end is not
+    assert.deepEqual(noticeEffectiveAt(mondays, utc(-1, 23.5), new Date(exact.getTime() - 1)), exact);
+});
+
+test('noticeEffectiveAt waits for a full claim day after a pause; none when paused for good', () => {
+    // paused until Thursday 00:00, every day open: Thursday is the window
+    const untilThu = rules({ paused: true, paused_until: utc(3).getTime() / 1000 });
+    assert.deepEqual(noticeEffectiveAt(untilThu, utc(0, 9), utc(3, 9)), utc(4));
+    // a longer notice already holds it
+    assert.equal(noticeEffectiveAt(untilThu, utc(0, 9), utc(7, 9)).getTime(), utc(7, 9).getTime());
+    // paused until Thursday noon on a Monday/Thursday chat: the Thursday
+    // half-day is not enough, the next Monday is
+    const mixed = rules({ claim_days: [1, 4], paused: true, paused_until: utc(3, 12).getTime() / 1000 });
+    assert.deepEqual(noticeEffectiveAt(mixed, utc(0, 9), utc(3, 9)), utc(8));
+    // paused with no end date: no window ever
+    assert.equal(noticeEffectiveAt(rules({ paused: true }), utc(0), utc(7)), null);
+    // no notice (0 days) stays none
+    const now = utc(1, 10);
+    assert.equal(noticeEffectiveAt(rules({ claim_days: [1] }), now, now), now);
+});
+
+test('decreasePreview says when a decrease requested now applies and when members can claim', () => {
+    const now = utc(1, 10); // Tuesday
+    const weekly = decreasePreview(rules({ claim_days: [1, 4] }), now, 3);
+    // Thursday is inside the 3-day notice: not extended
+    assert.equal(weekly.extended, false);
+    assert.equal(weekly.effective_at, utc(4, 10).getTime() / 1000);
+    assert.equal(weekly.notice_ends_at, utc(4, 10).getTime() / 1000);
+    assert.deepEqual(weekly.claim_windows, [{ start: utc(3).getTime() / 1000, end: utc(4).getTime() / 1000 }]);
+    assert.equal(weekly.claims_open_throughout, false);
+
+    const mondays = decreasePreview(rules({ claim_days: [1] }), now, 3);
+    assert.equal(mondays.extended, true);
+    assert.equal(mondays.effective_at, utc(8).getTime() / 1000);
+    assert.deepEqual(mondays.claim_windows, [{ start: utc(7).getTime() / 1000, end: utc(8).getTime() / 1000 }]);
+
+    const daily = decreasePreview(rules(), now, 3);
+    assert.equal(daily.extended, false);
+    assert.equal(daily.claims_open_throughout, true);
+
+    const stuck = decreasePreview(rules({ paused: true }), now, 3);
+    assert.equal(stuck.effective_at, null);
+    assert.deepEqual(stuck.claim_windows, []);
+
+    assert.deepEqual(serializeClaimWindows(rules(), now, now), { claim_windows: [], claims_open_throughout: false });
+});
+
+test('planPointPriceChange fits a new decrease to the claim rules', () => {
+    withRate('0.01', () => {
+        const now = utc(1, 10); // Tuesday
+        const opts = { ...OPTS, now, noticeDays: 3 };
+        const chat = { id: 5, point_price: '0.02' };
+        // without claim settings: exactly the notice, as before
+        assert.deepEqual(planPointPriceChange(chat, '0.015', opts).update.$set.point_price_pending.effective_at, utc(4, 10));
+        // Monday-only claims: the next Monday must be in it
+        const plan = planPointPriceChange(chat, '0.015', { ...opts, claimSettings: rules({ claim_days: [1] }) });
+        assert.deepEqual(plan.update.$set.point_price_pending.effective_at, utc(8));
+        // and the bot announces that date
+        assert.deepEqual(plan.announcements[0].params.effective_at, utc(8));
+        // every day open: unchanged
+        assert.deepEqual(
+            planPointPriceChange(chat, '0.015', { ...opts, claimSettings: rules() }).update.$set.point_price_pending.effective_at,
+            utc(4, 10),
+        );
+        // paused with no end date: refused
+        assert.throws(
+            () => planPointPriceChange(chat, '0.015', { ...opts, claimSettings: rules({ paused: true }) }),
+            (e) => e.status === 409 && e.message === CLAIMS_PAUSED_NO_END,
+        );
+        // ...but an increase still applies
+        assert.equal(planPointPriceChange(chat, '0.05', { ...opts, claimSettings: rules({ paused: true }) }).after, '0.05');
+        // notice 0: right away whatever the rules
+        const zero = planPointPriceChange(chat, '0.015', { ...opts, noticeDays: 0, claimSettings: rules({ paused: true }) });
+        assert.deepEqual(zero.update.$set.point_price_pending.effective_at, now);
     });
 });

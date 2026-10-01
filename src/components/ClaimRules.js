@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/client-api";
 import { useI18n } from "@/lib/use-locale";
-import { Button, Card, Chip, Notice, SectionHeader, Segmented, cx } from "./ui";
+import { Button, Card, Chip, Notice, SectionHeader, Segmented, bilingual, cx } from "./ui";
 import { useHaptic } from "./AppShell";
 
 const MATURATION_OPTIONS = [0, 1, 3, 7, 14];
@@ -18,16 +18,17 @@ const WEEKDAYS = [
   [0, "Вс", "Sun"],
 ];
 
-function Toggle({ checked, onChange, label }) {
+function Toggle({ checked, onChange, label, disabled = false }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cx(
-        "relative h-7 w-12 shrink-0 rounded-full transition",
+        "relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-40",
         checked && "bg-accent",
       )}
       style={checked ? undefined : { background: "color-mix(in srgb, var(--hint) 35%, transparent)" }}
@@ -48,6 +49,9 @@ function toDateInput(epochSec) {
 
 // Off-chain claim rules of a chat (the backend enforces them when it signs
 // claim vouchers): maturation period, weekly claim window, vacation pause.
+// While a price decrease is pending members must be able to claim before it,
+// so the server refuses (409) a pause and claim days that leave no full
+// claim day before it; the card says so up front and greys the pause out.
 export function ClaimRules({ chatId, initDataRaw }) {
   const haptic = useHaptic();
   const t = useI18n();
@@ -56,6 +60,8 @@ export function ClaimRules({ chatId, initDataRaw }) {
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+  // { effective_at, claim_windows, ... } of a pending price decrease, or null
+  const [decrease, setDecrease] = useState(null);
 
   const load = useCallback(async () => {
     if (!initDataRaw) return;
@@ -63,6 +69,7 @@ export function ClaimRules({ chatId, initDataRaw }) {
       const res = await apiFetch(`/api/claim-settings?chatId=${chatId}`, { initDataRaw });
       setSaved(res.settings);
       setDraft(res.settings);
+      setDecrease(res.pending_decrease ?? null);
     } catch (e) {
       setNotice({ kind: "err", text: e.message });
     }
@@ -75,6 +82,9 @@ export function ClaimRules({ chatId, initDataRaw }) {
   if (!draft) return null;
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  // a pause already saved can still be lifted (or shortened)
+  const pauseLocked = Boolean(decrease) && !saved.paused;
+  const decreaseAt = decrease ? t.moment(decrease.effective_at) : null;
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
   const toggleDay = (day) =>
     set({
@@ -94,8 +104,9 @@ export function ClaimRules({ chatId, initDataRaw }) {
       });
       setSaved(res.settings);
       setDraft(res.settings);
+      setDecrease(res.pending_decrease ?? null);
       haptic("success");
-      setNotice({ kind: "ok", text: L("Правила вывода сохранены.", "Claim rules saved.") });
+      setNotice({ kind: "ok", text: bilingual("Правила вывода сохранены.", "Claim rules saved.") });
     } catch (e) {
       haptic("error");
       setNotice({ kind: "err", text: e.message });
@@ -175,9 +186,18 @@ export function ClaimRules({ chatId, initDataRaw }) {
             <Toggle
               label={L("Приостановить вывод", "Pause claims")}
               checked={draft.paused}
+              disabled={pauseLocked && !draft.paused}
               onChange={(paused) => set({ paused, paused_until: paused ? draft.paused_until : null })}
             />
           </div>
+          {decrease && (
+            <p className="text-[13px] leading-snug text-hint">
+              {L(
+                `Снижение цены балла запланировано на ${decreaseAt}. До него вывод нельзя приостановить, а дни вывода должны оставить участникам хотя бы один полный день (UTC), чтобы забрать баллы по текущей цене.`,
+                `A point price decrease is scheduled for ${decreaseAt}. Until then claims can't be paused, and claim days must leave members at least one full day (UTC) to claim at the current price.`,
+              )}
+            </p>
+          )}
           {draft.paused && (
             <label className="flex h-12 items-center justify-between gap-3 rounded-xl bg-bg px-3.5">
               <span className="text-[14px] text-hint">{L("Возобновить автоматически", "Resume automatically")}</span>

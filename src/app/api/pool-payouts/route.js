@@ -2,6 +2,7 @@ import { getCollection } from "@/lib/mongo";
 import { fetchJettonMetadata } from "@/lib/ton/rpc";
 import { nowSeconds } from "@/lib/rewards";
 import { claimState, errorResponse, memberProfiles, requireChatCreator, sameAddress } from "@/lib/pool-members";
+import { queryInt } from "@/lib/query";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ const PAGE_SIZE = 30;
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const chatId = Number(searchParams.get("chatId"));
+    const chatId = queryInt(searchParams, "chatId");
     const { chat } = await requireChatCreator(request, chatId);
 
     const filter = { chat_id: chatId };

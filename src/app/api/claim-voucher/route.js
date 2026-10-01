@@ -11,6 +11,7 @@ import { chatLots } from "@/lib/lots";
 import { GAS, VOUCHER_TAG } from "@/lib/ton/constants";
 import { reconcileExpiredClaims, claimPoints, nowSeconds } from "@/lib/rewards";
 import { claimGate, claimSettingsOf, claimablePoints } from "@/lib/claim-rules";
+import { loadPlatformDefault } from "@/lib/platform-price";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,12 @@ export async function POST(request) {
     auth = authenticate(request);
   } catch (e) {
     return Response.json({ error: e.message }, { status: e.status || 401 });
+  }
+  // the platform default every price here builds on (lib/platform-price.js)
+  try {
+    await loadPlatformDefault();
+  } catch (e) {
+    return Response.json({ error: e.message }, { status: e.status || 500 });
   }
 
   const body = await request.json().catch(() => null);
