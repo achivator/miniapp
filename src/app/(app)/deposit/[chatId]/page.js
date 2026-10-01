@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Address } from "@ton/core";
 import { useInitDataRaw } from "@/components/TelegramSDK";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
@@ -98,6 +99,7 @@ function PoolManager({ chatId }) {
   const t = useI18n();
   const { L } = t;
   const formatTon = (nanotons) => t.units(nanotons, 9);
+  const router = useRouter();
   useTelegramBack(true);
 
   const [info, setInfo] = useState(null);
@@ -112,6 +114,12 @@ function PoolManager({ chatId }) {
     if (!initDataRaw) return null;
     try {
       const status = await apiFetch(`/api/pool-status?chatId=${chatId}`, { initDataRaw });
+      // a link made in a supergroup carries its own id: the pool is the
+      // economy's (lib/chat-ids.js), so its page lives under that id
+      if (status.chat_id !== chatId) {
+        router.replace(`/deposit/${status.chat_id}`);
+        return null;
+      }
       setInfo(status);
       setError(null);
       return status;
@@ -119,7 +127,7 @@ function PoolManager({ chatId }) {
       setError(e.message);
       return null;
     }
-  }, [chatId, initDataRaw]);
+  }, [chatId, initDataRaw, router]);
 
   useEffect(() => {
     load();
@@ -374,12 +382,15 @@ function PoolManager({ chatId }) {
         <Notice
           notice={{
             kind: "info",
-            text: L(
-              "Чат стал супергруппой (у него новый id). Бот пишет туда, а баллы, пул и настройки остаются за прежним чатом" +
-                (info.migrated.needs_review ? " — это должен проверить оператор платформы." : "."),
-              "The chat was upgraded to a supergroup (it has a new id). The bot posts there, but its points, pool and settings stay with the old chat" +
-                (info.migrated.needs_review ? " — a platform operator needs to review it." : "."),
-            ),
+            text: info.migrated.needs_review
+              ? L(
+                  "Чат стал супергруппой, но у неё уже были свои баллы или выплаты. Бот пишет туда, а баллы, пул и настройки остаются за прежним чатом — это должен проверить оператор платформы.",
+                  "The chat was upgraded to a supergroup that already had points or payouts of its own. The bot posts there, but the points, pool and settings stay with the old chat — a platform operator needs to review it.",
+                )
+              : L(
+                  "Группа стала супергруппой: баллы, пул и настройки перешли вместе с ней.",
+                  "This group was upgraded to a supergroup; rewards and the pool carry over.",
+                ),
           }}
         />
       )}
