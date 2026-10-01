@@ -126,6 +126,33 @@ export async function GET(request) {
     }
   }
 
+  // Whether the chat hears the bot's announcements (price changes, the
+  // jetton switch): the bot flags a chat it cannot post in
+  // (chats.bot_cannot_post_at / _reason). A group upgraded to a supergroup
+  // is posted to under its new id, so the flag that matters is the new
+  // chat's; its economy stays under this id until an operator reviews it.
+  let botCannotPost = null;
+  let migrated = null;
+  if (isCreator) {
+    let target = chat;
+    if (chat.migrated_to_chat_id) {
+      migrated = {
+        to_chat_id: chat.migrated_to_chat_id,
+        at: chat.migrated_at ? Math.floor(new Date(chat.migrated_at).getTime() / 1000) : null,
+        needs_review: chat.migration_needs_review === true,
+      };
+      target = await chatsCol
+        .findOne({ id: chat.migrated_to_chat_id }, { projection: { bot_cannot_post_at: 1, bot_cannot_post_reason: 1 } })
+        .catch(() => null);
+    }
+    if (target?.bot_cannot_post_at) {
+      botCannotPost = {
+        at: Math.floor(new Date(target.bot_cannot_post_at).getTime() / 1000),
+        reason: target.bot_cannot_post_reason || null,
+      };
+    }
+  }
+
   return Response.json({
     ok: true,
     chat_id: chatId,
@@ -143,6 +170,10 @@ export async function GET(request) {
     controls,
     // { from, to, effective_at }: set the daily limit back to `from`, or null
     limit_restore: limitRestoreView,
+    // creator only: { at, reason } when the bot cannot post in the chat, and
+    // { to_chat_id, at, needs_review } when it became a supergroup
+    bot_cannot_post: botCannotPost,
+    migrated,
     member_count: memberCount,
     create_pool_body:
       !status.active && isCreator ? buildCreatePoolBody(chatId).toBoc().toString("base64") : null,

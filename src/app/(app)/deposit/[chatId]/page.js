@@ -353,6 +353,37 @@ function PoolManager({ chatId }) {
         </div>
       </Card>
 
+      {info.is_creator && info.bot_cannot_post && (
+        <Notice
+          notice={{
+            kind: "err",
+            text: info.bot_cannot_post.reason
+              ? L(
+                  `Бот не может писать в ваш чат: ${info.bot_cannot_post.reason}. Объявления о цене балла и смене жетона туда не доходят — верните бота в чат и дайте ему право писать.`,
+                  `The bot can't post in your chat: ${info.bot_cannot_post.reason}. Announcements about the point price and the jetton don't reach it — add the bot back and let it post.`,
+                )
+              : L(
+                  "Бот не может писать в ваш чат. Объявления о цене балла и смене жетона туда не доходят — верните бота в чат и дайте ему право писать.",
+                  "The bot can't post in your chat. Announcements about the point price and the jetton don't reach it — add the bot back and let it post.",
+                ),
+          }}
+        />
+      )}
+
+      {info.is_creator && info.migrated && (
+        <Notice
+          notice={{
+            kind: "info",
+            text: L(
+              "Чат стал супергруппой (у него новый id). Бот пишет туда, а баллы, пул и настройки остаются за прежним чатом" +
+                (info.migrated.needs_review ? " — это должен проверить оператор платформы." : "."),
+              "The chat was upgraded to a supergroup (it has a new id). The bot posts there, but its points, pool and settings stay with the old chat" +
+                (info.migrated.needs_review ? " — a platform operator needs to review it." : "."),
+            ),
+          }}
+        />
+      )}
+
       {info.is_creator && info.limit_restore && (
         <LimitRestoreBanner
           restore={info.limit_restore}
