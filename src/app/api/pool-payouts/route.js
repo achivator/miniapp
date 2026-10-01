@@ -14,8 +14,9 @@ const PAGE_SIZE = 30;
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const chatId = queryInt(searchParams, "chatId");
-    const { chat } = await requireChatCreator(request, chatId);
+    // a supergroup's id resolves to its economy's (lib/chat-ids.js)
+    const { chat } = await requireChatCreator(request, queryInt(searchParams, "chatId"));
+    const chatId = chat.id;
 
     const filter = { chat_id: chatId };
     const before = /^(\d+):(\d+)$/.exec(searchParams.get("before") || "");
@@ -38,7 +39,7 @@ export async function GET(request) {
     const [metadata, profiles] = await Promise.all([
       Promise.all(masters.map(async (m) => [m, await fetchJettonMetadata(m)])).then((e) => new Map(e)),
       memberProfiles(
-        chatId,
+        chat,
         page.map((c) => c.user_id),
       ),
     ]);

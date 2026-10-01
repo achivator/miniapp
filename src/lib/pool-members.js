@@ -1,6 +1,7 @@
 const { Address } = require('@ton/core');
 const { getCollection } = require('./mongo');
 const { getChatMember, getChatMemberStatus } = require('./telegram');
+const { resolveEconomyChatId, telegramChatId } = require('./chat-ids');
 const { authenticate } = require('./auth');
 const { dateMatch } = require('./lot-dates');
 
@@ -24,14 +25,17 @@ function httpError(status, message) {
 
 // Only the chat creator sees other members' balances and payout wallets.
 // Read-only, so the stored creator flag is enough - unless Telegram actively
-// says the caller is no longer the creator (ownership moved on).
+// says the caller is no longer the creator (ownership moved on). `chatId`
+// may be a supergroup's own id: the chat returned is its economy's (lib/
+// chat-ids.js), and callers key everything by `chat.id`.
 async function requireChatCreator(request, chatId) {
     const auth = authenticate(request);
     if (!Number.isSafeInteger(chatId)) throw httpError(400, 'chatId is required');
-    const chat = await (await getCollection('chats')).findOne({ id: chatId });
+    const chats = await getCollection('chats');
+    const chat = await chats.findOne({ id: await resolveEconomyChatId(chatId, chats) });
     if (!chat) throw httpError(404, 'chat not found');
     if (chat.creator !== auth.user.id) throw httpError(403, 'only the chat creator can see member accounts');
-    const live = await getChatMemberStatus(chatId, auth.user.id);
+    const live = await getChatMemberStatus(telegramChatId(chat), auth.user.id);
     if (live !== null && live !== 'creator') {
         throw httpError(403, 'Telegram does not confirm you as the chat creator');
     }
@@ -93,12 +97,14 @@ function displayName(user) {
     return full || (user.username ? `@${user.username}` : null);
 }
 
-// Names come from Telegram (the database stores ids only). Members the bot
-// cannot see - left, never joined, bot lost admin rights - stay nameless.
-async function memberProfiles(chatId, userIds) {
+// Names come from Telegram (the database stores ids only), asked in the
+// chat where Telegram knows it now (telegramChatId). Members the bot cannot
+// see - left, never joined, bot lost admin rights - stay nameless.
+async function memberProfiles(chat, userIds) {
+    const tgChatId = telegramChatId(chat);
     const entries = await Promise.all(
         [...new Set(userIds)].map(async (id) => {
-            const member = await getChatMember(chatId, id);
+            const member = await getChatMember(tgChatId, id);
             return [
                 id,
                 {

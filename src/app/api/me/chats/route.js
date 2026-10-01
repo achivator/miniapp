@@ -173,7 +173,9 @@ export async function GET(request) {
     });
   }
 
-  const creatorChats = await chatsCol.find({ creator: userId }).toArray();
+  // a supergroup's own document is only an alias of its economy (lib/
+  // chat-ids.js), whose chat is listed under its own id
+  const creatorChats = await chatsCol.find({ creator: userId, economy_chat_id: null }).toArray();
 
   return Response.json({
     ok: true,

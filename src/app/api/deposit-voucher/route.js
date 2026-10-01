@@ -1,5 +1,6 @@
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
+import { resolveEconomyChatId } from "@/lib/chat-ids";
 import { getTonConfig } from "@/lib/ton/config";
 import { fetchJettonMetadata, fetchJettonWalletAddress, getPoolStatus } from "@/lib/ton/rpc";
 import { buildDepositVoucherCell, buildDepositForwardPayload, buildJettonTransferBody, signVoucher, defaultExpiry } from "@/lib/ton/vouchers";
@@ -19,10 +20,10 @@ export async function POST(request) {
   }
 
   const body = await request.json().catch(() => null);
-  const chatId = Number(body?.chatId);
+  const requestedChatId = Number(body?.chatId);
   const wallet = body?.wallet;
   const amountStr = body?.amount;
-  if (!Number.isSafeInteger(chatId) || !wallet || !amountStr) {
+  if (!Number.isSafeInteger(requestedChatId) || !wallet || !amountStr) {
     return Response.json({ error: "chatId, wallet and amount are required" }, { status: 400 });
   }
 
@@ -42,6 +43,9 @@ export async function POST(request) {
   }
 
   const chatsCol = await getCollection("chats");
+  // a supergroup's own id stands for its economy, whose id the pool and
+  // every voucher carry (lib/chat-ids.js)
+  const chatId = await resolveEconomyChatId(requestedChatId, chatsCol);
   const chat = await chatsCol.findOne({ id: chatId });
   if (!chat) return Response.json({ error: "chat not found" }, { status: 404 });
   if (chat.creator !== auth.user.id) {

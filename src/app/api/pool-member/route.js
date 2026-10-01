@@ -27,9 +27,10 @@ const WEEK = 7 * 86400;
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const chatId = queryInt(searchParams, "chatId");
+    // a supergroup's id resolves to its economy's (lib/chat-ids.js)
     const userId = queryInt(searchParams, "userId");
-    const { chat } = await requireChatCreator(request, chatId);
+    const { chat } = await requireChatCreator(request, queryInt(searchParams, "chatId"));
+    const chatId = chat.id;
     if (!Number.isSafeInteger(userId)) throw httpError(400, "userId is required");
     // the platform default its prices build on (lib/platform-price.js)
     await loadPlatformDefault();
@@ -87,7 +88,7 @@ export async function GET(request) {
       return { master, symbol: meta?.symbol ?? null, decimals: meta?.decimals ?? null };
     };
 
-    const profiles = await memberProfiles(chatId, [
+    const profiles = await memberProfiles(chat, [
       userId,
       ...grants.map((g) => g.granted_by).filter(Number.isSafeInteger),
       ...topReactors.map((r) => r._id),

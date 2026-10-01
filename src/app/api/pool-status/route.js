@@ -16,6 +16,7 @@ import { limitRestore } from "@/lib/payout-coverage";
 import { upcomingPointPrice } from "@/lib/point-price";
 import { loadPlatformDefault } from "@/lib/platform-price";
 import { queryInt } from "@/lib/query";
+import { resolveEconomyChatId, telegramChatId } from "@/lib/chat-ids";
 
 export const dynamic = "force-dynamic";
 
@@ -34,8 +35,8 @@ export async function GET(request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const chatId = queryInt(searchParams, "chatId");
-  if (!Number.isSafeInteger(chatId)) {
+  const requestedChatId = queryInt(searchParams, "chatId");
+  if (!Number.isSafeInteger(requestedChatId)) {
     return Response.json({ error: "chatId is required" }, { status: 400 });
   }
 
@@ -45,11 +46,14 @@ export async function GET(request) {
   }
 
   const chatsCol = await getCollection("chats");
+  // A supergroup's own id stands for its economy, the pool's id (lib/
+  // chat-ids.js): the response's chat_id is the one to link to.
+  const chatId = await resolveEconomyChatId(requestedChatId, chatsCol);
   const chat = await chatsCol.findOne({ id: chatId });
   if (!chat) return Response.json({ error: "chat not found" }, { status: 404 });
 
   const isCreator = chat.creator === auth.user.id;
-  const memberCount = await getChatMemberCount(chatId);
+  const memberCount = await getChatMemberCount(telegramChatId(chat));
 
   let status = { poolAddress: null, active: false, balance: 0n };
   try {
@@ -129,20 +133,23 @@ export async function GET(request) {
   // Whether the chat hears the bot's announcements (price changes, the
   // jetton switch): the bot flags a chat it cannot post in
   // (chats.bot_cannot_post_at / _reason). A group upgraded to a supergroup
-  // is posted to under its new id, so the flag that matters is the new
-  // chat's; its economy stays under this id until an operator reviews it.
+  // is posted to under its telegram id, so the flag that matters is that
+  // chat's. Its economy (points, pool, settings) stays under this id: the
+  // supergroup earns into it, unless it had money of its own and an
+  // operator has to review the move (needs_review).
   let botCannotPost = null;
   let migrated = null;
   if (isCreator) {
     let target = chat;
-    if (chat.migrated_to_chat_id) {
+    const tgChatId = telegramChatId(chat);
+    if (tgChatId !== chat.id) {
       migrated = {
-        to_chat_id: chat.migrated_to_chat_id,
+        to_chat_id: tgChatId,
         at: chat.migrated_at ? Math.floor(new Date(chat.migrated_at).getTime() / 1000) : null,
         needs_review: chat.migration_needs_review === true,
       };
       target = await chatsCol
-        .findOne({ id: chat.migrated_to_chat_id }, { projection: { bot_cannot_post_at: 1, bot_cannot_post_reason: 1 } })
+        .findOne({ id: tgChatId }, { projection: { bot_cannot_post_at: 1, bot_cannot_post_reason: 1 } })
         .catch(() => null);
     }
     if (target?.bot_cannot_post_at) {

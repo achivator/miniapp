@@ -4,6 +4,7 @@ import { getTonConfig } from "@/lib/ton/config";
 import { fetchPoolAddress } from "@/lib/ton/rpc";
 import { isNonceUsedOnChain, nowSeconds } from "@/lib/rewards";
 import { queryInt } from "@/lib/query";
+import { resolveEconomyChatId } from "@/lib/chat-ids";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +17,13 @@ export async function GET(request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const chatId = queryInt(searchParams, "chatId");
+  const requestedChatId = queryInt(searchParams, "chatId");
   const nonce = queryInt(searchParams, "nonce");
-  if (!Number.isSafeInteger(chatId) || !Number.isSafeInteger(nonce)) {
+  if (!Number.isSafeInteger(requestedChatId) || !Number.isSafeInteger(nonce)) {
     return Response.json({ error: "chatId and nonce are required" }, { status: 400 });
   }
+  // claims are kept under the economy id (lib/chat-ids.js)
+  const chatId = await resolveEconomyChatId(requestedChatId);
 
   const claimsCol = await getCollection("claims");
   const claim = await claimsCol.findOne({ chat_id: chatId, user_id: auth.user.id, nonce });

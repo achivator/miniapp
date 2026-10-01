@@ -29,8 +29,9 @@ const SORTS = {
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const chatId = queryInt(searchParams, "chatId");
-    const { chat } = await requireChatCreator(request, chatId);
+    // a supergroup's id resolves to its economy's (lib/chat-ids.js)
+    const { chat } = await requireChatCreator(request, queryInt(searchParams, "chatId"));
+    const chatId = chat.id;
     // the platform default its prices build on (lib/platform-price.js)
     await loadPlatformDefault();
 
@@ -87,7 +88,7 @@ export async function GET(request) {
             .toArray()
         : [],
       maturingByUser(chatId, userIds, settings.maturation_days, now),
-      memberProfiles(chatId, userIds),
+      memberProfiles(chat, userIds),
       userIds.length
         ? (await getCollection("achievements"))
             .aggregate([

@@ -1,6 +1,7 @@
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { getChatMemberStatus } from "@/lib/telegram";
+import { resolveEconomyChatId, telegramChatId } from "@/lib/chat-ids";
 import { getTonConfig } from "@/lib/ton/config";
 import {
   fetchJettonMetadata,
@@ -49,7 +50,9 @@ export const dynamic = "force-dynamic";
 async function creatorChat(request, chatId) {
   const auth = authenticate(request);
   if (!Number.isSafeInteger(chatId)) return { error: Response.json({ error: "chatId is required" }, { status: 400 }) };
-  const chat = await (await getCollection("chats")).findOne({ id: chatId });
+  // a supergroup's own id stands for its economy (lib/chat-ids.js)
+  const chats = await getCollection("chats");
+  const chat = await chats.findOne({ id: await resolveEconomyChatId(chatId, chats) });
   if (!chat) return { error: Response.json({ error: "chat not found" }, { status: 404 }) };
   // the platform default its price builds on (lib/platform-price.js)
   await loadPlatformDefault();
@@ -265,7 +268,7 @@ export async function POST(request) {
     const { auth, chat, error } = await creatorChat(request, Number(body?.chatId));
     if (error) return error;
     // A stale creator flag must not keep control of a chat's payouts.
-    if ((await getChatMemberStatus(chat.id, auth.user.id)) !== "creator") {
+    if ((await getChatMemberStatus(telegramChatId(chat), auth.user.id)) !== "creator") {
       return Response.json({ error: "Telegram does not confirm you as the chat creator" }, { status: 403 });
     }
     // what an earlier save could not queue goes first, in its own place

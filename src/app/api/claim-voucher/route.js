@@ -12,6 +12,7 @@ import { GAS, VOUCHER_TAG } from "@/lib/ton/constants";
 import { reconcileExpiredClaims, claimPoints, nowSeconds } from "@/lib/rewards";
 import { claimGate, claimSettingsOf, claimablePoints } from "@/lib/claim-rules";
 import { loadPlatformDefault } from "@/lib/platform-price";
+import { resolveEconomyChatId } from "@/lib/chat-ids";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +31,9 @@ export async function POST(request) {
   }
 
   const body = await request.json().catch(() => null);
-  const chatId = Number(body?.chatId);
+  const requestedChatId = Number(body?.chatId);
   const wallet = body?.wallet;
-  if (!Number.isSafeInteger(chatId) || !wallet) {
+  if (!Number.isSafeInteger(requestedChatId) || !wallet) {
     return Response.json({ error: "chatId and wallet are required" }, { status: 400 });
   }
   let recipient;
@@ -56,6 +57,9 @@ export async function POST(request) {
   const claimsCol = await getCollection("claims");
   const countersCol = await getCollection("counters");
 
+  // a supergroup's own id stands for its economy, whose id the pool and
+  // every voucher carry (lib/chat-ids.js)
+  const chatId = await resolveEconomyChatId(requestedChatId, chatsCol);
   const chat = await chatsCol.findOne({ id: chatId });
   if (!chat) return Response.json({ error: "chat not found" }, { status: 404 });
   if (!chat.jetton_master) {
