@@ -118,6 +118,14 @@ const ton = {
         const pool = chain.pools.get(Number(chatId));
         return pool ? pool.address : null;
     },
+    // Only pools are known to this chain: anything else was never deployed.
+    async getAddressInformation(addr) {
+        const parsed = Address.parse(String(addr));
+        for (const pool of chain.pools.values()) {
+            if (pool.address.equals(parsed)) return { state: pool.active ? 'active' : 'uninitialized', balance: 0n };
+        }
+        return { state: 'uninitialized', balance: 0n };
+    },
     async getPoolStatus(_master, chatId) {
         const pool = chain.pools.get(Number(chatId));
         if (!pool) return { poolAddress: null, active: false, balance: 0n };

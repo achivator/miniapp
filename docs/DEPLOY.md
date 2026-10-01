@@ -27,7 +27,8 @@ Pull requests run step 1 only.
    before CI has run, and the test gate does nothing.
 4. **Environment variables**: see `.env.example` for what each one means.
    - Runtime: `MONGODB_URI`, `TELEGRAM_BOT_TOKEN`, `BACKEND_SECRET`,
-     `MASTER_ADDRESS`, `TONCENTER_URL`, `TONCENTER_API_KEY`,
+     `MASTER_ADDRESS`, `LEGACY_MASTER_ADDRESSES` (after a master redeploy, the
+     replaced ones), `TONCENTER_URL`, `TONCENTER_API_KEY`,
      `MATURATION_DAYS`, `ACHIEVEMENT_REGISTRY`, `ACHIEVEMENT_TEMPLATES`,
      `IPFS_GATEWAY`.
    - Subscriptions in Telegram Stars: `SUBSCRIPTIONS_ENABLED`,

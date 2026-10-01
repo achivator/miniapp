@@ -20,6 +20,12 @@ function getTonConfig() {
         toncenterBase: base.replace(/\/+$/, ''),
         toncenterApiKey: process.env.TONCENTER_API_KEY || '',
         masterAddress: process.env.NEXT_PUBLIC_MASTER_ADDRESS || process.env.MASTER_ADDRESS || '',
+        // Masters replaced by a redeploy: their pools may still have paid out
+        // claims the database has not settled yet (lib/rewards.js).
+        legacyMasterAddresses: String(process.env.LEGACY_MASTER_ADDRESSES || '')
+            .split(',')
+            .map((address) => address.trim())
+            .filter(Boolean),
         jettonsPerPoint: process.env.JETTONS_PER_POINT || '0.01',
         registryAddress: process.env.ACHIEVEMENT_REGISTRY || '',
         achievementTemplates: parseTemplates(process.env.ACHIEVEMENT_TEMPLATES),
