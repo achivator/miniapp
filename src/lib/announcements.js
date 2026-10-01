@@ -48,10 +48,12 @@ async function reconcileAnnouncements(chats, now = new Date()) {
         if (announcement) expected.push(announcementDoc(chat.id, announcement, new Date(announcement.ref)));
     }
     if (expected.length === 0) return 0;
-    const since = new Date(Math.min(...expected.map((doc) => doc.created_at.getTime())));
+    // No created_at bound: a row queued before keys existed may be dated a
+    // moment before its decrease's requested_at, and missing it would announce
+    // the decrease twice.
     const rows = await (await getCollection('announcements'))
         .find(
-            { chat_id: { $in: expected.map((doc) => doc.chat_id) }, type: ANNOUNCE.scheduled, created_at: { $gte: since } },
+            { chat_id: { $in: expected.map((doc) => doc.chat_id) }, type: ANNOUNCE.scheduled },
             { projection: { key: 1, chat_id: 1, 'params.effective_at': 1 } },
         )
         .toArray();
