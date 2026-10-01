@@ -14,6 +14,12 @@ const OP = {
     MintAchievement: 4155708920, // AchievementRegistry
 };
 
+// Protocol version the backend signs for: what ChatPool, DistributorMaster
+// and AchievementRegistry return from their version() getter
+// (ton-contracts/contracts/voucher.tact ProtocolVersion). Contracts without
+// the getter speak version 1 (the DEP1 deposit voucher with a fee).
+const CONTRACTS_VERSION = 2;
+
 // Voucher kinds. The backend never signs a bare voucher cell: it signs
 // SignedVoucher{tag, target, ^voucher} (ton-contracts/contracts/voucher.tact),
 // where target is the contract that verifies it. A voucher can therefore not
@@ -48,4 +54,4 @@ const SECONDS = {
     mintVoucherTtl: 900,
 };
 
-module.exports = { OP, VOUCHER_TAG, GAS, SECONDS };
+module.exports = { OP, VOUCHER_TAG, GAS, SECONDS, CONTRACTS_VERSION };

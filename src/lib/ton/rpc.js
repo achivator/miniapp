@@ -95,9 +95,31 @@ async function runGetMethod(address, method, stack = []) {
     });
     const exitCode = result.exit_code;
     if (exitCode !== 0 && exitCode !== 1) {
-        throw new TonRpcError(`${method} exited with code ${exitCode}`, exitCode);
+        const error = new TonRpcError(`${method} exited with code ${exitCode}`, exitCode);
+        error.exitCode = exitCode; // the contract ran and failed (e.g. 11: no such getter)
+        throw error;
     }
     return result.stack || [];
+}
+
+// A contract's code never changes, so neither does its version.
+const versionCache = new Map(); // address -> version
+
+// Protocol version of an Achivator contract (its version() getter). Contracts
+// deployed before the getter existed speak version 1: their get method call
+// fails inside the VM. Network failures still throw.
+async function fetchContractVersion(address) {
+    const key = Address.parse(address.toString()).toRawString();
+    if (versionCache.has(key)) return versionCache.get(key);
+    let version;
+    try {
+        version = Number(stackItemToBigInt((await runGetMethod(address, 'version', []))[0]));
+    } catch (e) {
+        if (e?.exitCode === undefined) throw e;
+        version = 1;
+    }
+    versionCache.set(key, version);
+    return version;
 }
 
 async function getAddressInformation(address) {
@@ -311,6 +333,7 @@ module.exports = {
     fetchPoolLedgerBalance,
     fetchPoolClaimControls,
     fetchIsMinted,
+    fetchContractVersion,
     resolveMetadataUrl,
     getPoolStatus,
     stackItemToAddress,

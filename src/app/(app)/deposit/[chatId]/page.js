@@ -442,7 +442,22 @@ function PoolManager({ chatId }) {
         <Notice notice={{ kind: "info", text: L("Управлять этим пулом может только создатель чата.", "Only the chat creator can manage this pool.") }} />
       )}
 
-      {info.is_creator && !info.active && (
+      {/* The backend speaks another contract version than this chat's master
+          or pool: a deposit would come back as a refund, a new pool would be
+          the old one. Payouts and withdrawals are unaffected. */}
+      {info.is_creator && info.contracts?.outdated && (
+        <Notice
+          notice={{
+            kind: "err",
+            text: L(
+              "Контракты этого пула устаревшей версии: пополнение вернулось бы обратно, поэтому активация и пополнение пока отключены. Выплаты участникам и вывод остатка работают как обычно.",
+              "This pool's contracts are an outdated version: a top-up would be refunded, so activation and top-ups are off for now. Member payouts and withdrawals work as usual.",
+            ),
+          }}
+        />
+      )}
+
+      {info.is_creator && !info.active && !info.contracts?.outdated && (
         <section className="space-y-2.5">
           <SectionHeader title={L("Активация", "Activate")} />
           <Card className="space-y-3">
@@ -484,7 +499,7 @@ function PoolManager({ chatId }) {
         </section>
       )}
 
-      {info.is_creator && info.active && info.jetton_master && info.pool_admin && (
+      {info.is_creator && info.active && info.jetton_master && info.pool_admin && !info.contracts?.outdated && (
         <section className="space-y-2.5">
           <SectionHeader
             title={L("Пополнение", "Top up")}

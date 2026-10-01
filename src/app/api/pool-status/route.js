@@ -2,6 +2,7 @@ import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { getTonConfig } from "@/lib/ton/config";
 import {
+  fetchContractVersion,
   fetchJettonMetadata,
   fetchPoolClaimControls,
   fetchPoolLedgerBalance,
@@ -10,7 +11,7 @@ import {
   stackItemToAddress,
 } from "@/lib/ton/rpc";
 import { buildCreatePoolBody } from "@/lib/ton/vouchers";
-import { GAS } from "@/lib/ton/constants";
+import { CONTRACTS_VERSION, GAS } from "@/lib/ton/constants";
 import { getChatMemberCount } from "@/lib/telegram";
 import { limitRestore } from "@/lib/payout-coverage";
 import { upcomingPointPrice } from "@/lib/point-price";
@@ -60,6 +61,24 @@ export async function GET(request) {
     status = await getPoolStatus(cfg.masterAddress, chatId);
   } catch (e) {
     return Response.json({ error: `TON RPC failed: ${e.message}` }, { status: 502 });
+  }
+
+  // Contracts are immutable: a master or pool of another protocol version
+  // rejects what this backend signs (a deposit comes back as a refund). The
+  // page warns instead of offering what would fail; the deposit route
+  // refuses on its own as well.
+  const contracts = { expected: CONTRACTS_VERSION, master: null, pool: null };
+  try {
+    contracts.master = await fetchContractVersion(cfg.masterAddress);
+    if (status.active) contracts.pool = await fetchContractVersion(status.poolAddress);
+  } catch (e) {
+    console.error(`contract version check failed for chat ${chatId}:`, e.message);
+  }
+  contracts.outdated = [contracts.master, contracts.pool].some((v) => v !== null && v !== CONTRACTS_VERSION);
+  if (contracts.outdated) {
+    console.error(
+      `chat ${chatId}: contracts outdated (master v${contracts.master}, pool v${contracts.pool}, backend v${CONTRACTS_VERSION})`,
+    );
   }
 
   let jetton = null;
@@ -182,8 +201,13 @@ export async function GET(request) {
     bot_cannot_post: botCannotPost,
     migrated,
     member_count: memberCount,
+    // { expected, master, pool, outdated }: protocol versions, null when unknown
+    contracts,
+    // an outdated master would deploy a pool that refunds every deposit
     create_pool_body:
-      !status.active && isCreator ? buildCreatePoolBody(chatId).toBoc().toString("base64") : null,
+      !status.active && isCreator && contracts.master === CONTRACTS_VERSION
+        ? buildCreatePoolBody(chatId).toBoc().toString("base64")
+        : null,
     create_pool_ton: GAS.createPoolTon,
     pool_reserve_ton: GAS.poolReserveTon,
   });
