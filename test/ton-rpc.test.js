@@ -319,15 +319,28 @@ test('isClaimPaid finds an older claim paid by the pool of a replaced master', a
     }
 });
 
-test('isClaimPaid skips a pool that was never deployed', async () => {
-    const master = freshMaster();
-    const saved = process.env.MASTER_ADDRESS;
+test('isClaimPaid skips a pool that was never deployed, but never settles with none to ask', async () => {
+    const [master, oldMaster, oldPool] = [freshMaster(), freshMaster(), freshMaster()];
+    const saved = { master: process.env.MASTER_ADDRESS, legacy: process.env.LEGACY_MASTER_ADDRESSES };
     process.env.MASTER_ADDRESS = master.toString();
-    chainStub({ masters: new Map([[master.toRawString(), freshMaster()]]), pools: new Map() });
     try {
+        // the current master's pool is not deployed yet, the old one did not pay it
+        process.env.LEGACY_MASTER_ADDRESSES = oldMaster.toString();
+        chainStub({
+            masters: new Map([
+                [master.toRawString(), freshMaster()],
+                [oldMaster.toRawString(), oldPool],
+            ]),
+            pools: new Map([[oldPool.toRawString(), new Set()]]),
+        });
         assert.equal(await isClaimPaid({ chat_id: -100, nonce: 1 }), false);
+        // no deployed pool at all: the claim stays issued (a rejection), never released
+        process.env.LEGACY_MASTER_ADDRESSES = '';
+        await assert.rejects(() => isClaimPaid({ chat_id: -100, nonce: 1 }), TonRpcError);
     } finally {
-        if (saved === undefined) delete process.env.MASTER_ADDRESS;
-        else process.env.MASTER_ADDRESS = saved;
+        for (const [name, value] of [['MASTER_ADDRESS', saved.master], ['LEGACY_MASTER_ADDRESSES', saved.legacy]]) {
+            if (value === undefined) delete process.env[name];
+            else process.env[name] = value;
+        }
     }
 });

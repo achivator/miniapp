@@ -1,6 +1,6 @@
 const { getCollection } = require('./mongo');
 const { getTonConfig } = require('./ton/config');
-const { runGetMethod, fetchPoolAddress, getAddressInformation, stackItemToBigInt } = require('./ton/rpc');
+const { TonRpcError, runGetMethod, fetchPoolAddress, getAddressInformation, stackItemToBigInt } = require('./ton/rpc');
 
 function nowSeconds() {
     return Math.floor(Date.now() / 1000);
@@ -28,13 +28,18 @@ async function claimPools(claim) {
 }
 
 // Whether the claim's nonce was used on any pool it can have been paid
-// from. A pool that was never deployed has used none. Throws when the chain
-// cannot be read: the caller keeps the claim issued and retries later.
+// from. A pool that was never deployed has used none, but the claim was
+// issued by a deployed one: with none to ask, nothing can be settled. Throws
+// then, and when the chain cannot be read: the caller keeps the claim issued
+// and retries later.
 async function isClaimPaid(claim) {
+    let asked = 0;
     for (const pool of await claimPools(claim)) {
         if ((await getAddressInformation(pool)).state !== 'active') continue;
+        asked += 1;
         if (await isNonceUsedOnChain(pool, claim.nonce)) return true;
     }
+    if (asked === 0) throw new TonRpcError(`no deployed pool to settle claim ${claim.nonce} against`);
     return false;
 }
 
