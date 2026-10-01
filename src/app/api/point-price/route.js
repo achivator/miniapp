@@ -27,14 +27,17 @@ import {
   planPointPriceCancel,
   planPointPriceChange,
   platformPointPrice,
+  platformTargetPrice,
   pointPriceFor,
   pointPriceNoticeDays,
   noticeEffectiveAt,
   serializeClaimWindows,
   serializePendingPrice,
   serializePriceHistory,
+  upcomingPlatformDecrease,
   upcomingPointPrice,
 } from "@/lib/point-price";
+import { loadPlatformDefault } from "@/lib/platform-price";
 
 const DAY_MS = 86400 * 1000;
 
@@ -47,6 +50,8 @@ async function creatorChat(request, chatId) {
   if (!Number.isSafeInteger(chatId)) return { error: Response.json({ error: "chatId is required" }, { status: 400 }) };
   const chat = await (await getCollection("chats")).findOne({ id: chatId });
   if (!chat) return { error: Response.json({ error: "chat not found" }, { status: 404 }) };
+  // the platform default its price builds on (lib/platform-price.js)
+  await loadPlatformDefault();
   if (chat.creator !== auth.user.id) {
     return { error: Response.json({ error: "only the chat creator can change the point price" }, { status: 403 }) };
   }
@@ -161,6 +166,11 @@ async function coverageOf(chat, jetton, now, force = false) {
   }
 }
 
+function serializePlatformDecrease(decrease) {
+  if (!decrease) return null;
+  return { price: decrease.price, from: decrease.from, effective_at: Math.floor(decrease.effective_at.getTime() / 1000) };
+}
+
 function view(chat, jetton, extra = {}) {
   const now = new Date();
   let price = null;
@@ -184,7 +194,11 @@ function view(chat, jetton, extra = {}) {
     ok: true,
     price,
     custom: hasCustomPointPrice(chat, now),
-    platform_price: platformPointPrice(),
+    // the platform default in force, where it is heading ("Use default" is
+    // scheduled to that), and its decrease ahead if any
+    platform_price: platformPointPrice(now),
+    platform_target: platformTargetPrice(),
+    platform_pending: serializePlatformDecrease(upcomingPlatformDecrease(now)),
     max_price: MAX_POINT_PRICE,
     // a decrease waiting for its notice period, or null
     pending,

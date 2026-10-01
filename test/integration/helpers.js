@@ -206,6 +206,7 @@ stubExports(
 register(pathToFileURL(path.join(__dirname, 'alias-loader.mjs')));
 
 const { getClient, getDb, getCollection } = require(path.join(SRC, 'lib/mongo.js'));
+const { resetPlatformDefault } = require(path.join(SRC, 'lib/platform-price.js'));
 
 // ---- MongoDB lifecycle ----
 
@@ -231,6 +232,9 @@ function setupIntegration() {
     beforeEach(async () => {
         chain.reset();
         telegram.reset();
+        // the platform default is seeded again from JETTONS_PER_POINT: a
+        // route that prices without loading it fails instead of guessing
+        resetPlatformDefault();
         if (!state.skip) await (await getDb()).dropDatabase();
     });
     after(async () => {
@@ -371,4 +375,5 @@ module.exports = {
     callApi,
     getDb,
     getCollection,
+    resetPlatformDefault,
 };

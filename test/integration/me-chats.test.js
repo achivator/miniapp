@@ -4,7 +4,7 @@
 const h = require('./helpers');
 const assert = require('node:assert/strict');
 
-const { itest, seed, chain, callApi, getCollection, ago, address, DAY_MS, MASTER_ADDRESS } = h;
+const { itest, seed, chain, callApi, getCollection, ago, address, DAY_MS, MASTER_ADDRESS, resetPlatformDefault } = h;
 
 h.setupIntegration();
 
@@ -166,16 +166,18 @@ itest('a scheduled decrease is shown as a price drop until it applies', async (t
     assert.equal(item.point_price_pending.to, '0.01');
     assert.ok(Math.abs(item.point_price_pending.effective_at - (nowSec() + 5 * 86400)) <= 60);
 
-    // "back to the default" follows the live default: once the operator
-    // raises it above the current price it is no drop any more
+    // "back to the default" pays the price it was scheduled to: the operator
+    // raising the default since changes nothing for this chat
     const saved = process.env.JETTONS_PER_POINT;
     process.env.JETTONS_PER_POINT = '0.03';
     t.after(() => {
         process.env.JETTONS_PER_POINT = saved;
     });
+    resetPlatformDefault();
     const raised = itemOf(await dashboard());
+    assert.equal((await dashboard()).body.config.jettons_per_point, '0.03');
     assert.equal(raised.point_price, '0.02');
-    assert.equal(raised.point_price_pending, null);
+    assert.equal(raised.point_price_pending.to, '0.01');
 });
 
 itest('an unreadable jetton shows no amounts and claims refuse to guess its decimals', async () => {

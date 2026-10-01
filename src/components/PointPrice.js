@@ -407,8 +407,10 @@ export function PointPrice({ chatId, initDataRaw }) {
   const alreadyScheduled = pending && !pending.to_default && price === pending.price;
   const dirty = price !== null && price !== data.price && !alreadyScheduled;
   const lowering = dirty && data.price !== null && compareDecimal(price, data.price) < 0;
-  // "Use default" is a decrease too when the default is lower.
-  const resetLowers = data.custom && data.price !== null && compareDecimal(data.platform_price, data.price) < 0;
+  // "Use default" is a decrease too when the default is (or is heading)
+  // lower: it is scheduled to where the default is heading.
+  const platformTarget = data.platform_target ?? data.platform_price;
+  const resetLowers = data.custom && data.price !== null && compareDecimal(platformTarget, data.price) < 0;
   const example =
     price !== null ? formatUnits(pointsToJettons(EXAMPLE_POINTS, price, data.decimals), data.decimals) : null;
   // A decrease requested now (the server's preview): when it would apply,
@@ -561,6 +563,11 @@ export function PointPrice({ chatId, initDataRaw }) {
           <p className="text-[13px] leading-snug text-hint tabular">
             {L("По умолчанию на платформе:", "Platform default:")} {L("1 балл", "1 point")} = {data.platform_price}{" "}
             {symbol}
+            {data.platform_pending &&
+              L(
+                `, с ${momentText(data.platform_pending.effective_at * 1000)} — ${data.platform_pending.price} ${symbol}`,
+                `, ${data.platform_pending.price} ${symbol} from ${momentText(data.platform_pending.effective_at * 1000)}`,
+              )}
             {!data.decimals_known &&
               L(
                 " · знаков после запятой у жетона пока не узнать, проверим при выплате",
@@ -572,7 +579,11 @@ export function PointPrice({ chatId, initDataRaw }) {
         {pending && (
           <div className="space-y-2 rounded-xl bg-bg p-3">
             <div className="flex items-baseline justify-between gap-3">
-              <p className="text-[13px] font-semibold">{L("Снижение запланировано", "Decrease scheduled")}</p>
+              <p className="text-[13px] font-semibold">
+                {pending.platform
+                  ? L("Платформа снижает цену по умолчанию", "The platform default goes down")
+                  : L("Снижение запланировано", "Decrease scheduled")}
+              </p>
               <span className="shrink-0 whitespace-nowrap">
                 <Chip tone="gold">{momentText(pending.effective_at * 1000)}</Chip>
               </span>
@@ -581,17 +592,24 @@ export function PointPrice({ chatId, initDataRaw }) {
               {L("1 балл", "1 point")} = {pending.from ?? data.price} →{" "}
               <span className="font-semibold text-fg">{pending.price}</span> {symbol}
               {pending.to_default ? L(" (цена по умолчанию)", " (platform default)") : ""}.{" "}
-              {L(
-                "Участники видят это на своём экране, бот объявил об этом в чате; до этого момента они забирают баллы по текущей цене.",
-                "Members see it on their dashboard and the bot announced it in the chat; until then they claim at the current price.",
-              )}
+              {pending.platform
+                ? L(
+                    "Чат на цене по умолчанию, поэтому снижение касается и его. Участники видят это на своём экране, бот объявляет об этом в чате; до этого момента они забирают баллы по текущей цене. Чтобы цена не менялась, задайте свою.",
+                    "The chat is on the platform default, so the decrease applies to it too. Members see it on their dashboard and the bot announces it in the chat; until then they claim at the current price. Set your own price to keep it.",
+                  )
+                : L(
+                    "Участники видят это на своём экране, бот объявил об этом в чате; до этого момента они забирают баллы по текущей цене.",
+                    "Members see it on their dashboard and the bot announced it in the chat; until then they claim at the current price.",
+                  )}
             </p>
             {!pending.claims_open_throughout && pending.claim_windows?.length > 0 && (
               <ClaimWindows windows={pending.claim_windows} />
             )}
-            <Button variant="ghost" size="sm" busy={busy === "cancel"} disabled={Boolean(busy)} onClick={cancelPending}>
-              {L("Отменить снижение", "Cancel decrease")}
-            </Button>
+            {!pending.platform && (
+              <Button variant="ghost" size="sm" busy={busy === "cancel"} disabled={Boolean(busy)} onClick={cancelPending}>
+                {L("Отменить снижение", "Cancel decrease")}
+              </Button>
+            )}
           </div>
         )}
 
@@ -612,7 +630,7 @@ export function PointPrice({ chatId, initDataRaw }) {
           <ClaimWindows windows={next.claim_windows} />
         )}
         {lowering && blocked && <Notice notice={{ kind: "err", text: blockedText }} />}
-        {pending && dirty && !lowering && (
+        {pending && !pending.platform && dirty && !lowering && (
           <p className="text-[13px] leading-snug text-hint">
             {L(
               "Если сохранить эту цену, запланированное снижение отменится.",
@@ -673,8 +691,8 @@ export function PointPrice({ chatId, initDataRaw }) {
         {data.custom && resetLowers && noticeDays > 0 && !pending?.to_default && (
           <p className="text-[13px] leading-snug text-hint">
             {L(
-              `Цена по умолчанию (${data.platform_price} ${symbol}) ниже вашей, так что возврат к ней — тоже снижение: оно тоже ждёт ${daysText(L, noticeDays)}.`,
-              `The default (${data.platform_price} ${symbol}) is lower than your price, so going back to it is a decrease: it waits ${daysText(L, noticeDays)} too.`,
+              `Цена по умолчанию (${platformTarget} ${symbol}) ниже вашей, так что возврат к ней — тоже снижение: оно тоже ждёт ${daysText(L, noticeDays)}.`,
+              `The default (${platformTarget} ${symbol}) is lower than your price, so going back to it is a decrease: it waits ${daysText(L, noticeDays)} too.`,
             )}
           </p>
         )}

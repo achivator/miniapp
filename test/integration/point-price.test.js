@@ -53,6 +53,7 @@ itest('schedule, replace and cancel a decrease', async () => {
         from: '0.02',
         symbol: 'TST',
         effective_at: 0,
+        platform: false,
     });
     assert.ok(near(scheduled.body.pending.effective_at, secondsFromNow(7)));
     assert.deepEqual(scheduled.body.history, []);
@@ -134,7 +135,7 @@ itest('an increase applies at once and cancels a pending decrease', async () => 
     assert.equal(raised.body.price, '0.03');
     assert.equal(raised.body.pending, null);
     assert.equal(raised.body.history.length, 1);
-    assert.deepEqual({ ...raised.body.history[0], at: null }, { old: '0.02', new: '0.03', at: null, by: CREATOR });
+    assert.deepEqual({ ...raised.body.history[0], at: null }, { old: '0.02', new: '0.03', at: null, by: CREATOR, reason: null });
 
     const chat = await chatDoc();
     assert.equal(chat.point_price, '0.03');
@@ -235,7 +236,7 @@ itest('a due decrease applies while the bot is down, and a save writes it out', 
     assert.equal(item.point_price, '0.01');
     assert.equal(item.point_price_custom, true);
     assert.equal(item.point_price_pending, null);
-    assert.deepEqual(item.point_price_change, { old: '0.02', new: '0.01', at: effectiveSec, changes: 1 });
+    assert.deepEqual(item.point_price_change, { old: '0.02', new: '0.01', at: effectiveSec, changes: 1, reason: null });
     assert.equal(item.available_points, 140);
     assert.equal(item.jettons, '1.8');
     assert.deepEqual(item.jettons_breakdown, [
@@ -248,7 +249,7 @@ itest('a due decrease applies while the bot is down, and a save writes it out', 
     assert.equal(view.status, 200, JSON.stringify(view.body));
     assert.equal(view.body.price, '0.01');
     assert.equal(view.body.pending, null);
-    assert.deepEqual(view.body.history, [{ old: '0.02', new: '0.01', at: effectiveSec, by: CREATOR }]);
+    assert.deepEqual(view.body.history, [{ old: '0.02', new: '0.01', at: effectiveSec, by: CREATOR, reason: null }]);
 
     // A claim pays exactly what the dashboard showed.
     const claimed = await claim();
@@ -271,7 +272,7 @@ itest('a due decrease applies while the bot is down, and a save writes it out', 
     // The due pending predates maturation snapshots, so writing it out records
     // the chat's setting at that moment.
     assert.deepEqual(chat.point_price_history, [
-        { old: '0.02', new: '0.01', at: effectiveAt, by: CREATOR, maturation_days: 3 },
+        { old: '0.02', new: '0.01', at: effectiveAt, by: CREATOR, maturation_days: 3, from_default: false },
     ]);
     assert.deepEqual(
         (await outbox()).map((r) => [r.type, r.params.from, r.params.to]),

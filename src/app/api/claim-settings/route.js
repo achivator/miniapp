@@ -3,6 +3,7 @@ import { getCollection } from "@/lib/mongo";
 import { getChatMemberStatus } from "@/lib/telegram";
 import { claimGate, claimRulesConflict, claimSettingsOf, normalizeClaimSettings } from "@/lib/claim-rules";
 import { pendingFilter, serializeClaimWindows, upcomingPointPrice } from "@/lib/point-price";
+import { loadPlatformDefault } from "@/lib/platform-price";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,8 @@ async function creatorChat(request, chatId) {
   if (!Number.isSafeInteger(chatId)) return { error: Response.json({ error: "chatId is required" }, { status: 400 }) };
   const chat = await (await getCollection("chats")).findOne({ id: chatId });
   if (!chat) return { error: Response.json({ error: "chat not found" }, { status: 404 }) };
+  // the platform default its price builds on (lib/platform-price.js)
+  await loadPlatformDefault();
   if (chat.creator !== auth.user.id) {
     return { error: Response.json({ error: "only the chat creator can change claim rules" }, { status: 403 }) };
   }

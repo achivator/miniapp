@@ -14,6 +14,7 @@ import {
   serializeSummary,
   summarizeClaims,
 } from "@/lib/pool-members";
+import { loadPlatformDefault } from "@/lib/platform-price";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,8 @@ export async function GET(request) {
     const chatId = Number(searchParams.get("chatId"));
     const userId = Number(searchParams.get("userId"));
     const { chat } = await requireChatCreator(request, chatId);
+    // the platform default its prices build on (lib/platform-price.js)
+    await loadPlatformDefault();
     if (!Number.isSafeInteger(userId)) throw httpError(400, "userId is required");
 
     // Same reconciliation the member's own screen runs: settles lapsed

@@ -4,8 +4,10 @@ const { parseRate, pointsToJettons } = require('./ton/amounts');
 // Price of a point: how many jettons one point pays out, per chat.
 //
 // The chat creator may set their own price (chats.point_price, a canonical
-// decimal string); without one the platform default JETTONS_PER_POINT
-// applies. It is off-chain like the claim rules: the pool contract only
+// decimal string); without one the platform default applies: the one stored
+// in the database (settings "point_price_default", see platform-price.js),
+// which follows JETTONS_PER_POINT with the same notice as a creator's
+// decrease. It is off-chain like the claim rules: the pool contract only
 // checks the backend's signature and daily limit, so the price is whatever
 // the backend sizes the voucher with - which is why every points -> jettons
 // conversion must go through pointPriceFor() and never read the env rate.
@@ -29,8 +31,12 @@ const { parseRate, pointsToJettons } = require('./ton/amounts');
 // the chat to claim first:
 //   { price, to_default, from, symbol, effective_at, requested_at, by,
 //     maturation_days }
-// `price` is the target effective price; `to_default` means the bot must
-// $unset point_price (back to the platform rate) rather than set it;
+// `price` is the target effective price, also for `to_default` ("back to the
+// platform default"): the default it will be by then, fixed when scheduled,
+// so the mini app and the bot pay and log the same one. On applying it the
+// bot $unsets point_price only if the default in force is that price, else
+// it keeps the chat at `price` (landsOnDefault); `from_default` records
+// whether the chat was on the default before it;
 // `maturation_days` is the chat's setting, kept in step by claim-settings
 // saves until effective_at, and copied into the history entry the decrease
 // becomes (by the bot, or by a save here). The bot applies a due decrease and
@@ -119,13 +125,69 @@ function normalizePointPrice(raw, decimals = null) {
     return price;
 }
 
-// Platform default from JETTONS_PER_POINT. Not bounds-checked: it is the
-// operator's setting, and an unparseable one throws exactly as before.
-function platformPointPrice() {
+// ---- The platform default ----
+// The design is in platform-price.js, which loads the stored default
+// (settings "point_price_default") on every request and hands it here with
+// setPlatformDefault(): this file stays free of the database (it is also
+// bundled for the browser). The state, all prices canonical:
+//   { price, pending: { price, from, effective_at, requested_at } | null,
+//     history: [{ old, new, at, requested_at? }] }
+// `price` pays until a pending decrease is due; from its effective_at on the
+// pending price does, whether or not the stored document has caught up.
+
+let platformCache = null;
+
+function setPlatformDefault(state) {
+    platformCache = state;
+}
+
+// The env value, canonical. Not bounds-checked: it is the operator's
+// setting, and an unparseable one throws.
+function envPointPrice() {
     const raw = String(getTonConfig().jettonsPerPoint).trim();
     const price = canonicalDecimal(raw);
     if (price === null) throw new Error(`invalid JETTONS_PER_POINT: ${raw}`);
     return price;
+}
+
+// The loaded state. Before any load, the env value with no history - only
+// where there is no database to load from (unit tests, a build): a server
+// with MONGODB_URI refuses rather than pay a default it did not read.
+function platformDefault() {
+    if (platformCache) return platformCache;
+    if (typeof window === 'undefined' && process.env.MONGODB_URI) {
+        throw httpError(500, 'the platform default point price was not loaded');
+    }
+    return { price: envPointPrice(), pending: null, history: [] };
+}
+
+// The platform default in force at `now`.
+function platformPointPrice(now = new Date()) {
+    const { price, pending } = platformDefault();
+    return pending && pending.effective_at.getTime() <= now.getTime() ? pending.price : price;
+}
+
+// Where the platform default is heading: a pending decrease's price, else
+// the current one. "Back to default" is scheduled to this.
+function platformTargetPrice() {
+    const { price, pending } = platformDefault();
+    return pending ? pending.price : price;
+}
+
+// The platform decrease members still have time to claim before, or null.
+function upcomingPlatformDecrease(now = new Date()) {
+    const { pending } = platformDefault();
+    return pending && pending.effective_at.getTime() > now.getTime() ? pending : null;
+}
+
+// Changes of the platform default up to `now`, oldest first: { old, new, at }.
+function platformSteps(now = new Date()) {
+    const { history, pending } = platformDefault();
+    const steps = (history || []).filter((h) => h.at instanceof Date && h.at.getTime() <= now.getTime());
+    if (pending && pending.effective_at.getTime() <= now.getTime()) {
+        steps.push({ old: pending.from, new: pending.price, at: pending.effective_at });
+    }
+    return steps.map((h) => ({ old: h.old, new: h.new, at: h.at }));
 }
 
 // Days a price decrease waits before it applies (POINT_PRICE_NOTICE_DAYS,
@@ -146,9 +208,9 @@ function invalidStored(what, value) {
 // ignoring any pending decrease. A stored value that fails validation means
 // the document was edited by hand: refuse rather than silently pay a
 // different rate (the creator can fix it by saving a new price).
-function storedPointPrice(chat) {
+function storedPointPrice(chat, now = new Date()) {
     const stored = chat?.point_price;
-    if (stored === undefined || stored === null) return platformPointPrice();
+    if (stored === undefined || stored === null) return platformPointPrice(now);
     try {
         return normalizePointPrice(stored);
     } catch {
@@ -192,16 +254,23 @@ function pendingPointPrice(chat) {
         requested_at: p.requested_at ?? null,
         by: p.by ?? null,
         maturation_days: snapshotMaturationDays(p.maturation_days),
+        from_default: typeof p.from_default === 'boolean' ? p.from_default : null,
     };
 }
 
-// The price a due decrease lands on. For a "back to the platform default"
-// decrease that is the default as it is now, not as it was when scheduled:
-// once the bot applies it (by unsetting point_price) the live default is
-// what pays, so reading it here keeps the price identical whether or not the
-// bot has run yet.
+// The price a decrease lands on: its own `price`, for "back to default"
+// too - the default it was scheduled to (platformTargetPrice() then), never
+// the default as it is when it applies. The bot logs the same price.
 function pendingTarget(pending) {
-    return pending.to_default ? platformPointPrice() : pending.price;
+    return pending.price;
+}
+
+// Whether a due "back to default" decrease leaves the chat on the default:
+// only while the default in force is the price it was scheduled to; else the
+// chat keeps that price as its own (the bot does the same when it applies
+// it), so a platform change meanwhile never moves it unannounced.
+function landsOnDefault(pending, now = new Date()) {
+    return pending.to_default && compareDecimal(pending.price, platformPointPrice(now)) === 0;
 }
 
 function isDue(pending, now) {
@@ -213,7 +282,7 @@ function isDue(pending, now) {
 function pointPriceFor(chat, now = new Date()) {
     const pending = pendingPointPrice(chat);
     if (isDue(pending, now)) return pendingTarget(pending);
-    return storedPointPrice(chat);
+    return storedPointPrice(chat, now);
 }
 
 // Whether the effective price at `now` is the creator's own (vs. the
@@ -225,15 +294,36 @@ function hasCustomPointPrice(chat, now = new Date()) {
     } catch {
         // a malformed pending: fall back to what is stored
     }
-    if (isDue(pending, now)) return !pending.to_default;
+    if (isDue(pending, now)) return !landsOnDefault(pending, now);
     return chat?.point_price !== undefined && chat?.point_price !== null;
 }
 
+// A platform decrease as a chat on the default sees it: shaped like its own
+// pending decrease (`platform: true`; it cannot cancel it).
+function platformPendingFor(decrease) {
+    return {
+        price: decrease.price,
+        to_default: true,
+        from: decrease.from,
+        symbol: null,
+        effective_at: decrease.effective_at,
+        requested_at: decrease.requested_at ?? null,
+        by: null,
+        maturation_days: null,
+        from_default: true,
+        platform: true,
+    };
+}
+
 // The decrease members still have time to claim before, or null (none, or
-// already in effect).
+// already in effect): the chat's own, else - for a chat on the platform
+// default - a platform one.
 function upcomingPointPrice(chat, now = new Date()) {
     const pending = pendingPointPrice(chat);
-    return pending !== null && !isDue(pending, now) ? pending : null;
+    if (pending !== null && !isDue(pending, now)) return pending;
+    const onDefault = pending !== null ? landsOnDefault(pending, now) : chat?.point_price === undefined || chat?.point_price === null;
+    const platform = onDefault ? upcomingPlatformDecrease(now) : null;
+    return platform ? platformPendingFor(platform) : null;
 }
 
 function isPriceDecrease(from, to) {
@@ -362,38 +452,93 @@ function toEpochSec(at) {
 }
 
 // The history entry a due decrease becomes (the bot logs the same one when it
-// applies it).
-function pendingHistoryEntry(pending) {
+// applies it). `from_default`: whether the chat was on the default before
+// it - the pending's own record, else what is stored on the chat.
+function pendingHistoryEntry(pending, chat = null) {
     return {
         old: pending.from,
         new: pendingTarget(pending),
         at: pending.effective_at,
         by: pending.by,
         maturation_days: pending.maturation_days,
+        from_default: pending.from_default ?? (chat?.point_price === undefined || chat?.point_price === null),
     };
 }
 
-// The history as members should see it: a decrease that is due but that the
-// bot has not applied yet already pays, so it is listed as a change at its
-// effective_at.
+// Whether the chat was on the platform default at `atMs`, from its own
+// history (in time order): the next entry after `atMs` says what it changed
+// from - its `from_default`, or for an entry written before that existed,
+// whether its `old` price was the default then - and with none after it the
+// chat is still as it is stored now. Every save that switches the chat to or
+// from the default writes an entry (even at the same price), so nothing in
+// between is missed.
+function onDefaultAt(chat, own, atMs, platformAt) {
+    const next = own.find((h) => toEpochMs(h?.at) > atMs);
+    if (!next) return chat?.point_price === undefined || chat?.point_price === null;
+    if (typeof next.from_default === 'boolean') return next.from_default;
+    const old = typeof next.old === 'string' ? canonicalDecimal(next.old) : null;
+    return old !== null && old === platformAt(toEpochMs(next.at) - 1);
+}
+
+// The platform default's changes, as entries of the chat's own history, for
+// the stretches the chat was on the default: they move its price just the
+// same, so they protect its maturing points (lot-pricing.js) and members are
+// shown them. Their maturation_days is null: the chat's current setting.
+function platformEntriesFor(chat, own, now) {
+    const steps = platformSteps(now);
+    if (steps.length === 0) return [];
+    const sorted = own
+        .map((h, index) => ({ h, index }))
+        .sort((a, b) => toEpochMs(a.h?.at) - toEpochMs(b.h?.at) || a.index - b.index)
+        .map(({ h }) => h);
+    const platformAt = (ms) => {
+        let price = steps[0].old;
+        for (const step of steps) if (step.at.getTime() <= ms) price = step.new;
+        return price;
+    };
+    return steps
+        .filter((step) => onDefaultAt(chat, sorted, step.at.getTime(), platformAt))
+        .map((step) => ({ old: step.old, new: step.new, at: step.at, by: null, maturation_days: null, reason: 'platform_default' }));
+}
+
+function toEpochMs(at) {
+    const ms = at instanceof Date ? at.getTime() : Number(at);
+    return Number.isFinite(ms) ? ms : NaN;
+}
+
+// The history as members should see it, in time order: a decrease that is
+// due but that the bot has not applied yet already pays, so it is listed as
+// a change at its effective_at; and the platform default's changes while
+// the chat was on it are listed too.
 function effectivePriceHistory(chat, now = new Date()) {
-    const history = Array.isArray(chat?.point_price_history) ? chat.point_price_history : [];
+    const own = Array.isArray(chat?.point_price_history) ? [...chat.point_price_history] : [];
     let pending = null;
     try {
         pending = pendingPointPrice(chat);
     } catch {
-        return history;
+        pending = null;
     }
-    if (!isDue(pending, now)) return history;
-    const entry = pendingHistoryEntry(pending);
-    return entry.old === entry.new ? history : [...history, entry];
+    if (isDue(pending, now)) own.push(pendingHistoryEntry(pending, chat));
+    const platform = platformEntriesFor(chat, own, now);
+    if (platform.length === 0) return own;
+    return [...own, ...platform]
+        .map((h, index) => ({ h, index }))
+        .sort((a, b) => toEpochMs(a.h?.at) - toEpochMs(b.h?.at) || a.index - b.index)
+        .map(({ h }) => h);
+}
+
+// A change members are told about: a price that moved, or the reward
+// jetton switching (the bot logs that even when the number stays).
+function shownChange(h) {
+    return h?.reason === 'jetton_changed' || String(h?.old) !== String(h?.new);
 }
 
 // The latest price change if it happened within the last week, for the
 // member-facing "rate changed" notice; `changes` counts all changes in that
 // window so several quick edits (down, then back up) are not hidden.
 function recentPointPriceChange(chat, nowSec = Math.floor(Date.now() / 1000)) {
-    const history = effectivePriceHistory(chat, new Date(nowSec * 1000));
+    // through the end of that second: `nowSec` is rounded down
+    const history = effectivePriceHistory(chat, new Date(nowSec * 1000 + 999)).filter(shownChange);
     const since = nowSec - RECENT_CHANGE_DAYS * 86400;
     const recent = history.filter((h) => {
         const at = toEpochSec(h?.at);
@@ -401,20 +546,34 @@ function recentPointPriceChange(chat, nowSec = Math.floor(Date.now() / 1000)) {
     });
     if (recent.length === 0) return null;
     const last = recent.reduce((a, b) => (toEpochSec(b.at) >= toEpochSec(a.at) ? b : a));
-    return { old: String(last.old), new: String(last.new), at: toEpochSec(last.at), changes: recent.length };
+    return {
+        old: String(last.old),
+        new: String(last.new),
+        at: toEpochSec(last.at),
+        changes: recent.length,
+        reason: last.reason ?? null,
+    };
 }
 
 // History entries for API responses, newest first.
 function serializePriceHistory(chat, limit = 10, now = new Date()) {
     return effectivePriceHistory(chat, now)
+        .filter(shownChange)
         .slice(-limit)
         .reverse()
-        .map((h) => ({ old: String(h.old), new: String(h.new), at: toEpochSec(h.at), by: h.by ?? null }));
+        .map((h) => ({
+            old: String(h.old),
+            new: String(h.new),
+            at: toEpochSec(h.at),
+            by: h.by ?? null,
+            // "jetton_changed" (the bot's /jetton), "platform_default", or null
+            reason: h.reason ?? null,
+        }));
 }
 
 // Pending decrease for API responses (epoch seconds, like every other date
-// the API returns), or null. `price` is what it will pay: for a "back to
-// default" decrease, the default as it is now.
+// the API returns), or null. `platform`: the platform default's, which the
+// creator cannot cancel.
 function serializePendingPrice(pending) {
     if (!pending) return null;
     return {
@@ -423,6 +582,7 @@ function serializePendingPrice(pending) {
         from: pending.from,
         symbol: pending.symbol,
         effective_at: toEpochSec(pending.effective_at),
+        platform: pending.platform === true,
     };
 }
 
@@ -487,22 +647,23 @@ function planPointPriceChange(
     let before;
     let beforeValid = !malformed;
     try {
-        before = malformed ? storedPointPrice(chat) : pointPriceFor(chat, now);
+        before = malformed ? storedPointPrice(chat, now) : pointPriceFor(chat, now);
     } catch {
         before = String(stored); // replacing a corrupted value
         beforeValid = false;
     }
-    const target = next ?? platformPointPrice();
+    // "Back to default" aims at where the default is heading: a platform
+    // decrease already scheduled is one more reason for notice, not a drop
+    // members get without it.
+    const target = next ?? platformTargetPrice();
 
     const history = [];
     const announcements = [];
     if (due) {
-        const dueEntry = pendingHistoryEntry(pending);
+        const dueEntry = pendingHistoryEntry(pending, chat);
         if (dueEntry.maturation_days === null) dueEntry.maturation_days = maturationDays;
-        if (dueEntry.old !== dueEntry.new) history.push(dueEntry);
-        // `to` is what was actually applied: the live default for to_default,
-        // which the operator may have raised since, so only a real drop is
-        // announced as one.
+        // logged like the bot logs it when it applies one
+        history.push(dueEntry);
         if (dueEntry.old !== null && isPriceDecrease(dueEntry.old, dueEntry.new)) {
             announcements.push({
                 type: ANNOUNCE.decreased,
@@ -512,7 +673,7 @@ function planPointPriceChange(
         }
     }
     // What point_price holds once a due decrease is written out.
-    const settled = due ? (pending.to_default ? null : pending.price) : stored;
+    const settled = due ? (landsOnDefault(pending, now) ? null : pending.price) : stored;
 
     const $set = {};
     const $unset = {};
@@ -523,13 +684,21 @@ function planPointPriceChange(
     let after;
 
     // A corrupted current price cannot be compared, and nobody can claim at
-    // it anyway: the fix applies at once, as before.
-    if (beforeValid && isPriceDecrease(before, target)) {
+    // it anyway: the fix applies at once, as before. A chat already on the
+    // default that asks for it again has nothing to schedule: a platform
+    // decrease reaches it by itself.
+    if (beforeValid && isPriceDecrease(before, target) && !(next === null && settled === null)) {
         // Same target as the decrease already waiting: keep its date.
-        if (live !== null && (next === null ? live.to_default : !live.to_default && next === live.price)) return null;
+        if (live !== null && (next === null ? live.to_default : !live.to_default) && target === live.price) return null;
         after = before;
         if (settled !== stored) setStored(settled);
         let effectiveAt = decreaseEffectiveAt(now, noticeDays);
+        // back to a default that is still on its way down: not before it is
+        // there, so the chat lands on it (landsOnDefault)
+        const platformDrop = next === null ? upcomingPlatformDecrease(now) : null;
+        if (platformDrop && platformDrop.effective_at.getTime() > effectiveAt.getTime()) {
+            effectiveAt = platformDrop.effective_at;
+        }
         if (claimSettings) {
             effectiveAt = noticeEffectiveAt(claimSettings, now, effectiveAt);
             if (effectiveAt === null) throw httpError(409, CLAIMS_PAUSED_NO_END);
@@ -543,6 +712,7 @@ function planPointPriceChange(
             requested_at: now,
             by,
             maturation_days: maturationDays,
+            from_default: settled === null,
         };
         // With no notice there is nothing to warn about ahead: the bot's own
         // "price decreased" message, when it applies it, is the announcement.
@@ -555,16 +725,22 @@ function planPointPriceChange(
         }
     } else {
         if (pending === null && !malformed && next === stored) return null;
-        after = target;
+        // on the default the chat pays the one in force (a platform decrease
+        // ahead then reaches it with its own notice)
+        after = next ?? platformPointPrice(now);
         if (next !== stored) setStored(next);
         if (pending !== null || malformed) $unset.point_price_pending = '';
-        // the effective price did not move (e.g. custom = platform default):
-        // nothing for members to be warned about
-        if (before !== target) history.push({ old: before, new: target, at: now, by, maturation_days: maturationDays });
-        if (beforeValid && compareDecimal(target, before) > 0) {
+        // Logged when the price moves, and when the chat switches to or from
+        // the default even at the same price: which stretches it spent on the
+        // default decides which platform changes reach its points
+        // (onDefaultAt). Only a move is shown to members.
+        if (before !== after || (settled === null) !== (next === null)) {
+            history.push({ old: before, new: after, at: now, by, maturation_days: maturationDays, from_default: settled === null });
+        }
+        if (beforeValid && compareDecimal(after, before) > 0) {
             announcements.push({
                 type: ANNOUNCE.increased,
-                params: { from: before, to: target, symbol, cancelled_pending: live !== null },
+                params: { from: before, to: after, symbol, cancelled_pending: live !== null },
                 ref: now.getTime(),
             });
         } else if (live !== null) {
@@ -607,7 +783,7 @@ function planPointPriceCancel(chat, { now = new Date(), symbol = null } = {}) {
     if (isDue(pending, now)) throw httpError(409, 'the price decrease already took effect; set a new price instead');
     let before = null;
     try {
-        before = storedPointPrice(chat);
+        before = storedPointPrice(chat, now);
     } catch {
         // corrupted stored price: still cancel, but there is no price to name
     }
@@ -693,6 +869,13 @@ function announcementDoc(chatId, announcement, now = new Date()) {
 }
 
 module.exports = {
+    setPlatformDefault,
+    platformDefault,
+    envPointPrice,
+    platformTargetPrice,
+    upcomingPlatformDecrease,
+    platformSteps,
+    landsOnDefault,
     FALLBACK_DECIMALS,
     MAX_POINT_PRICE,
     RECENT_CHANGE_DAYS,

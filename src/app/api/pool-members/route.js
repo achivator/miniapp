@@ -12,6 +12,7 @@ import {
   serializeSummary,
   summarizeClaims,
 } from "@/lib/pool-members";
+import { loadPlatformDefault } from "@/lib/platform-price";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,8 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const chatId = Number(searchParams.get("chatId"));
     const { chat } = await requireChatCreator(request, chatId);
+    // the platform default its prices build on (lib/platform-price.js)
+    await loadPlatformDefault();
 
     const sort = SORTS[searchParams.get("sort")] ? searchParams.get("sort") : "earned";
     const offset = Math.max(0, Math.min(Number(searchParams.get("offset")) || 0, 100000));

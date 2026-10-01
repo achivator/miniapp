@@ -17,6 +17,7 @@ import {
   recentPointPriceChange,
   upcomingPointPrice,
 } from "@/lib/point-price";
+import { loadPlatformDefault } from "@/lib/platform-price";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,12 @@ export async function GET(request) {
     auth = authenticate(request);
   } catch (e) {
     return Response.json({ error: e.message }, { status: e.status || 401 });
+  }
+  // the platform default every price here builds on (lib/platform-price.js)
+  try {
+    await loadPlatformDefault();
+  } catch (e) {
+    return Response.json({ error: e.message }, { status: e.status || 500 });
   }
   const userId = auth.user.id;
   const cfg = getTonConfig();
@@ -90,8 +97,8 @@ export async function GET(request) {
       price = null;
     }
 
-    // Only while it is still a drop: a "back to default" decrease follows the
-    // live default, which the operator may have raised since.
+    // The chat's own decrease ahead, or - on the platform default - the
+    // platform's (only ever a drop; checked anyway).
     const dropTo = upcoming && price !== null ? pendingTarget(upcoming) : null;
     const priceDrop =
       dropTo !== null && compareDecimal(dropTo, price) < 0
