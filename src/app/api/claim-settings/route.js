@@ -4,6 +4,7 @@ import { getChatMemberStatus } from "@/lib/telegram";
 import { claimGate, claimRulesConflict, claimSettingsOf, normalizeClaimSettings } from "@/lib/claim-rules";
 import { pendingFilter, serializeClaimWindows, upcomingPointPrice } from "@/lib/point-price";
 import { loadPlatformDefault } from "@/lib/platform-price";
+import { queryInt } from "@/lib/query";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +45,7 @@ function view(settings, chat) {
 
 export async function GET(request) {
   try {
-    const chatId = Number(new URL(request.url).searchParams.get("chatId"));
+    const chatId = queryInt(new URL(request.url).searchParams, "chatId");
     const { chat, error } = await creatorChat(request, chatId);
     if (error) return error;
     return Response.json(view(claimSettingsOf(chat), chat));

@@ -15,6 +15,7 @@ import { getChatMemberCount } from "@/lib/telegram";
 import { limitRestore } from "@/lib/payout-coverage";
 import { upcomingPointPrice } from "@/lib/point-price";
 import { loadPlatformDefault } from "@/lib/platform-price";
+import { queryInt } from "@/lib/query";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,7 @@ export async function GET(request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const chatId = Number(searchParams.get("chatId"));
+  const chatId = queryInt(searchParams, "chatId");
   if (!Number.isSafeInteger(chatId)) {
     return Response.json({ error: "chatId is required" }, { status: 400 });
   }

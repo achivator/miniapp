@@ -38,6 +38,7 @@ import {
   upcomingPointPrice,
 } from "@/lib/point-price";
 import { loadPlatformDefault } from "@/lib/platform-price";
+import { queryInt } from "@/lib/query";
 
 const DAY_MS = 86400 * 1000;
 
@@ -223,7 +224,7 @@ function view(chat, jetton, extra = {}) {
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const chatId = Number(searchParams.get("chatId"));
+    const chatId = queryInt(searchParams, "chatId");
     const { chat, error } = await creatorChat(request, chatId);
     if (error) return error;
     // a decrease whose announcement its save could not queue is queued now

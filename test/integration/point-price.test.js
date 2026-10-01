@@ -433,3 +433,11 @@ itest('a creator check that goes stale: Telegram must confirm before any change'
     const anon = await callApi('point-price', { method: 'POST', body: { chatId: CHAT, price: '0.05' } });
     assert.equal(anon.status, 401);
 });
+
+itest('a missing chatId is a 400, not a lookup of chat 0', async () => {
+    await seedChat();
+    const res = await callApi('point-price', { user: CREATOR });
+    assert.equal(res.status, 400);
+    assert.match(res.body.error, /chatId is required/);
+    assert.equal((await callApi('point-price', { user: CREATOR, query: { chatId: ' ' } })).status, 400);
+});

@@ -3,6 +3,7 @@ import { getCollection } from "@/lib/mongo";
 import { getTonConfig } from "@/lib/ton/config";
 import { fetchPoolAddress } from "@/lib/ton/rpc";
 import { isNonceUsedOnChain, nowSeconds } from "@/lib/rewards";
+import { queryInt } from "@/lib/query";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,8 @@ export async function GET(request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const chatId = Number(searchParams.get("chatId"));
-  const nonce = Number(searchParams.get("nonce"));
+  const chatId = queryInt(searchParams, "chatId");
+  const nonce = queryInt(searchParams, "nonce");
   if (!Number.isSafeInteger(chatId) || !Number.isSafeInteger(nonce)) {
     return Response.json({ error: "chatId and nonce are required" }, { status: 400 });
   }

@@ -174,3 +174,18 @@ itest('a creator check that goes stale closes the member views', async () => {
     assert.equal((await callApi('pool-members', { user: CREATOR, query: { chatId: 42 } })).status, 404);
     assert.equal((await callApi('pool-members', { query: { chatId: CHAT } })).status, 401);
 });
+
+itest('a missing chatId or userId is a 400, not a lookup of chat or user 0', async () => {
+    await seedChat();
+    const noChat = await callApi('pool-members', { user: CREATOR });
+    assert.equal(noChat.status, 400);
+    assert.match(noChat.body.error, /chatId is required/);
+    assert.equal((await callApi('pool-members', { user: CREATOR, query: { chatId: '' } })).status, 400);
+    assert.equal((await callApi('pool-member', { user: CREATOR, query: { userId: ALICE } })).status, 400);
+    const noUser = await callApi('pool-member', { user: CREATOR, query: { chatId: CHAT } });
+    assert.equal(noUser.status, 400);
+    assert.match(noUser.body.error, /userId is required/);
+    assert.equal((await member('')).status, 400);
+    // a member called 0 is still looked up as asked
+    assert.equal((await member(0)).status, 404);
+});

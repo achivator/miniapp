@@ -9,6 +9,7 @@ import {
   subscriptionPayload,
   tierFor,
 } from "@/lib/subscription";
+import { queryInt } from "@/lib/query";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,7 @@ async function view(chat, userId, now) {
 
 export async function GET(request) {
   try {
-    const chatId = Number(new URL(request.url).searchParams.get("chatId"));
+    const chatId = queryInt(new URL(request.url).searchParams, "chatId");
     const { auth, chat, error } = await creatorChat(request, chatId);
     if (error) return error;
     const now = new Date();
