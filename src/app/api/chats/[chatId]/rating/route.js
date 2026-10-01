@@ -1,6 +1,7 @@
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { getChatMember } from "@/lib/telegram";
+import { resolveEconomyChatId, telegramChatId } from "@/lib/chat-ids";
 import {
   DEFAULT_LIMIT,
   achieversPipeline,
@@ -28,25 +29,33 @@ export async function GET(request, { params }) {
     return fail(e.status || 401, e.message);
   }
   const userId = auth.user.id;
-  const chatId = Number(params.chatId);
-  if (!Number.isSafeInteger(chatId)) return fail(400, "chatId is required");
+  const requestedChatId = Number((await params).chatId);
+  if (!Number.isSafeInteger(requestedChatId)) return fail(400, "chatId is required");
 
   const [achievementsCol, rewardsCol, chatsCol, usersCol] = await Promise.all(
     ["achievements", "rewards", "chats", "users"].map((name) => getCollection(name)),
   );
+  // A supergroup's own id stands for its economy, which keeps the medals
+  // and points (lib/chat-ids.js); Telegram is asked about the chat where it
+  // knows it now.
+  const chatId = await resolveEconomyChatId(requestedChatId, chatsCol);
+  const chat = await chatsCol.findOne(
+    { id: chatId },
+    { projection: { id: 1, title: 1, telegram_chat_id: 1, migrated_to_chat_id: 1 } },
+  );
+  const tgChatId = telegramChatId(chat) ?? chatId;
 
   // Membership before anything else, so a non-member learns nothing about
   // the chat (not even whether the bot knows it).
   const [reward, achievement, member] = await Promise.all([
     rewardsCol.findOne({ chat_id: chatId, user_id: userId }, { projection: { _id: 1 } }),
     achievementsCol.findOne({ chat_id: chatId, user_id: userId }, { projection: { _id: 1 } }),
-    getChatMember(chatId, userId),
+    getChatMember(tgChatId, userId),
   ]);
   if (!canSeeRating({ status: member?.status ?? null, hasRecord: Boolean(reward || achievement) })) {
     return fail(403, "only members of this chat can see its rating");
   }
 
-  const chat = await chatsCol.findOne({ id: chatId }, { projection: { title: 1 } });
   if (!chat) return fail(404, "chat not found");
 
   const rows = await achievementsCol.aggregate(achieversPipeline(chatId)).toArray();
@@ -77,7 +86,7 @@ export async function GET(request, { params }) {
   const missing = ids.filter((id) => !names.get(id));
   await Promise.all(
     missing.map(async (id) => {
-      const profile = await getChatMember(chatId, id);
+      const profile = await getChatMember(tgChatId, id);
       names.set(id, publicName(profile?.user));
     }),
   );

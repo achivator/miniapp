@@ -140,9 +140,9 @@ export function EmptyState({ icon, title, children }) {
   );
 }
 
-// Deterministic tinted avatar with the chat's initial.
+// Deterministic tinted avatar with the initial of a chat or a member.
 const AVATAR_HUES = [210, 262, 330, 20, 145, 190, 40, 290];
-export function ChatAvatar({ title, id, size = 44 }) {
+export function LetterAvatar({ title, id, size = 44 }) {
   const seed = String(id ?? title ?? "");
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;

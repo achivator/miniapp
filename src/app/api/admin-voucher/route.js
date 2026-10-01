@@ -6,6 +6,7 @@ import { getPoolStatus, runGetMethod, stackItemToAddress } from "@/lib/ton/rpc";
 import { buildAdminVoucherCell, buildSetAdminBody, signVoucher, defaultExpiry } from "@/lib/ton/vouchers";
 import { GAS, SECONDS, VOUCHER_TAG } from "@/lib/ton/constants";
 import { getChatMemberStatus } from "@/lib/telegram";
+import { resolveEconomyChatId, telegramChatId } from "@/lib/chat-ids";
 
 export const dynamic = "force-dynamic";
 
@@ -23,14 +24,14 @@ export async function POST(request) {
   }
 
   const body = await request.json().catch(() => null);
-  const chatId = Number(body?.chatId);
+  const requestedChatId = Number(body?.chatId);
   let wallet;
   try {
     wallet = Address.parse(String(body?.wallet || ""));
   } catch {
     return Response.json({ error: "chatId and a valid wallet are required" }, { status: 400 });
   }
-  if (!Number.isSafeInteger(chatId)) {
+  if (!Number.isSafeInteger(requestedChatId)) {
     return Response.json({ error: "chatId and a valid wallet are required" }, { status: 400 });
   }
 
@@ -39,13 +40,16 @@ export async function POST(request) {
     return Response.json({ error: "backend is not configured" }, { status: 500 });
   }
 
+  // a supergroup's own id stands for its economy, whose id the pool and
+  // every voucher carry (lib/chat-ids.js)
+  const chatId = await resolveEconomyChatId(requestedChatId);
   const chat = await (await getCollection("chats")).findOne({ id: chatId });
   if (!chat || chat.creator !== auth.user.id) {
     return Response.json({ error: "only the chat creator can manage the pool" }, { status: 403 });
   }
   // The stored creator flag can be stale (ownership transfer); the admin slot
   // is long-lived, so confirm with Telegram right now.
-  if ((await getChatMemberStatus(chatId, auth.user.id)) !== "creator") {
+  if ((await getChatMemberStatus(telegramChatId(chat), auth.user.id)) !== "creator") {
     return Response.json({ error: "Telegram does not confirm you as the chat creator" }, { status: 403 });
   }
 

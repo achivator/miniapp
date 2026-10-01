@@ -1,6 +1,7 @@
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { botApi, getChatMemberStatus } from "@/lib/telegram";
+import { resolveEconomyChatId, telegramChatId } from "@/lib/chat-ids";
 import {
   ACTIVE_WINDOW_DAYS,
   SUBSCRIPTION_PERIOD_SECONDS,
@@ -16,7 +17,9 @@ export const dynamic = "force-dynamic";
 async function creatorChat(request, chatId) {
   const auth = authenticate(request);
   if (!Number.isSafeInteger(chatId)) return { error: Response.json({ error: "chatId is required" }, { status: 400 }) };
-  const chat = await (await getCollection("chats")).findOne({ id: chatId });
+  // a supergroup's own id stands for its economy (lib/chat-ids.js)
+  const chats = await getCollection("chats");
+  const chat = await chats.findOne({ id: await resolveEconomyChatId(chatId, chats) });
   if (!chat) return { error: Response.json({ error: "chat not found" }, { status: 404 }) };
   if (chat.creator !== auth.user.id) {
     return { error: Response.json({ error: "only the chat creator can manage the subscription" }, { status: 403 }) };
@@ -96,7 +99,7 @@ export async function POST(request) {
     if (!chat.jetton_master) {
       return Response.json({ error: "set the reward jetton first (/jetton in the chat)" }, { status: 409 });
     }
-    if ((await getChatMemberStatus(chat.id, auth.user.id)) !== "creator") {
+    if ((await getChatMemberStatus(telegramChatId(chat), auth.user.id)) !== "creator") {
       return Response.json({ error: "Telegram does not confirm you as the chat creator" }, { status: 403 });
     }
     const now = new Date();

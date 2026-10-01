@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useInitDataRaw } from "@tma.js/sdk-react";
+import { use, useEffect, useState } from "react";
+import { useInitDataRaw } from "@/components/TelegramSDK";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { achievementName } from "@/lib/achievements";
 import { apiFetch, sendTonTransaction, sleep } from "@/lib/client-api";
 import { formatDecimal, intlLocale } from "@/lib/i18n";
 import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
-import { AchievementArt, Button, Card, ChatAvatar, Notice, Skeleton, bilingual } from "@/components/ui";
+import { AchievementArt, Button, Card, Notice, Skeleton, bilingual } from "@/components/ui";
+import { ChatAvatar } from "@/components/ChatAvatar";
 import { Check, Medal, Sparkles } from "@/components/icons";
 
 function formatTon(nanotons, locale) {
@@ -201,9 +202,10 @@ function AchievementView({ id }) {
 }
 
 export default function AchievementPage({ params }) {
+  const { _id } = use(params);
   return (
     <AppShell>
-      <AchievementView id={params._id} />
+      <AchievementView id={_id} />
     </AppShell>
   );
 }

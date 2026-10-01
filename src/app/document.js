@@ -3,10 +3,11 @@ import { LAUNCH_SCRIPT } from "@/lib/launch";
 import { LOCALE_SCRIPT } from "@/lib/locale";
 
 // What the root layouts share: ru/layout.js and en/layout.js (the landing,
-// guide and 404 in one language, /ru… and /en…, see _locale/layout.js) and
-// (app)/layout.js (the Telegram app screens, the bare "/" and "/help", and
-// the 404 of any other URL). Moving between them is a full page load, so the
-// inline scripts run again on the other side.
+// guide and 404 in one language, /ru… and /en…, see _locale/layout.js),
+// (app)/layout.js (the Telegram app screens, the bare "/" and "/help"), and
+// global-not-found.js, the 404 of any other URL, which renders in none of
+// them. Moving between them is a full page load, so the inline scripts run
+// again on the other side.
 
 export const metadata = {
   metadataBase: new URL("https://achivator.cc"),

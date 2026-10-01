@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useInitDataRaw } from "@tma.js/sdk-react";
+import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useInitDataRaw } from "@/components/TelegramSDK";
 import { apiFetch } from "@/lib/client-api";
 import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useTelegramBack } from "@/components/AppShell";
-import { AchievementArt, Card, ChatAvatar, EmptyState, Notice, Skeleton, cx } from "@/components/ui";
+import { AchievementArt, Card, EmptyState, LetterAvatar, Notice, Skeleton, cx } from "@/components/ui";
+import { ChatAvatar } from "@/components/ChatAvatar";
 import { Medal } from "@/components/icons";
 
 const MEDALS_SHOWN = 6;
@@ -29,7 +31,7 @@ function RatingRow({ entry }) {
       >
         {entry.rank}
       </span>
-      <ChatAvatar title={name} size={36} />
+      <LetterAvatar title={name} size={36} />
       <div className="min-w-0 flex-1">
         <p className="truncate font-semibold">
           {name}
@@ -85,6 +87,7 @@ function Summary({ data }) {
 
 function RatingScreen({ chatId }) {
   const initDataRaw = useInitDataRaw();
+  const router = useRouter();
   useTelegramBack(true);
   const t = useI18n();
   const { L } = t;
@@ -95,11 +98,16 @@ function RatingScreen({ chatId }) {
     if (!initDataRaw) return;
     apiFetch(`/api/chats/${encodeURIComponent(chatId)}/rating`, { initDataRaw })
       .then((res) => {
+        // a supergroup's own id: the rating is its economy's (lib/chat-ids.js)
+        if (res.chat && res.chat.id !== chatId) {
+          router.replace(`/rating/${res.chat.id}`);
+          return;
+        }
         setData(res);
         setError(null);
       })
       .catch((e) => setError(e.message));
-  }, [chatId, initDataRaw]);
+  }, [chatId, initDataRaw, router]);
 
   const title = data?.chat?.title || L(`Чат ${chatId}`, `Chat ${chatId}`);
 
@@ -162,9 +170,10 @@ function RatingScreen({ chatId }) {
 }
 
 export default function RatingPage({ params }) {
+  const { chatId } = use(params);
   return (
     <AppShell>
-      <RatingScreen chatId={Number(params.chatId)} />
+      <RatingScreen chatId={Number(chatId)} />
     </AppShell>
   );
 }

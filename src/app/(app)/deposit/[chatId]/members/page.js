@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useInitDataRaw } from "@tma.js/sdk-react";
+import { useInitDataRaw } from "@/components/TelegramSDK";
 import { apiFetch } from "@/lib/client-api";
 import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useTelegramBack } from "@/components/AppShell";
-import { Button, Card, ChatAvatar, Chip, EmptyState, Notice, Row, Segmented, Skeleton } from "@/components/ui";
+import { Button, Card, Chip, EmptyState, LetterAvatar, Notice, Row, Segmented, Skeleton } from "@/components/ui";
+import { ChatAvatar } from "@/components/ChatAvatar";
 import { ChevronRight, Clock, Coins, Search, Users } from "@/components/icons";
 import { PayoutRow, hasLeft, memberLabel } from "@/components/PoolAdmin";
 
@@ -96,7 +97,7 @@ function MemberRow({ chatId, member, sort }) {
   return (
     <li>
       <Link href={`/deposit/${chatId}/members/${member.user_id}`} className="flex items-center gap-3 px-4 py-3 active:bg-bg">
-        <ChatAvatar title={memberLabel(member, L)} id={member.user_id} size={40} />
+        <LetterAvatar title={memberLabel(member, L)} id={member.user_id} size={40} />
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{memberLabel(member, L)}</p>
           <p className="truncate text-[13px] text-hint tabular">
@@ -342,9 +343,10 @@ function MembersScreen({ chatId }) {
 }
 
 export default function MembersPage({ params }) {
+  const { chatId } = use(params);
   return (
     <AppShell>
-      <MembersScreen chatId={Number(params.chatId)} />
+      <MembersScreen chatId={Number(chatId)} />
     </AppShell>
   );
 }

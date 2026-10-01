@@ -18,6 +18,7 @@ import {
   upcomingPointPrice,
 } from "@/lib/point-price";
 import { loadPlatformDefault } from "@/lib/platform-price";
+import { missingTitles } from "@/lib/chat-photo";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,14 @@ export async function GET(request) {
     ? await chatsCol.find({ id: { $in: rewardChatIds } }).toArray()
     : [];
   const chatById = new Map(rewardChats.map((c) => [c.id, c]));
+  // a supergroup's own document is only an alias of its economy (lib/
+  // chat-ids.js), whose chat is listed under its own id
+  const creatorChats = await chatsCol.find({ creator: userId, economy_chat_id: null }).toArray();
+  // A chat the bot stored no title for is shown with Telegram's (a cached
+  // getChat that also stores it on the chat's document), asked while the
+  // rewards are valued.
+  const titlesLoaded = missingTitles([...rewardChats, ...creatorChats], chatsCol);
+
   // a decrease members are shown here is also announced in the chat, even
   // when the save that scheduled it could not queue the announcement
   await reconcileAnnouncementsQuietly(rewardChats);
@@ -173,7 +182,8 @@ export async function GET(request) {
     });
   }
 
-  const creatorChats = await chatsCol.find({ creator: userId }).toArray();
+  const titles = await titlesLoaded;
+  for (const reward of rewards) reward.title ??= titles.get(reward.chat_id) ?? null;
 
   return Response.json({
     ok: true,
@@ -187,7 +197,7 @@ export async function GET(request) {
     rewards,
     creator: creatorChats.map((c) => ({
       chat_id: c.id,
-      title: c.title || null,
+      title: c.title || titles.get(c.id) || null,
       jetton_master: c.jetton_master || null,
     })),
   });

@@ -1,6 +1,7 @@
 import { Address } from "@ton/core";
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
+import { resolveEconomyChatId } from "@/lib/chat-ids";
 import { getTonConfig } from "@/lib/ton/config";
 import { fetchJettonMetadata, fetchPoolClaimControls, getPoolStatus } from "@/lib/ton/rpc";
 import { claimSettingsOf } from "@/lib/claim-rules";
@@ -74,13 +75,16 @@ export async function POST(request) {
   }
 
   const body = await request.json().catch(() => null);
-  const chatId = Number(body?.chatId);
+  const requestedChatId = Number(body?.chatId);
   const action = String(body?.action || "");
-  if (!Number.isSafeInteger(chatId) || !["withdraw", "pause", "resume", "limit"].includes(action)) {
+  if (!Number.isSafeInteger(requestedChatId) || !["withdraw", "pause", "resume", "limit"].includes(action)) {
     return Response.json({ error: "chatId and a valid action are required" }, { status: 400 });
   }
 
   const cfg = getTonConfig();
+  // a supergroup's own id stands for its economy, whose id the pool and
+  // every voucher carry (lib/chat-ids.js)
+  const chatId = await resolveEconomyChatId(requestedChatId);
   const chat = await (await getCollection("chats")).findOne({ id: chatId });
   if (!chat) return Response.json({ error: "chat not found" }, { status: 404 });
   if (chat.creator !== auth.user.id) {

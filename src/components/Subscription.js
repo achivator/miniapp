@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useInvoice } from "@tma.js/sdk-react";
+import { useInvoice } from "@/components/TelegramSDK";
 import { apiFetch, sleep } from "@/lib/client-api";
 import { useI18n } from "@/lib/use-locale";
 import { Button, Card, Chip, Notice, Row, SectionHeader, bilingual } from "./ui";

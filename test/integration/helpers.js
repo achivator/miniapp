@@ -165,18 +165,46 @@ stubExports(
 );
 
 // What Telegram says about chat members: setStatus(chatId, userId, status).
-// Unknown members read as null (the bot cannot see them).
+// Unknown members read as null (the bot cannot see them). setChat(chatId,
+// { title, photo }) is what getChat returns (unknown chats: null, the bot
+// has no access); a photo is { file_id, unique_id, bytes, file_path? },
+// served by getFile and the file download. The getChat cache
+// (getChatCached) and the image cache are the real ones, emptied for every
+// test.
 const telegram = {
     statuses: new Map(),
+    chats: new Map(),
+    files: new Map(), // file_id -> { file_path, file_size }
+    downloads: new Map(), // file_path -> { bytes, contentType }
     hooks: {},
     calls: [],
     reset() {
         this.statuses.clear();
+        this.chats.clear();
+        this.files.clear();
+        this.downloads.clear();
         this.hooks = {};
         this.calls.length = 0;
+        require(path.join(SRC, 'lib/telegram.js')).clearChatCache();
+        require(path.join(SRC, 'lib/chat-photo.js')).clearPhotoCache();
     },
     setStatus(chatId, userId, status) {
         this.statuses.set(`${chatId}:${userId}`, status);
+    },
+    setChat(chatId, { title = null, photo = null } = {}) {
+        const chat = { id: chatId, type: 'supergroup', title };
+        if (photo) {
+            const filePath = photo.file_path || `profile_photos/${photo.file_id}.jpg`;
+            chat.photo = {
+                small_file_id: photo.file_id,
+                small_file_unique_id: photo.unique_id,
+                big_file_id: `${photo.file_id}-big`,
+                big_file_unique_id: `${photo.unique_id}-big`,
+            };
+            this.files.set(photo.file_id, { file_id: photo.file_id, file_path: filePath, file_size: photo.bytes.length });
+            this.downloads.set(filePath, { bytes: Buffer.from(photo.bytes), contentType: photo.contentType ?? 'image/jpeg' });
+        }
+        this.chats.set(chatId, chat);
     },
 };
 const telegramImpl = {
@@ -191,13 +219,20 @@ const telegramImpl = {
     async getChatMemberCount() {
         return null;
     },
-    async getChat() {
-        return null;
+    async getChat(chatId) {
+        return telegram.chats.get(chatId) ?? null;
+    },
+    async getFile(fileId) {
+        return telegram.files.get(fileId) ?? null;
+    },
+    async downloadFile(filePath, { maxBytes = Infinity } = {}) {
+        const file = telegram.downloads.get(filePath);
+        return file && file.bytes.length <= maxBytes ? file : null;
     },
 };
 stubExports(
     path.join(SRC, 'lib/telegram.js'),
-    ['botApi', 'getChatMemberCount', 'getChat', 'getChatMemberStatus', 'getChatMember'],
+    ['botApi', 'getChatMemberCount', 'getChat', 'getFile', 'downloadFile', 'getChatMemberStatus', 'getChatMember'],
     telegramImpl,
     new Proxy({}, { get: (_, name) => telegram.hooks[name] }),
 );

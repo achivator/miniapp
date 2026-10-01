@@ -1,5 +1,6 @@
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
+import { resolveEconomyChatId } from "@/lib/chat-ids";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +11,11 @@ export async function POST(request) {
   try {
     const auth = authenticate(request);
     const body = await request.json().catch(() => null);
-    const chatId = Number(body?.chatId);
-    if (!Number.isSafeInteger(chatId)) return Response.json({ error: "chatId is required" }, { status: 400 });
+    const requestedChatId = Number(body?.chatId);
+    if (!Number.isSafeInteger(requestedChatId)) return Response.json({ error: "chatId is required" }, { status: 400 });
     const chats = await getCollection("chats");
+    // a supergroup's own id stands for its economy (lib/chat-ids.js)
+    const chatId = await resolveEconomyChatId(requestedChatId, chats);
     const chat = await chats.findOne({ id: chatId });
     if (!chat) return Response.json({ error: "chat not found" }, { status: 404 });
     if (chat.creator !== auth.user.id) {
