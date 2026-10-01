@@ -6,7 +6,7 @@ import { achievementName } from "@/lib/achievements";
 import { apiFetch } from "@/lib/client-api";
 import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useTelegramBack } from "@/components/AppShell";
-import { AchievementArt, Card, ChatAvatar, Chip, Notice, Row, SectionHeader, Skeleton } from "@/components/ui";
+import { AchievementArt, Card, Chip, LetterAvatar, Notice, Row, SectionHeader, Skeleton } from "@/components/ui";
 import { Refresh, Sparkles } from "@/components/icons";
 import { PayoutRow, hasLeft, memberLabel, stateHint, stateLabel } from "@/components/PoolAdmin";
 
@@ -254,7 +254,7 @@ function MemberScreen({ chatId, userId }) {
     <Screen>
       <TopBar />
       <div className="flex items-center gap-3">
-        <ChatAvatar title={memberLabel(member, L)} id={member.user_id} size={56} />
+        <LetterAvatar title={memberLabel(member, L)} id={member.user_id} size={56} />
         <div className="min-w-0">
           <h1 className="brand-heading truncate text-[24px] leading-tight">{memberLabel(member, L)}</h1>
           <p className="truncate text-[13px] text-hint">

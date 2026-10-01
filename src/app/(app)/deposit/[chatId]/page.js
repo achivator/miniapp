@@ -10,7 +10,8 @@ import { apiFetch, sendTonTransaction, shortenAddress, sleep } from "@/lib/clien
 import { formatExact } from "@/lib/format";
 import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
-import { Button, Card, ChatAvatar, Chip, Notice, Row, SectionHeader, Skeleton, bilingual } from "@/components/ui";
+import { Button, Card, Chip, Notice, Row, SectionHeader, Skeleton, bilingual } from "@/components/ui";
+import { ChatAvatar } from "@/components/ChatAvatar";
 import { ArrowDown, ArrowUp, Check, ChevronRight, Refresh, Shield, Users } from "@/components/icons";
 import { ClaimRules } from "@/components/ClaimRules";
 import { PointPrice } from "@/components/PointPrice";

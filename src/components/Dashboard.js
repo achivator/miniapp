@@ -11,7 +11,6 @@ import {
   AchievementArt,
   Button,
   Card,
-  ChatAvatar,
   Chip,
   EmptyState,
   Notice,
@@ -19,6 +18,7 @@ import {
   SectionHeader,
   Skeleton,
 } from "@/components/ui";
+import { ChatAvatar } from "@/components/ChatAvatar";
 import { achievementName } from "@/lib/achievements";
 import { intlLocale } from "@/lib/i18n";
 import { useI18n } from "@/lib/use-locale";

@@ -6,7 +6,8 @@ import { useInitDataRaw } from "@/components/TelegramSDK";
 import { apiFetch } from "@/lib/client-api";
 import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useTelegramBack } from "@/components/AppShell";
-import { AchievementArt, Card, ChatAvatar, EmptyState, Notice, Skeleton, cx } from "@/components/ui";
+import { AchievementArt, Card, EmptyState, LetterAvatar, Notice, Skeleton, cx } from "@/components/ui";
+import { ChatAvatar } from "@/components/ChatAvatar";
 import { Medal } from "@/components/icons";
 
 const MEDALS_SHOWN = 6;
@@ -30,7 +31,7 @@ function RatingRow({ entry }) {
       >
         {entry.rank}
       </span>
-      <ChatAvatar title={name} size={36} />
+      <LetterAvatar title={name} size={36} />
       <div className="min-w-0 flex-1">
         <p className="truncate font-semibold">
           {name}
