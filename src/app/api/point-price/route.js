@@ -172,6 +172,17 @@ function serializePlatformDecrease(decrease) {
   return { price: decrease.price, from: decrease.from, effective_at: Math.floor(decrease.effective_at.getTime() / 1000) };
 }
 
+function serializeConfirm(flag) {
+  if (!flag) return null;
+  return {
+    reason: flag.reason ?? null,
+    at: flag.at ? Math.floor(new Date(flag.at).getTime() / 1000) : null,
+    old_jetton: flag.old_jetton ?? null,
+    new_jetton: flag.new_jetton ?? null,
+    old_price: flag.old_price ?? null,
+  };
+}
+
 function view(chat, jetton, extra = {}) {
   const now = new Date();
   let price = null;
@@ -217,6 +228,9 @@ function view(chat, jetton, extra = {}) {
     decimals: jetton?.decimals ?? FALLBACK_DECIMALS,
     decimals_known: Number.isInteger(jetton?.decimals),
     history: serializePriceHistory(chat, 10, now),
+    // the bot's /jetton switched the reward jetton and reset the price: the
+    // card asks for a price in the new jetton, or to keep the default
+    confirm_required: serializeConfirm(chat.point_price_confirm_required),
     ...extra,
   };
 }
@@ -239,7 +253,9 @@ export async function GET(request) {
 
 // Body: { chatId, price } where price is a decimal string of jettons per
 // point, or null to go back to the platform default; or { chatId,
-// cancelPending: true } to cancel a scheduled decrease. Off-chain and free,
+// cancelPending: true } to cancel a scheduled decrease; or { chatId,
+// confirmDefault: true } to keep the platform default after a jetton switch
+// (point_price_confirm_required, which any saved price clears too). Off-chain and free,
 // like the claim rules. A higher (or equal) price applies to the next claim;
 // a lower one waits the notice period (see planPointPriceChange) and the bot
 // announces it in the chat.
@@ -258,6 +274,17 @@ export async function POST(request) {
     const jetton = await jettonOf(chat);
     const now = new Date();
     const symbol = jetton?.symbol ?? null;
+    const chats = await getCollection("chats");
+    // After a jetton switch: keep the platform default (the price the switch
+    // left) and stop asking.
+    if (body?.confirmDefault === true) {
+      const res = await chats.findOneAndUpdate(
+        { id: chat.id },
+        { $unset: { point_price_confirm_required: "" } },
+        { returnDocument: "after" },
+      );
+      return Response.json(view(res ?? chat, jetton, await coverageOf(res ?? chat, jetton, new Date(), false)));
+    }
     let plan;
     if (body?.cancelPending === true) {
       // 409 when there is nothing to cancel or it already took effect
@@ -281,7 +308,21 @@ export async function POST(request) {
         claimSettings: claimSettingsOf(chat),
       });
     }
-    if (!plan) return Response.json(view(chat, jetton, await coverageOf(chat, jetton, new Date(), body?.coverage === true)));
+    // Any price saved answers the jetton switch's question; a cancellation
+    // sets no price, so it does not.
+    const answers = body?.cancelPending !== true && Boolean(chat.point_price_confirm_required);
+    if (!plan) {
+      // the price asked for is already in force (e.g. the default again)
+      const res = answers
+        ? await chats.findOneAndUpdate(
+            { id: chat.id },
+            { $unset: { point_price_confirm_required: "" } },
+            { returnDocument: "after" },
+          )
+        : null;
+      return Response.json(view(res ?? chat, jetton, await coverageOf(res ?? chat, jetton, new Date(), body?.coverage === true)));
+    }
+    if (answers) plan.update.$unset = { ...plan.update.$unset, point_price_confirm_required: "" };
 
     // Conditional on the price and the pending decrease we read, so two
     // concurrent saves cannot both log a change from the same "old" price
@@ -293,7 +334,7 @@ export async function POST(request) {
     const filter = schedules
       ? { ...plan.filter, claim_settings_updated_at: chat.claim_settings_updated_at ?? null }
       : plan.filter;
-    const res = await (await getCollection("chats")).findOneAndUpdate(filter, plan.update, {
+    const res = await chats.findOneAndUpdate(filter, plan.update, {
       returnDocument: "after",
     });
     if (!res) {

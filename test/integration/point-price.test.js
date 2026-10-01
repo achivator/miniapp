@@ -441,3 +441,63 @@ itest('a missing chatId is a 400, not a lookup of chat 0', async () => {
     assert.match(res.body.error, /chatId is required/);
     assert.equal((await callApi('point-price', { user: CREATOR, query: { chatId: ' ' } })).status, 400);
 });
+
+itest('after a jetton switch the card asks for a price; keeping the default or saving one answers it', async () => {
+    const switchedAt = ago(1);
+    const flag = {
+        reason: 'jetton_changed',
+        at: switchedAt,
+        by: CREATOR,
+        old_jetton: address('old-jetton'),
+        new_jetton: JETTON,
+        old_price: '0.02',
+    };
+    // the bot's /jetton reset: the custom price dropped, the switch logged
+    await seedChat({
+        point_price: undefined,
+        point_price_confirm_required: flag,
+        point_price_history: [
+            { old: '0.02', new: '0.01', at: switchedAt, by: CREATOR, maturation_days: 0, reason: 'jetton_changed', from_default: false },
+        ],
+    });
+    const chats = await getCollection('chats');
+    await chats.updateOne({ id: CHAT }, { $unset: { point_price: '' } });
+
+    let view = await readPrice();
+    assert.equal(view.status, 200, JSON.stringify(view.body));
+    assert.deepEqual(view.body.confirm_required, {
+        reason: 'jetton_changed',
+        at: Math.floor(switchedAt.getTime() / 1000),
+        old_jetton: address('old-jetton'),
+        new_jetton: JETTON,
+        old_price: '0.02',
+    });
+    // shown as a jetton switch, not as a rate change
+    assert.equal(view.body.history[0].reason, 'jetton_changed');
+
+    // keep the default
+    const kept = await savePrice({ confirmDefault: true });
+    assert.equal(kept.status, 200, JSON.stringify(kept.body));
+    assert.equal(kept.body.confirm_required, null);
+    assert.equal((await chatDoc()).point_price_confirm_required, undefined);
+    assert.equal((await chatDoc()).point_price, undefined);
+
+    // saving a price answers it too, in the same write
+    await chats.updateOne({ id: CHAT }, { $set: { point_price_confirm_required: flag } });
+    const saved = await savePrice({ price: '0.03' });
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.equal(saved.body.confirm_required, null);
+    assert.equal((await chatDoc()).point_price, '0.03');
+    assert.equal((await chatDoc()).point_price_confirm_required, undefined);
+
+    // ...and so does asking for the price already in force
+    await chats.updateOne({ id: CHAT }, { $set: { point_price_confirm_required: flag } });
+    assert.equal((await savePrice({ price: '0.03' })).body.confirm_required, null);
+
+    // a cancellation sets no price: the question stays
+    assert.equal((await savePrice({ price: '0.02' })).status, 200);
+    await chats.updateOne({ id: CHAT }, { $set: { point_price_confirm_required: flag } });
+    const cancelled = await savePrice({ cancelPending: true });
+    assert.equal(cancelled.status, 200, JSON.stringify(cancelled.body));
+    assert.ok(cancelled.body.confirm_required);
+});

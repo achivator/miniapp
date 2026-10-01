@@ -248,20 +248,28 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
       )}
 
       {/* The creator can re-price points already earned: say so for a week. */}
+      {/* A jetton switch is no rate change: the old price was in another
+          jetton, so "old → new" would compare different coins. */}
       {reward.jetton_master && priceChange && (
         <Notice
           notice={{
             kind: "info",
-            text: L(
-              `Курс изменён ${shortDate(priceChange.at, t.locale)}: 1 балл = ${t.decimal(priceChange.old)} → ${t.decimal(priceChange.new)} ${symbol}${
-                priceChange.changes > 1
-                  ? ` (${t.count(priceChange.changes, ["изменение", "изменения", "изменений"], [])} за 7 дней)`
-                  : ""
-              }`,
-              `Rate changed on ${shortDate(priceChange.at, t.locale)}: 1 pt = ${t.decimal(priceChange.old)} → ${t.decimal(priceChange.new)} ${symbol}${
-                priceChange.changes > 1 ? ` (${priceChange.changes} changes in 7 days)` : ""
-              }`,
-            ),
+            text:
+              priceChange.reason === "jetton_changed"
+                ? L(
+                    `Жетон наград сменился ${shortDate(priceChange.at, t.locale)}: незабранные баллы теперь выплачиваются в ${symbol}, 1 балл = ${t.decimal(priceChange.new)} ${symbol}.`,
+                    `Reward jetton changed on ${shortDate(priceChange.at, t.locale)}: unclaimed points are now paid in ${symbol}, 1 pt = ${t.decimal(priceChange.new)} ${symbol}.`,
+                  )
+                : L(
+                    `${priceChange.reason === "platform_default" ? "Курс платформы по умолчанию изменён" : "Курс изменён"} ${shortDate(priceChange.at, t.locale)}: 1 балл = ${t.decimal(priceChange.old)} → ${t.decimal(priceChange.new)} ${symbol}${
+                      priceChange.changes > 1
+                        ? ` (${t.count(priceChange.changes, ["изменение", "изменения", "изменений"], [])} за 7 дней)`
+                        : ""
+                    }`,
+                    `${priceChange.reason === "platform_default" ? "Platform default rate changed" : "Rate changed"} on ${shortDate(priceChange.at, t.locale)}: 1 pt = ${t.decimal(priceChange.old)} → ${t.decimal(priceChange.new)} ${symbol}${
+                      priceChange.changes > 1 ? ` (${priceChange.changes} changes in 7 days)` : ""
+                    }`,
+                  ),
           }}
         />
       )}

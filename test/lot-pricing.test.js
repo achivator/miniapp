@@ -55,7 +55,7 @@ function value(chat, lots, { claimed = 0, count, maturationDays = 3, now = at(30
 test('no history: every lot is paid at the current price (same as before lots)', () => {
     const chat = { id: 1, point_price: '2' };
     const timeline = priceTimeline(chat, at(0));
-    assert.deepEqual(timeline, { current: '2', initial: null, steps: [] });
+    assert.deepEqual(timeline, { current: '2', initial: null, steps: [], jettonChangedAt: null });
     assert.deepEqual(priceDecreases(timeline), []);
     const lots = [
         { points: 5, at: at(-10) },
@@ -564,4 +564,33 @@ test('more than 50 price changes: the oldest decrease still protects its lots', 
     assert.equal(lotPrice(ms(-5), t, 3), '6');
     const v = value(chat, [{ points: 3, at: at(-1) }], { now: at(30) });
     assert.equal(v.units, 30n * U);
+});
+
+test('decreases before the latest jetton switch protect no lot: they priced the old jetton', () => {
+    // 10 -> 5 at day 0, then the bot's /jetton reset to the default (0.01) at
+    // day 1, logged with maturation 0
+    const switched = { old: '5', new: '0.01', at: at(1), by: 1, maturation_days: 0, reason: 'jetton_changed' };
+    const chat = chatWith([drop('10', '5', at(0)), switched], null);
+    const t = priceTimeline(chat, at(30));
+    assert.equal(t.jettonChangedAt, ms(1));
+    // the old drop is gone; the switch itself (maturation 0) protects nothing
+    assert.deepEqual(priceDecreases(t), [{ at: ms(1), before: '5', after: '0.01', maturationDays: 0 }]);
+    // a lot maturing across the old drop is paid the new jetton's price
+    assert.equal(lotPrice(ms(-1), t, 3), '0.01');
+    assert.equal(lotPrice(ms(0.5), t, 3), '0.01');
+    assert.deepEqual(affectedWindow(t, 3), { from: ms(1), to: ms(1) });
+    // without the switch the same lot would keep the old price
+    assert.equal(lotPrice(ms(-1), priceTimeline(chatWith([drop('10', '5', at(0))], '5'), at(30)), 3), '10');
+    // a decrease after the switch, in the new jetton, protects as usual
+    const later = chatWith([drop('10', '5', at(0)), switched, drop('0.01', '0.005', at(5))], '0.005');
+    const lt = priceTimeline(later, at(30));
+    assert.deepEqual(priceDecreases(lt).map((d) => d.at), [ms(1), ms(5)]);
+    assert.equal(lotPrice(ms(4), lt, 3), '0.01');
+    assert.equal(lotPrice(ms(-1), lt, 3), '0.005');
+    // a switch that kept the same number (the chat was on the default) still
+    // ends the old jetton's protection
+    const same = { old: '5', new: '5', at: at(1), by: 1, maturation_days: 0, reason: 'jetton_changed' };
+    const sameTimeline = priceTimeline(chatWith([drop('10', '5', at(0)), same], '5'), at(30));
+    assert.deepEqual(priceDecreases(sameTimeline), []);
+    assert.equal(lotPrice(ms(-1), sameTimeline, 3), '5');
 });

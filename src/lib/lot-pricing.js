@@ -26,6 +26,12 @@ const { canonicalDecimal, compareDecimal, effectivePriceHistory, pointPriceFor, 
 // exactly at `d` was claimable at `d` (the same `date <= now - maturation`
 // rule claim-rules uses).
 //
+// A switch of the reward jetton (the bot's /jetton, a history entry with
+// reason "jetton_changed") ends all that: decreases before it priced points
+// in the old jetton, and an old-jetton price must never be paid in the new
+// one, so only decreases at or after the latest switch protect lots. The
+// switch's own entry snapshots maturation 0, so it protects nothing either.
+//
 // Rounding: points are grouped by the price they are paid at and each group
 // is converted with pointsToJettons (floor). A price that fits the jetton's
 // decimals converts exactly, so rounding only bites for an old price finer
@@ -62,6 +68,7 @@ function maxPrice(a, b) {
 //   steps     [{ at (ms), price, maturationDays }] in time order: `price`
 //             applies from `at`; maturationDays is the entry's snapshot, or
 //             null (use the chat's current setting)
+//   jettonChangedAt  the latest reward jetton switch (ms), or null
 function priceTimeline(chat, now = new Date()) {
     const current = pointPriceFor(chat, now);
     const nowMs = now.getTime();
@@ -72,13 +79,23 @@ function priceTimeline(chat, now = new Date()) {
         // an unreadable entry (hand-edited) is skipped: without it a drop is
         // not seen and its lots are paid at the current price - never more
         if (!Number.isFinite(at) || at > nowMs || price === null) return;
-        entries.push({ at, price, old: canonicalPrice(h?.old), maturationDays: snapshotMaturationDays(h?.maturation_days), index });
+        entries.push({
+            at,
+            price,
+            old: canonicalPrice(h?.old),
+            maturationDays: snapshotMaturationDays(h?.maturation_days),
+            index,
+            jettonChanged: h?.reason === 'jetton_changed',
+        });
     });
     entries.sort((a, b) => a.at - b.at || a.index - b.index);
+    const switches = entries.filter((e) => e.jettonChanged);
     return {
         current,
         initial: entries.length ? entries[0].old : null,
         steps: entries.map((e) => ({ at: e.at, price: e.price, maturationDays: e.maturationDays })),
+        // the latest reward jetton switch (ms), or null
+        jettonChangedAt: switches.length ? switches[switches.length - 1].at : null,
     };
 }
 
@@ -106,12 +123,14 @@ function priceBefore(timeline, atMs) {
 
 // Moments the price went down: [{ at, before, after, maturationDays }],
 // oldest first. Several changes at the same instant count as one move (the
-// last one wins, maturation snapshot included).
+// last one wins, maturation snapshot included). Decreases before the latest
+// jetton switch are left out (see the top of this file).
 function priceDecreases(timeline) {
     const out = [];
     const seen = new Set();
+    const since = timeline.jettonChangedAt ?? -Infinity;
     for (const step of timeline.steps) {
-        if (seen.has(step.at)) continue;
+        if (seen.has(step.at) || step.at < since) continue;
         seen.add(step.at);
         const before = priceBefore(timeline, step.at);
         const after = priceAt(timeline, step.at);

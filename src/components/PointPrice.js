@@ -503,6 +503,12 @@ export function PointPrice({ chatId, initDataRaw }) {
     return post({ price: next }, action, (res) => ({ L }) => savedText(L, res, lowered, next));
   }
 
+  function confirmDefault() {
+    return post({ confirmDefault: true }, "confirm", () =>
+      bilingual("Остаётся цена платформы по умолчанию.", "The platform default stays."),
+    );
+  }
+
   function cancelPending() {
     return post({ cancelPending: true }, "cancel", (res) =>
       res.announced === false
@@ -575,6 +581,21 @@ export function PointPrice({ chatId, initDataRaw }) {
               )}
           </p>
         </div>
+
+        {data.confirm_required && (
+          <div className="space-y-2 rounded-xl bg-bg p-3">
+            <p className="text-[13px] font-semibold">{L("Жетон наград сменился", "The reward jetton changed")}</p>
+            <p className="text-[13px] leading-snug text-hint tabular">
+              {L(
+                `Прежняя цена${data.confirm_required.old_price ? ` (${data.confirm_required.old_price} за балл)` : ""} была в старом жетоне, поэтому теперь действует цена платформы по умолчанию. Задайте цену в новом жетоне или оставьте цену по умолчанию.`,
+                `The old price${data.confirm_required.old_price ? ` (${data.confirm_required.old_price} per point)` : ""} was in the old jetton, so the platform default applies now. Set a price in the new jetton, or keep the platform default.`,
+              )}
+            </p>
+            <Button variant="ghost" size="sm" busy={busy === "confirm"} disabled={Boolean(busy)} onClick={confirmDefault}>
+              {L("Оставить по умолчанию", "Keep the default")}
+            </Button>
+          </div>
+        )}
 
         {pending && (
           <div className="space-y-2 rounded-xl bg-bg p-3">
@@ -706,9 +727,15 @@ export function PointPrice({ chatId, initDataRaw }) {
               {data.history.slice(0, 3).map((h, i) => (
                 <li key={i} className="flex justify-between gap-3">
                   <span className="text-hint">{formatDate(h.at)}</span>
-                  <span>
-                    {h.old} → {h.new} {symbol}
-                  </span>
+                  {/* the old price was in the old jetton: no "old → new" */}
+                  {h.reason === "jetton_changed" ? (
+                    <span>{L("Жетон наград сменился", "Reward jetton changed")}</span>
+                  ) : (
+                    <span>
+                      {h.old} → {h.new} {symbol}
+                      {h.reason === "platform_default" ? L(" · платформа", " · platform default") : ""}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
