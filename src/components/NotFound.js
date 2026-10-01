@@ -7,9 +7,10 @@ import { HomeLink } from "./HomeLink";
 
 // The site's 404, served with status 404 for unknown URLs: localized under
 // /ru… and /en…, bilingual anywhere else, where the visitor's language is not
-// in the URL. src/middleware.js marks unknown URLs and sets the status; the
-// catch-all pages ([...missing]) render MissingPage in their root layout.
-// The not-found.js files beside them show the same for a notFound() call.
+// in the URL (app/global-not-found.js). Under /ru… and /en…, src/middleware.js
+// marks unknown URLs and sets the status, and the catch-all pages
+// ([...missing]) render MissingPage in their locale's layout. The not-found.js
+// files beside them show the same for a notFound() call.
 
 const APP_URL = "https://t.me/achivator_bot/app";
 
@@ -37,12 +38,11 @@ export function notFoundMetadata(locale) {
   };
 }
 
-// A catch-all page: the 404 of `locale` (null: bilingual) when the middleware
-// marked the request; otherwise (a path it let through as a file, e.g. a
-// missing /brand/*.png) notFound(), which also answers 404.
+// A locale's catch-all page: its 404 when the middleware marked the request;
+// otherwise notFound(), which also answers 404.
 export async function MissingPage({ locale }) {
   if (!(await headers()).get(MISSING_HEADER)) notFound();
-  return locale ? <LocaleNotFound locale={locale} /> : <BilingualNotFound />;
+  return <LocaleNotFound locale={locale} />;
 }
 
 function Frame({ children }) {

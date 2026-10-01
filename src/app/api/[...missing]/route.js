@@ -1,8 +1,8 @@
 export const dynamic = "force-dynamic";
 
 // Any /api/… path no API route matches: a JSON 404 in the shape of the other
-// routes' errors, rather than the site's HTML 404 (the middleware leaves
-// /api/ alone; without this route the app's page catch-all would answer).
+// routes' errors, rather than the site's HTML 404 (app/global-not-found.js,
+// which would answer without this route).
 function missing() {
   return Response.json({ error: "not found" }, { status: 404 });
 }

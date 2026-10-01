@@ -14,7 +14,10 @@ const STORAGE_KEY = "achivator-lang";
 const TELEGRAM_KEY = "achivator-tg-lang";
 
 // Web pages that exist in every locale, as the suffix after /ru or /en. The
-// bare path (without a locale) redirects to the visitor's language.
+// bare path (without a locale) redirects to the visitor's language. Any other
+// path under /ru/ or /en/ gets the localized 404 (src/middleware.js), so a
+// page missing here would answer 404: test/not-found.test.js checks this
+// list against app/ru and app/en.
 export const PAGES = ["", "/help"];
 
 // Section anchors carried the locale while one page held both languages
