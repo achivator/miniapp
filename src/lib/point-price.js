@@ -507,6 +507,7 @@ function planPointPriceChange(
             announcements.push({
                 type: ANNOUNCE.decreased,
                 params: { from: dueEntry.old, to: dueEntry.new, symbol: symbol ?? pending.symbol },
+                ref: pendingRef(pending),
             });
         }
     }
@@ -546,7 +547,11 @@ function planPointPriceChange(
         // With no notice there is nothing to warn about ahead: the bot's own
         // "price decreased" message, when it applies it, is the announcement.
         if (effectiveAt.getTime() > now.getTime()) {
-            announcements.push({ type: ANNOUNCE.scheduled, params: { from: before, to: target, symbol, effective_at: effectiveAt } });
+            announcements.push({
+                type: ANNOUNCE.scheduled,
+                params: { from: before, to: target, symbol, effective_at: effectiveAt },
+                ref: now.getTime(),
+            });
         }
     } else {
         if (pending === null && !malformed && next === stored) return null;
@@ -557,9 +562,17 @@ function planPointPriceChange(
         // nothing for members to be warned about
         if (before !== target) history.push({ old: before, new: target, at: now, by, maturation_days: maturationDays });
         if (beforeValid && compareDecimal(target, before) > 0) {
-            announcements.push({ type: ANNOUNCE.increased, params: { from: before, to: target, symbol, cancelled_pending: live !== null } });
+            announcements.push({
+                type: ANNOUNCE.increased,
+                params: { from: before, to: target, symbol, cancelled_pending: live !== null },
+                ref: now.getTime(),
+            });
         } else if (live !== null) {
-            announcements.push({ type: ANNOUNCE.cancelled, params: { from: before, to: pendingTarget(live), symbol: symbol ?? live.symbol } });
+            announcements.push({
+                type: ANNOUNCE.cancelled,
+                params: { from: before, to: pendingTarget(live), symbol: symbol ?? live.symbol },
+                ref: pendingRef(live),
+            });
         }
     }
 
@@ -604,16 +617,71 @@ function planPointPriceCancel(chat, { now = new Date(), symbol = null } = {}) {
         announcements:
             before === null
                 ? []
-                : [{ type: ANNOUNCE.cancelled, params: { from: before, to: pendingTarget(pending), symbol: symbol ?? pending.symbol } }],
+                : [
+                      {
+                          type: ANNOUNCE.cancelled,
+                          params: { from: before, to: pendingTarget(pending), symbol: symbol ?? pending.symbol },
+                          ref: pendingRef(pending),
+                      },
+                  ],
         before,
         after: before,
     };
 }
 
+// ---- The announcements outbox ----
+//
+// The price is saved on the chat first and its announcements are queued
+// after it, in another collection. Production MongoDB may be a single node
+// without a replica set, so the two writes cannot share a transaction:
+// instead every row has a deterministic `key`, `<chat_id>:<type>:<ref>`,
+// where `ref` (epoch ms) names what the row is about - the requested_at of
+// the decrease it schedules, cancels or writes out, or the moment of an
+// increase. Writing a row twice then queues it once (the bot keeps a unique
+// index on `key`), which makes the one row that must never go missing
+// reconcilable: the "will drop" announcement of a pending decrease
+// (scheduledAnnouncement). Each read of the chat here re-queues it when the
+// save that scheduled the decrease could not (lib/announcements.js), and so
+// does the bot's announcement pass for decreases older than two minutes,
+// with the same key and row.
+
+function announcementKey(chatId, type, ref) {
+    return `${chatId}:${type}:${ref}`;
+}
+
+// What a pending decrease's rows are keyed by: its requested_at (the bot
+// conditions on it too), else - a hand-made pending - its effective_at.
+function pendingRef(pending) {
+    const at = pending.requested_at instanceof Date ? pending.requested_at : pending.effective_at;
+    return at.getTime();
+}
+
+// The "will drop" announcement the chat's pending decrease was scheduled
+// with, as the save queued it, or null when it has none: no pending (or a
+// malformed one), already due (the bot announces it as applied instead), or
+// scheduled with no notice.
+function scheduledAnnouncement(chat, now = new Date()) {
+    let pending = null;
+    try {
+        pending = pendingPointPrice(chat);
+    } catch {
+        return null;
+    }
+    if (pending === null || isDue(pending, now) || !(pending.requested_at instanceof Date)) return null;
+    if (pending.effective_at.getTime() <= pending.requested_at.getTime()) return null;
+    return {
+        type: ANNOUNCE.scheduled,
+        params: { from: pending.from, to: pendingTarget(pending), symbol: pending.symbol, effective_at: pending.effective_at },
+        ref: pending.requested_at.getTime(),
+    };
+}
+
 // The outbox row the bot drains (sent_at/claimed_at/attempts are its own
-// bookkeeping).
+// bookkeeping). `now` is its created_at, the bot's sending order: a row
+// queued late by a reconcile keeps the moment of the save it belongs to.
 function announcementDoc(chatId, announcement, now = new Date()) {
     return {
+        key: announcementKey(chatId, announcement.type, announcement.ref ?? now.getTime()),
         chat_id: chatId,
         type: announcement.type,
         params: announcement.params,
@@ -661,5 +729,7 @@ module.exports = {
     planPointPriceChange,
     planPointPriceCancel,
     pendingFilter,
+    announcementKey,
+    scheduledAnnouncement,
     announcementDoc,
 };

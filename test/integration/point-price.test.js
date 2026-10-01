@@ -289,19 +289,72 @@ itest('a due decrease applies while the bot is down, and a save writes it out', 
     assert.equal(botApply.matchedCount, 0);
 });
 
-itest('a failed outbox insert keeps the change and reports announced: false', async (t) => {
+itest('a failed outbox insert: the change stands and the decrease is still announced, once', async (t) => {
     await seedChat();
+    await seed.grant(CHAT, ALICE, 100, ago(10));
+    await seed.rewards(CHAT, ALICE, 100);
     const logged = t.mock.method(console, 'error', () => {});
-    // an outbox that rejects every row
-    await (await getDb()).createCollection('announcements', { validator: { $jsonSchema: { required: ['never_present'] } } });
+    t.mock.method(console, 'warn', () => {});
+    // the bot's unique index on the outbox key (index.mjs)
+    const db = await getDb();
+    await db.createCollection('announcements');
+    await db.collection('announcements').createIndex({ key: 1 }, { unique: true, partialFilterExpression: { key: { $type: 'string' } } });
+    // an outbox that rejects every row: the write after the price change fails
+    await db.command({ collMod: 'announcements', validator: { $jsonSchema: { required: ['never_present'] } } });
 
     const res = await savePrice({ price: '0.01' });
     assert.equal(res.status, 200, JSON.stringify(res.body));
     assert.equal(res.body.announced, false);
     assert.equal(res.body.pending.price, '0.01');
-    assert.equal((await chatDoc()).point_price_pending.price, '0.01');
+    const chat = await chatDoc();
+    assert.equal(chat.point_price_pending.price, '0.01');
     assert.deepEqual(await outbox(), []);
     assert.equal(logged.mock.callCount(), 1);
+
+    // Reads while the outbox is still broken change nothing and fail nothing.
+    assert.equal((await readPrice()).status, 200);
+    assert.deepEqual(await outbox(), []);
+
+    // The outbox works again: the next read of the chat - the member's
+    // dashboard here - queues the "will drop" row the save could not, as the
+    // save would have, dated by the save so it keeps its place in the chat's
+    // order.
+    await db.command({ collMod: 'announcements', validator: {} });
+    assert.equal((await callApi('me/chats', { user: ALICE })).status, 200);
+    let rows = await outbox();
+    assert.equal(rows.length, 1);
+    const requestedAt = chat.point_price_pending.requested_at;
+    assert.equal(rows[0].key, `${CHAT}:price_decrease_scheduled:${requestedAt.getTime()}`);
+    assert.equal(rows[0].type, 'price_decrease_scheduled');
+    assert.deepEqual(rows[0].params, {
+        from: '0.02',
+        to: '0.01',
+        symbol: 'TST',
+        effective_at: chat.point_price_pending.effective_at,
+    });
+    assert.deepEqual(rows[0].created_at, requestedAt);
+    assert.equal(rows[0].sent_at, null);
+    assert.equal(rows[0].attempts, 0);
+
+    // Queued once, however often the chat is read or saved.
+    await readPrice();
+    await callApi('me/chats', { user: ALICE });
+    assert.equal((await savePrice({ price: '0.0100' })).status, 200);
+    assert.equal((await outbox()).length, 1);
+
+    // A row queued before keys existed counts as the announcement too.
+    await (await getCollection('announcements')).updateOne({}, { $unset: { key: '' } });
+    await readPrice();
+    rows = await outbox();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].key, undefined);
+
+    // A cancelled decrease is not announced late.
+    assert.equal((await savePrice({ cancelPending: true })).status, 200);
+    await (await getCollection('announcements')).deleteMany({});
+    await readPrice();
+    await callApi('me/chats', { user: ALICE });
+    assert.deepEqual(await outbox(), []);
 });
 
 itest('coverage counts unclaimed points and issued vouchers against the pool', async () => {

@@ -461,9 +461,18 @@ export function PointPrice({ chatId, initDataRaw }) {
           )
         : "";
     if (lowered && res.pending) {
+      // the "will drop" announcement is queued again on the next read, and
+      // by the bot itself within minutes
+      const late =
+        res.announced === false
+          ? L(
+              " Бот получит задание с задержкой, в течение нескольких минут.",
+              " The bot gets it with a delay, within a few minutes.",
+            )
+          : "";
       return L(
-        `Снижение запланировано на ${momentText(res.pending.effective_at * 1000)}. Бот объявит о нём в чате.${unsent}`,
-        `Decrease scheduled for ${momentText(res.pending.effective_at * 1000)}. The bot announces it in the chat.${unsent}`,
+        `Снижение запланировано на ${momentText(res.pending.effective_at * 1000)}. Бот объявит о нём в чате.${late}`,
+        `Decrease scheduled for ${momentText(res.pending.effective_at * 1000)}. The bot announces it in the chat.${late}`,
       );
     }
     if (next === null)

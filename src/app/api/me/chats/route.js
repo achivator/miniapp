@@ -5,6 +5,7 @@ import { fetchJettonMetadata } from "@/lib/ton/rpc";
 import { formatUnits } from "@/lib/ton/amounts";
 import { chatLots } from "@/lib/lots";
 import { reconcileExpiredClaims } from "@/lib/rewards";
+import { reconcileAnnouncementsQuietly } from "@/lib/announcements";
 import { claimGate, claimSettingsOf, claimablePoints } from "@/lib/claim-rules";
 import {
   compareDecimal,
@@ -40,6 +41,9 @@ export async function GET(request) {
     ? await chatsCol.find({ id: { $in: rewardChatIds } }).toArray()
     : [];
   const chatById = new Map(rewardChats.map((c) => [c.id, c]));
+  // a decrease members are shown here is also announced in the chat, even
+  // when the save that scheduled it could not queue the announcement
+  await reconcileAnnouncementsQuietly(rewardChats);
 
   const myGrants = rewardChatIds.length
     ? await grantsCol

@@ -13,6 +13,7 @@ import {
 import { chatDebt } from "@/lib/lots";
 import { budgetDays, payoutCoverage, serializeCoverage } from "@/lib/payout-coverage";
 import { sameAddress } from "@/lib/pool-members";
+import { reconcileAnnouncementsQuietly, writeAnnouncements } from "@/lib/announcements";
 import { claimGate, claimSettingsOf } from "@/lib/claim-rules";
 import {
   FALLBACK_DECIMALS,
@@ -211,6 +212,8 @@ export async function GET(request) {
     const chatId = Number(searchParams.get("chatId"));
     const { chat, error } = await creatorChat(request, chatId);
     if (error) return error;
+    // a decrease whose announcement its save could not queue is queued now
+    await reconcileAnnouncementsQuietly([chat]);
     const jetton = await jettonOf(chat);
     const force = searchParams.get("coverage") === "1";
     return Response.json(view(chat, jetton, await coverageOf(chat, jetton, new Date(), force)));
@@ -234,6 +237,8 @@ export async function POST(request) {
     if ((await getChatMemberStatus(chat.id, auth.user.id)) !== "creator") {
       return Response.json({ error: "Telegram does not confirm you as the chat creator" }, { status: 403 });
     }
+    // what an earlier save could not queue goes first, in its own place
+    await reconcileAnnouncementsQuietly([chat]);
 
     const jetton = await jettonOf(chat);
     const now = new Date();
@@ -285,17 +290,15 @@ export async function POST(request) {
 
     // Only after the chat write succeeded, so the bot never announces a
     // change that did not happen. Without a replica set there is no
-    // transaction to share: if this insert fails the change stands and the
-    // creator is told the chat was not notified.
+    // transaction to share: if this write fails the change stands, the
+    // creator is told (announced: false), and a scheduled decrease's "will
+    // drop" row is queued later - by the next read of the chat here, or by
+    // the bot's pass - under the same key (see point-price.js). Ordered: a
+    // written-out due decrease is announced before what the creator just did.
     let announced = null;
     if (plan.announcements.length > 0) {
       try {
-        // ordered: a written-out due decrease is announced before what the
-        // creator just did
-        await (await getCollection("announcements")).insertMany(
-          plan.announcements.map((a) => announcementDoc(chat.id, a, now)),
-          { ordered: true },
-        );
+        await writeAnnouncements(plan.announcements.map((a) => announcementDoc(chat.id, a, now)));
         announced = true;
       } catch (e) {
         console.error("point-price: announcement insert failed", chat.id, e);

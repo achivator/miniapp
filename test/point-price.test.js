@@ -26,6 +26,7 @@ const {
     planPointPriceChange,
     planPointPriceCancel,
     announcementDoc,
+    scheduledAnnouncement,
 } = require('../src/lib/point-price');
 
 const NOW = 1_800_000_000;
@@ -288,6 +289,7 @@ test('planPointPriceChange: an increase applies at once and is announced', () =>
             {
                 type: 'price_increased',
                 params: { from: '0.02', to: '0.03', symbol: 'PTS', cancelled_pending: false },
+                ref: T0.getTime(),
             },
         ]);
         assert.equal(plan.after, '0.03');
@@ -324,6 +326,8 @@ test('planPointPriceChange: a decrease is scheduled, not applied', () => {
             {
                 type: 'price_decrease_scheduled',
                 params: { from: '0.02', to: '0.015', symbol: 'PTS', effective_at: at(7) },
+                // the outbox key: the decrease's requested_at
+                ref: T0.getTime(),
             },
         ]);
         assert.equal(plan.after, '0.02');
@@ -397,6 +401,7 @@ test('planPointPriceChange: an equal price or an increase cancels the pending de
             {
                 type: 'price_decrease_cancelled',
                 params: { from: '0.02', to: '0.015', symbol: 'PTS' },
+                ref: at(-1).getTime(),
             },
         ]);
 
@@ -407,6 +412,7 @@ test('planPointPriceChange: an equal price or an increase cancels the pending de
             {
                 type: 'price_increased',
                 params: { from: '0.02', to: '0.05', symbol: 'PTS', cancelled_pending: true },
+                ref: T0.getTime(),
             },
         ]);
     });
@@ -422,14 +428,18 @@ test('planPointPriceChange writes out a due decrease the bot has not applied yet
         // scheduled before snapshots: it gets the current setting when written out
         const dueEntry = { old: '0.02', new: '0.005', at: at(-1), by: 7, maturation_days: 3 };
 
-        const decreased = { type: 'price_decreased', params: { from: '0.02', to: '0.005', symbol: 'PTS' } };
+        const decreased = { type: 'price_decreased', params: { from: '0.02', to: '0.005', symbol: 'PTS' }, ref: at(-1).getTime() };
 
         // an increase from the due price: both changes are logged and
         // announced, the written-out drop first
         const up = planPointPriceChange(chat, '0.008', OPTS);
         assert.deepEqual(up.announcements, [
             decreased,
-            { type: 'price_increased', params: { from: '0.005', to: '0.008', symbol: 'PTS', cancelled_pending: false } },
+            {
+                type: 'price_increased',
+                params: { from: '0.005', to: '0.008', symbol: 'PTS', cancelled_pending: false },
+                ref: T0.getTime(),
+            },
         ]);
         assert.deepEqual(up.update.$push.point_price_history.$each, [
             dueEntry,
@@ -471,6 +481,7 @@ test('planPointPriceChange writes out a due decrease the bot has not applied yet
             assert.deepEqual(planPointPriceChange(toDefault, '0.001', OPTS).announcements[0], {
                 type: 'price_decreased',
                 params: { from: '0.02', to: '0.012', symbol: 'PTS' },
+                ref: at(-1).getTime(),
             });
         });
         // a default raised above `from` is no drop: logged, not announced as one
@@ -514,6 +525,7 @@ test('planPointPriceCancel cancels a pending decrease explicitly', () => {
             {
                 type: 'price_decrease_cancelled',
                 params: { from: '0.02', to: '0.015', symbol: 'PTS' },
+                ref: at(-1).getTime(),
             },
         ]);
 
@@ -526,9 +538,14 @@ test('planPointPriceCancel cancels a pending decrease explicitly', () => {
     });
 });
 
-test('announcementDoc is the outbox row the bot drains', () => {
-    const doc = announcementDoc(-100123, { type: 'price_increased', params: { from: '1', to: '2', symbol: null, cancelled_pending: false } }, T0);
+test('announcementDoc is the outbox row the bot drains, keyed so it is queued once', () => {
+    const doc = announcementDoc(
+        -100123,
+        { type: 'price_increased', params: { from: '1', to: '2', symbol: null, cancelled_pending: false }, ref: at(-1).getTime() },
+        T0,
+    );
     assert.deepEqual(doc, {
+        key: `-100123:price_increased:${at(-1).getTime()}`,
         chat_id: -100123,
         type: 'price_increased',
         params: { from: '1', to: '2', symbol: null, cancelled_pending: false },
@@ -536,6 +553,28 @@ test('announcementDoc is the outbox row the bot drains', () => {
         sent_at: null,
         claimed_at: null,
         attempts: 0,
+    });
+    // without a ref the row is about its own moment
+    assert.equal(announcementDoc(1, { type: 'price_increased', params: {} }, T0).key, `1:price_increased:${T0.getTime()}`);
+});
+
+test('scheduledAnnouncement rebuilds the row a pending decrease was announced with', () => {
+    withRate('0.01', () => {
+        const plan = planPointPriceChange({ id: 5, point_price: '0.02' }, '0.015', OPTS);
+        const chat = { id: 5, point_price: '0.02', point_price_pending: plan.update.$set.point_price_pending };
+        // the same row, under the same key, as the save queued
+        assert.deepEqual(scheduledAnnouncement(chat, T0), plan.announcements[0]);
+        assert.equal(
+            announcementDoc(5, scheduledAnnouncement(chat, at(1)), T0).key,
+            announcementDoc(5, plan.announcements[0], T0).key,
+        );
+        // none once due, without a pending, or for a malformed one
+        assert.equal(scheduledAnnouncement(chat, at(7)), null);
+        assert.equal(scheduledAnnouncement({ id: 5 }, T0), null);
+        assert.equal(scheduledAnnouncement({ id: 5, point_price_pending: { price: 'x' } }, T0), null);
+        // nor for a decrease scheduled with no notice (nothing was announced ahead)
+        const now = planPointPriceChange({ id: 5, point_price: '0.02' }, '0.015', { ...OPTS, noticeDays: 0 });
+        assert.equal(scheduledAnnouncement({ id: 5, point_price_pending: now.update.$set.point_price_pending }, at(-1)), null);
     });
 });
 
