@@ -123,6 +123,7 @@ const ERRORS = {
   "only the chat creator can manage the pool": ["Управлять пулом может только создатель чата.", "Only the chat creator can manage the pool."],
   "only the chat creator can change claim rules": ["Менять правила вывода может только создатель чата.", "Only the chat creator can change claim rules."],
   "only the chat creator can change the point price": ["Менять цену балла может только создатель чата.", "Only the chat creator can change the point price."],
+  "only members of this chat can see its rating": ["Рейтинг чата видят только его участники.", "Only members of this chat can see its rating."],
   "only the chat creator can see member accounts": ["Счета участников видит только создатель чата.", "Only the chat creator can see member accounts."],
   "only the chat creator can manage the subscription": ["Подпиской управляет только создатель чата.", "Only the chat creator can manage the subscription."],
   "subscriptions are not enabled": ["Подписка пока не включена.", "Subscriptions aren't enabled yet."],

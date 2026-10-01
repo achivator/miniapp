@@ -8,6 +8,7 @@ const PAGES = [
     /^\/(ru|en)(\/help)?$/,
     /^\/deposit\/[^/]+(\/members(\/[^/]+)?)?$/,
     /^\/achievement\/[^/]+$/,
+    /^\/rating\/[^/]+$/,
 ];
 
 function isPage(pathname) {

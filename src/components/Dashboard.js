@@ -281,7 +281,26 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
       )}
 
       <Notice notice={notice} />
+
+      <RatingLink chatId={reward.chat_id} />
     </Card>
+  );
+}
+
+// The foot of a chat's card: its achievement rating (app/(app)/rating/[chatId]).
+function RatingLink({ chatId }) {
+  const { L } = useI18n();
+  return (
+    <Link
+      href={`/rating/${chatId}`}
+      className="flex items-center justify-between gap-2 border-t border-[color:var(--separator)] pt-3 text-[13px] font-medium text-link active:opacity-80"
+    >
+      <span className="flex items-center gap-1.5">
+        <Medal className="h-4 w-4" />
+        {L("Рейтинг чата", "Chat rating")}
+      </span>
+      <ChevronRight className="h-4 w-4" />
+    </Link>
   );
 }
 
@@ -369,6 +388,7 @@ function Achievements({ groups }) {
           </li>
         ))}
       </ul>
+      <RatingLink chatId={chat.id} />
     </Card>
   ));
 }
