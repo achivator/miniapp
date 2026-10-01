@@ -221,3 +221,37 @@ test('isNonceUsedOnChain reads Tact true (-1) as used and false (0) as unused', 
         assert.equal(await isNonceUsedOnChain(pool, 1), expected);
     }
 });
+
+// ---- fetchContractVersion: refuse vouchers an older contract would reject ----
+
+const { fetchContractVersion } = require('../src/lib/ton/rpc');
+
+function getMethodStub(handler) {
+    const calls = [];
+    stubFetch(async (url, init) => {
+        const body = JSON.parse(init.body);
+        calls.push(body);
+        return jsonResponse({ ok: true, result: handler(body) });
+    });
+    return calls;
+}
+
+test('fetchContractVersion reads the version() getter and caches it', async () => {
+    const pool = new Address(0, Buffer.alloc(32, 21));
+    const calls = getMethodStub(() => ({ exit_code: 0, stack: [['num', '0x2']] }));
+    assert.equal(await fetchContractVersion(pool), 2);
+    assert.equal(await fetchContractVersion(pool.toString()), 2, 'same contract, any address form');
+    assert.equal(calls.length, 1, 'code is immutable: asked once');
+    assert.equal(calls[0].method, 'version');
+});
+
+test('fetchContractVersion treats a contract without the getter as version 1', async () => {
+    // TVM exit code 11: no such get method (contracts deployed before version())
+    getMethodStub(() => ({ exit_code: 11, stack: [] }));
+    assert.equal(await fetchContractVersion(new Address(0, Buffer.alloc(32, 22))), 1);
+});
+
+test('fetchContractVersion lets network failures through instead of guessing', async () => {
+    stubFetch(async () => jsonResponse({ ok: false, error: 'backend down', code: 503 }));
+    await assert.rejects(() => fetchContractVersion(new Address(0, Buffer.alloc(32, 23))), TonRpcError);
+});

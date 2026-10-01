@@ -127,6 +127,10 @@ const ERRORS = {
   "only the chat creator can see member accounts": ["Счета участников видит только создатель чата.", "Only the chat creator can see member accounts."],
   "only the chat creator can manage the subscription": ["Подпиской управляет только создатель чата.", "Only the chat creator can manage the subscription."],
   "subscriptions are not enabled": ["Подписка пока не включена.", "Subscriptions aren't enabled yet."],
+  "this pool runs an outdated contract version and would refund the deposit": [
+    "Пул работает на устаревшей версии контракта и вернул бы пополнение. Жетоны не отправлены.",
+    "This pool runs an outdated contract version and would refund the deposit. No jettons were sent.",
+  ],
   "set the reward jetton first (/jetton in the chat)": [
     "Сначала задайте жетон наград: /jetton в чате.",
     "Set the reward jetton first: /jetton in the chat.",

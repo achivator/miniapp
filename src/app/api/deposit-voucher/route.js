@@ -2,10 +2,10 @@ import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { resolveEconomyChatId } from "@/lib/chat-ids";
 import { getTonConfig } from "@/lib/ton/config";
-import { fetchJettonMetadata, fetchJettonWalletAddress, getPoolStatus } from "@/lib/ton/rpc";
+import { fetchContractVersion, fetchJettonMetadata, fetchJettonWalletAddress, getPoolStatus } from "@/lib/ton/rpc";
 import { buildDepositVoucherCell, buildDepositForwardPayload, buildJettonTransferBody, signVoucher, defaultExpiry } from "@/lib/ton/vouchers";
 import { parseUnits } from "@/lib/ton/amounts";
-import { GAS, VOUCHER_TAG } from "@/lib/ton/constants";
+import { CONTRACTS_VERSION, GAS, VOUCHER_TAG } from "@/lib/ton/constants";
 import { runGetMethod, stackItemToAddress, stackItemToBigInt } from "@/lib/ton/rpc";
 import { Address } from "@ton/core";
 
@@ -66,6 +66,21 @@ export async function POST(request) {
   }
   if (!pool.poolAddress || !pool.active) {
     return Response.json({ error: "pool is not activated yet; activate it first" }, { status: 409 });
+  }
+  // A pool of another protocol version rejects this voucher and refunds the
+  // jettons, after the creator has paid the gas: refuse before the wallet opens.
+  let poolVersion;
+  try {
+    poolVersion = await fetchContractVersion(pool.poolAddress);
+  } catch (e) {
+    return Response.json({ error: `TON RPC failed: ${e.message}` }, { status: 502 });
+  }
+  if (poolVersion !== CONTRACTS_VERSION) {
+    console.error(`chat ${chatId}: deposit refused, pool v${poolVersion} but backend v${CONTRACTS_VERSION}`);
+    return Response.json(
+      { error: "this pool runs an outdated contract version and would refund the deposit", pool_version: poolVersion },
+      { status: 409 },
+    );
   }
 
   if (metadata.decimals === null) {
