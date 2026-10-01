@@ -28,7 +28,7 @@ export async function GET(request, { params }) {
     return fail(e.status || 401, e.message);
   }
   const userId = auth.user.id;
-  const chatId = Number(params.chatId);
+  const chatId = Number((await params).chatId);
   if (!Number.isSafeInteger(chatId)) return fail(400, "chatId is required");
 
   const [achievementsCol, rewardsCol, chatsCol, usersCol] = await Promise.all(

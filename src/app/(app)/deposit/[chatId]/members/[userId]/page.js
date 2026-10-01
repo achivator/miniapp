@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useInitDataRaw } from "@tma.js/sdk-react";
+import { use, useCallback, useEffect, useState } from "react";
+import { useInitDataRaw } from "@/components/TelegramSDK";
 import { achievementName } from "@/lib/achievements";
 import { apiFetch } from "@/lib/client-api";
 import { useI18n } from "@/lib/use-locale";
@@ -290,9 +290,10 @@ function MemberScreen({ chatId, userId }) {
 }
 
 export default function MemberPage({ params }) {
+  const { chatId, userId } = use(params);
   return (
     <AppShell>
-      <MemberScreen chatId={Number(params.chatId)} userId={Number(params.userId)} />
+      <MemberScreen chatId={Number(chatId)} userId={Number(userId)} />
     </AppShell>
   );
 }

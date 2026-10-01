@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Address } from "@ton/core";
-import { useInitDataRaw } from "@tma.js/sdk-react";
+import { useInitDataRaw } from "@/components/TelegramSDK";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { apiFetch, sendTonTransaction, shortenAddress, sleep } from "@/lib/client-api";
 import { formatExact } from "@/lib/format";
@@ -615,9 +615,10 @@ function PoolManager({ chatId }) {
 }
 
 export default function DepositPage({ params }) {
+  const { chatId } = use(params);
   return (
     <AppShell>
-      <PoolManager chatId={Number(params.chatId)} />
+      <PoolManager chatId={Number(chatId)} />
     </AppShell>
   );
 }

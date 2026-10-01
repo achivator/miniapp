@@ -2,6 +2,13 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { TonConnectButton, TonConnectUIProvider, useTonConnectUI } from "@tonconnect/ui-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { LOCALES } from "@/lib/locale";
+import { applyTelegramLocale, setAppLocale, useI18n, useLocale } from "@/lib/use-locale";
+import { BrandMark } from "./brand";
+import { Question } from "./icons";
 import {
   SDKProvider,
   useBackButton,
@@ -10,14 +17,7 @@ import {
   useSDKContext,
   useSettingsButton,
   useThemeParams,
-} from "@tma.js/sdk-react";
-import { TonConnectButton, TonConnectUIProvider, useTonConnectUI } from "@tonconnect/ui-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { LOCALES } from "@/lib/locale";
-import { applyTelegramLocale, setAppLocale, useI18n, useLocale } from "@/lib/use-locale";
-import { BrandMark } from "./brand";
-import { Question } from "./icons";
+} from "./TelegramSDK";
 import { Spinner } from "./ui";
 
 const MANIFEST_URL = "https://achivator.cc/ton-connect.json";
@@ -185,7 +185,7 @@ export function AppShell({ children }) {
   if (!isClient) return null;
 
   return (
-    <SDKProvider options={{ cssVars: true, acceptCustomStyles: true, async: true }}>
+    <SDKProvider options={{ cssVars: true, acceptCustomStyles: true }}>
       <TonConnectUIProvider manifestUrl={MANIFEST_URL} language={locale}>
         <HtmlLang />
         <TonConnectLanguage />

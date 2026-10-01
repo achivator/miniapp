@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useInitDataRaw } from "@tma.js/sdk-react";
+import { useInitDataRaw } from "@/components/TelegramSDK";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { apiFetch, pollClaimStatus, sendTonTransaction, shortenAddress } from "@/lib/client-api";
 import { Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";

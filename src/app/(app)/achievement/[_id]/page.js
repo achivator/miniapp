@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useInitDataRaw } from "@tma.js/sdk-react";
+import { use, useEffect, useState } from "react";
+import { useInitDataRaw } from "@/components/TelegramSDK";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { achievementName } from "@/lib/achievements";
 import { apiFetch, sendTonTransaction, sleep } from "@/lib/client-api";
@@ -201,9 +201,10 @@ function AchievementView({ id }) {
 }
 
 export default function AchievementPage({ params }) {
+  const { _id } = use(params);
   return (
     <AppShell>
-      <AchievementView id={params._id} />
+      <AchievementView id={_id} />
     </AppShell>
   );
 }

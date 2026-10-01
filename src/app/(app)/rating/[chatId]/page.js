@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useInitDataRaw } from "@tma.js/sdk-react";
+import { use, useEffect, useState } from "react";
+import { useInitDataRaw } from "@/components/TelegramSDK";
 import { apiFetch } from "@/lib/client-api";
 import { useI18n } from "@/lib/use-locale";
 import { AppShell, Screen, TopBar, useTelegramBack } from "@/components/AppShell";
@@ -162,9 +162,10 @@ function RatingScreen({ chatId }) {
 }
 
 export default function RatingPage({ params }) {
+  const { chatId } = use(params);
   return (
     <AppShell>
-      <RatingScreen chatId={Number(params.chatId)} />
+      <RatingScreen chatId={Number(chatId)} />
     </AppShell>
   );
 }
