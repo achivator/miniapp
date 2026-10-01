@@ -1,6 +1,6 @@
 const { getCollection } = require('./mongo');
 const { getTonConfig } = require('./ton/config');
-const { runGetMethod, fetchPoolAddress, stackItemToBigInt } = require('./ton/rpc');
+const { runGetMethod, fetchPoolAddress, getAddressInformation, stackItemToBigInt } = require('./ton/rpc');
 
 function nowSeconds() {
     return Math.floor(Date.now() / 1000);
@@ -9,6 +9,33 @@ function nowSeconds() {
 async function isNonceUsedOnChain(poolAddress, nonce) {
     const stack = await runGetMethod(poolAddress, 'isNonceUsed', [['num', '0x' + BigInt(nonce).toString(16)]]);
     return stackItemToBigInt(stack[0]) !== 0n; // Tact encodes true as -1
+}
+
+// The pools a claim can have been paid from. A claim records its pool when it
+// is issued; older claims came from the chat's pool under the current master
+// or, after a redeploy, under a replaced one (LEGACY_MASTER_ADDRESSES).
+// Asking only the current master's pool would read an old payout as never
+// sent, release its points and let the member claim them a second time.
+async function claimPools(claim) {
+    if (claim.pool_address) return [claim.pool_address];
+    const { masterAddress, legacyMasterAddresses = [] } = getTonConfig();
+    const pools = [];
+    for (const master of [masterAddress, ...legacyMasterAddresses].filter(Boolean)) {
+        const pool = await fetchPoolAddress(master, claim.chat_id);
+        if (pool) pools.push(pool.toString());
+    }
+    return pools;
+}
+
+// Whether the claim's nonce was used on any pool it can have been paid
+// from. A pool that was never deployed has used none. Throws when the chain
+// cannot be read: the caller keeps the claim issued and retries later.
+async function isClaimPaid(claim) {
+    for (const pool of await claimPools(claim)) {
+        if ((await getAddressInformation(pool)).state !== 'active') continue;
+        if (await isNonceUsedOnChain(pool, claim.nonce)) return true;
+    }
+    return false;
 }
 
 // Expired vouchers either got confirmed on-chain before expiry (nonce used ->
@@ -25,8 +52,7 @@ async function reconcileExpiredClaims(chatId, userId) {
     for (const claim of expired) {
         let used = null;
         try {
-            const poolAddress = await fetchPoolAddress(getTonConfig().masterAddress, chatId);
-            used = await isNonceUsedOnChain(poolAddress, claim.nonce);
+            used = await isClaimPaid(claim);
         } catch {
             continue; // chain unreadable: keep the claim issued, retry later
         }
@@ -72,4 +98,4 @@ async function claimPoints(chatId, userId, points, ceiling = Infinity, expectedC
     return res.modifiedCount === 1;
 }
 
-module.exports = { reconcileExpiredClaims, claimPoints, isNonceUsedOnChain, nowSeconds };
+module.exports = { reconcileExpiredClaims, claimPoints, isNonceUsedOnChain, isClaimPaid, claimPools, nowSeconds };

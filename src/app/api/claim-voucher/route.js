@@ -246,6 +246,9 @@ export async function POST(request) {
         nonce,
         recipient: recipient.toString(),
         jetton_master: jettonMaster,
+        // the pool that pays it: a later redeploy changes the chat's pool,
+        // and settling this claim must still ask this one (lib/rewards.js)
+        pool_address: pool.poolAddress.toString(),
         expiry: Number(expiry),
         status: "issued",
         created_at: nowSeconds(),

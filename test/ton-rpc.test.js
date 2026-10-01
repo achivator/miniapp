@@ -255,3 +255,79 @@ test('fetchContractVersion lets network failures through instead of guessing', a
     stubFetch(async () => jsonResponse({ ok: false, error: 'backend down', code: 503 }));
     await assert.rejects(() => fetchContractVersion(new Address(0, Buffer.alloc(32, 23))), TonRpcError);
 });
+
+// ---- isClaimPaid: a master redeploy must never make a paid claim look unsent ----
+
+const { isClaimPaid } = require('../src/lib/rewards');
+
+// A toy chain: masters map chat pools, pools list their used nonces.
+function chainStub({ masters, pools }) {
+    const slice = (address) => ['slice', { bytes: beginCell().storeAddress(address).endCell().toBoc().toString('base64') }];
+    const key = (address) => Address.parse(address).toRawString();
+    stubFetch(async (url, init) => {
+        const body = JSON.parse(init.body);
+        const method = url.split('/').pop();
+        if (method === 'getAddressInformation') {
+            const known = pools.has(key(body.address));
+            return jsonResponse({ ok: true, result: { state: known ? 'active' : 'uninitialized', balance: '0' } });
+        }
+        if (body.method === 'poolAddress') {
+            return jsonResponse({ ok: true, result: { exit_code: 0, stack: [slice(masters.get(key(body.address)))] } });
+        }
+        if (body.method === 'isNonceUsed') {
+            const used = pools.get(key(body.address))?.has(BigInt(body.stack[0][1]));
+            return jsonResponse({ ok: true, result: { exit_code: 0, stack: [['num', used ? '-0x1' : '0x0']] } });
+        }
+        throw new Error(`unexpected call ${method} ${body.method}`);
+    });
+}
+
+test('isClaimPaid asks the pool recorded on the claim', async () => {
+    const oldPool = freshMaster();
+    chainStub({ masters: new Map(), pools: new Map([[oldPool.toRawString(), new Set([7n])]]) });
+    assert.equal(await isClaimPaid({ chat_id: -100, nonce: 7, pool_address: oldPool.toString() }), true);
+    assert.equal(await isClaimPaid({ chat_id: -100, nonce: 8, pool_address: oldPool.toString() }), false);
+});
+
+test('isClaimPaid finds an older claim paid by the pool of a replaced master', async () => {
+    const [newMaster, oldMaster, newPool, oldPool] = [freshMaster(), freshMaster(), freshMaster(), freshMaster()];
+    const saved = { master: process.env.MASTER_ADDRESS, legacy: process.env.LEGACY_MASTER_ADDRESSES, pub: process.env.NEXT_PUBLIC_MASTER_ADDRESS };
+    delete process.env.NEXT_PUBLIC_MASTER_ADDRESS;
+    process.env.MASTER_ADDRESS = newMaster.toString();
+    chainStub({
+        masters: new Map([
+            [newMaster.toRawString(), newPool],
+            [oldMaster.toRawString(), oldPool],
+        ]),
+        pools: new Map([
+            [newPool.toRawString(), new Set()],
+            [oldPool.toRawString(), new Set([42n])],
+        ]),
+    });
+    try {
+        const claim = { chat_id: -100, nonce: 42 }; // issued before claims recorded their pool
+        // without the old master the payout looks unsent: its points would be released twice
+        process.env.LEGACY_MASTER_ADDRESSES = '';
+        assert.equal(await isClaimPaid(claim), false);
+        process.env.LEGACY_MASTER_ADDRESSES = ` ${oldMaster.toString()} `;
+        assert.equal(await isClaimPaid(claim), true);
+    } finally {
+        for (const [name, value] of [['MASTER_ADDRESS', saved.master], ['LEGACY_MASTER_ADDRESSES', saved.legacy], ['NEXT_PUBLIC_MASTER_ADDRESS', saved.pub]]) {
+            if (value === undefined) delete process.env[name];
+            else process.env[name] = value;
+        }
+    }
+});
+
+test('isClaimPaid skips a pool that was never deployed', async () => {
+    const master = freshMaster();
+    const saved = process.env.MASTER_ADDRESS;
+    process.env.MASTER_ADDRESS = master.toString();
+    chainStub({ masters: new Map([[master.toRawString(), freshMaster()]]), pools: new Map() });
+    try {
+        assert.equal(await isClaimPaid({ chat_id: -100, nonce: 1 }), false);
+    } finally {
+        if (saved === undefined) delete process.env.MASTER_ADDRESS;
+        else process.env.MASTER_ADDRESS = saved;
+    }
+});
