@@ -12,6 +12,8 @@ import {
 import { buildCreatePoolBody } from "@/lib/ton/vouchers";
 import { GAS } from "@/lib/ton/constants";
 import { getChatMemberCount } from "@/lib/telegram";
+import { limitRestore } from "@/lib/payout-coverage";
+import { upcomingPointPrice } from "@/lib/point-price";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +72,7 @@ export async function GET(request) {
   // Jetton ledger of the pool (what members can claim), not its TON balance.
   let ledger = null;
   let controls = null;
+  let onchainLimit = null;
   if (status.active && chat.jetton_master) {
     try {
       const [balance, c] = await Promise.all([
@@ -80,8 +83,38 @@ export async function GET(request) {
       // safety controls: pause flag, explicit daily limit (0 = default
       // 10%/day) and what claims can still move today
       controls = { paused: c.paused, limit: c.limit.toString(), claimable_today: c.claimableToday.toString() };
+      onchainLimit = c.limit;
     } catch {
       ledger = null;
+    }
+  }
+
+  // A daily limit raised for a price decrease that is now behind: the
+  // creator is asked to set it back (lib/payout-coverage.js limitRestore).
+  let limitRestoreView = null;
+  if (isCreator && chat.claim_limit_raise) {
+    let upcoming = false;
+    try {
+      upcoming = upcomingPointPrice(chat) !== null;
+    } catch {
+      upcoming = false;
+    }
+    const restore = limitRestore(chat.claim_limit_raise, {
+      jettonMaster: chat.jetton_master || null,
+      limit: onchainLimit,
+      upcoming,
+    });
+    if (restore?.state === "clear") {
+      // back at or below the original (or obsolete): done. Conditional, so a
+      // raise recorded meanwhile stays.
+      await chatsCol
+        .updateOne(
+          { id: chatId, "claim_limit_raise.requested_at": chat.claim_limit_raise.requested_at ?? null },
+          { $unset: { claim_limit_raise: "" } },
+        )
+        .catch((e) => console.error("pool-status: clearing claim_limit_raise failed", chatId, e));
+    } else if (restore?.state === "due") {
+      limitRestoreView = { from: restore.from, to: restore.to, effective_at: restore.effective_at };
     }
   }
 
@@ -100,6 +133,8 @@ export async function GET(request) {
     ledger,
     pool_admin: poolAdmin ? poolAdmin.toString() : null,
     controls,
+    // { from, to, effective_at }: set the daily limit back to `from`, or null
+    limit_restore: limitRestoreView,
     member_count: memberCount,
     create_pool_body:
       !status.active && isCreator ? buildCreatePoolBody(chatId).toBoc().toString("base64") : null,

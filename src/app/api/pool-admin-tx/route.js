@@ -2,7 +2,10 @@ import { Address } from "@ton/core";
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { getTonConfig } from "@/lib/ton/config";
-import { fetchJettonMetadata, getPoolStatus } from "@/lib/ton/rpc";
+import { fetchJettonMetadata, fetchPoolClaimControls, getPoolStatus } from "@/lib/ton/rpc";
+import { claimSettingsOf } from "@/lib/claim-rules";
+import { limitRaiseRecord } from "@/lib/payout-coverage";
+import { decreaseEffectiveAt, noticeEffectiveAt, upcomingPointPrice } from "@/lib/point-price";
 import {
   buildSetClaimLimitBody,
   buildSetClaimsPausedBody,
@@ -16,6 +19,45 @@ export const dynamic = "force-dynamic";
 // Builds the pool admin's own transactions: withdraw, pause/resume claims,
 // daily claim limit. Nothing is signed here - the pool only obeys its admin
 // wallet - this keeps the message layouts in one place (lib/ton/vouchers.js).
+
+// The decrease a limit raised from the price card is for: the pending one,
+// else one requested now (the card offers the raise before it is scheduled).
+function noticeDecreaseAt(chat, now) {
+  try {
+    const pending = upcomingPointPrice(chat, now);
+    if (pending) return pending.effective_at;
+  } catch {
+    // malformed pending: as if none
+  }
+  const noticeEnds = decreaseEffectiveAt(now);
+  return noticeEffectiveAt(claimSettingsOf(chat), now, noticeEnds) ?? noticeEnds;
+}
+
+// A limit raised so members can claim before a price decrease ({ purpose:
+// "price_notice" }) is recorded with the limit it replaces, so the pool page
+// can remind the admin to set it back afterwards (lib/payout-coverage.js
+// limitRaiseRecord). Recorded on request: whether the wallet sends it is not
+// known here, and a raise that never lands is dropped after the decrease.
+async function recordNoticeRaise(chat, pool, target, userId) {
+  let controls;
+  try {
+    controls = await fetchPoolClaimControls(pool.poolAddress, chat.jetton_master);
+  } catch (e) {
+    const error = new Error(`TON RPC failed: ${e.message}`);
+    error.status = 502;
+    throw error;
+  }
+  const now = new Date();
+  const record = limitRaiseRecord(chat.claim_limit_raise ?? null, {
+    jettonMaster: chat.jetton_master,
+    currentLimit: controls.limit,
+    target,
+    effectiveAt: noticeDecreaseAt(chat, now),
+    now,
+    by: userId,
+  });
+  if (record) await (await getCollection("chats")).updateOne({ id: chat.id }, { $set: { claim_limit_raise: record } });
+}
 export async function POST(request) {
   let auth;
   try {
@@ -70,6 +112,14 @@ export async function POST(request) {
   }
 
   if (action === "limit") {
+    if (body?.purpose === "price_notice") {
+      try {
+        await recordNoticeRaise(chat, pool, amount, auth.user.id);
+      } catch (e) {
+        // no tx without the reminder to set it back
+        return Response.json({ error: e.message }, { status: e.status || 500 });
+      }
+    }
     // 0 restores the default budget (10% of the balance per day)
     return tx(buildSetClaimLimitBody({ jettonMaster: chat.jetton_master, dailyLimit: amount }));
   }

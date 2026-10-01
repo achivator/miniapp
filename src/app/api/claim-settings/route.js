@@ -1,7 +1,8 @@
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { getChatMemberStatus } from "@/lib/telegram";
-import { claimGate, claimSettingsOf, normalizeClaimSettings } from "@/lib/claim-rules";
+import { claimGate, claimRulesConflict, claimSettingsOf, normalizeClaimSettings } from "@/lib/claim-rules";
+import { pendingFilter, serializeClaimWindows, upcomingPointPrice } from "@/lib/point-price";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +17,26 @@ async function creatorChat(request, chatId) {
   return { auth, chat };
 }
 
-function view(settings) {
-  return { ok: true, settings, gate: claimGate(settings) };
+// The price decrease members are waiting to claim before, if any: while it is
+// pending the card cannot pause claims or close the last claim window
+// (claimRulesConflict), and says why.
+function pendingDecrease(chat, settings, now) {
+  let pending = null;
+  try {
+    pending = upcomingPointPrice(chat, now);
+  } catch {
+    pending = null;
+  }
+  if (!pending) return null;
+  return {
+    effective_at: Math.floor(pending.effective_at.getTime() / 1000),
+    ...serializeClaimWindows(settings, now, pending.effective_at),
+  };
+}
+
+function view(settings, chat) {
+  const now = new Date();
+  return { ok: true, settings, gate: claimGate(settings), pending_decrease: pendingDecrease(chat, settings, now) };
 }
 
 export async function GET(request) {
@@ -25,7 +44,7 @@ export async function GET(request) {
     const chatId = Number(new URL(request.url).searchParams.get("chatId"));
     const { chat, error } = await creatorChat(request, chatId);
     if (error) return error;
-    return Response.json(view(claimSettingsOf(chat)));
+    return Response.json(view(claimSettingsOf(chat), chat));
   } catch (e) {
     return Response.json({ error: e.message }, { status: e.status || 500 });
   }
@@ -51,10 +70,22 @@ export async function POST(request) {
     }
     const chats = await getCollection("chats");
     const now = new Date();
-    await chats.updateOne(
-      { id: chat.id },
+    const conflict = claimRulesConflict(claimSettingsOf(chat), settings, chat, now);
+    if (conflict) {
+      return Response.json(
+        { error: conflict.error, code: conflict.code, effective_at: Math.floor(conflict.effective_at.getTime() / 1000) },
+        { status: 409 },
+      );
+    }
+    // Conditional on the pending decrease checked above: one scheduled (or
+    // replaced) meanwhile was planned against the rules being replaced.
+    const res = await chats.updateOne(
+      { id: chat.id, ...pendingFilter(chat) },
       { $set: { claim_settings: settings, claim_settings_updated_by: auth.user.id, claim_settings_updated_at: now } },
     );
+    if (res.matchedCount === 0) {
+      return Response.json({ error: "the claim rules or the price were changed meanwhile; reload and try again" }, { status: 409 });
+    }
     // A scheduled decrease protects the points still maturing when it takes
     // effect (lib/point-price.js). Until it is due, a longer maturation widens
     // that protection; a shorter one doesn't narrow what members were already
@@ -63,7 +94,7 @@ export async function POST(request) {
       { id: chat.id, "point_price_pending.effective_at": { $gt: now } },
       { $max: { "point_price_pending.maturation_days": settings.maturation_days } },
     );
-    return Response.json(view(settings));
+    return Response.json(view(settings, chat));
   } catch (e) {
     return Response.json({ error: e.message }, { status: e.status || 500 });
   }

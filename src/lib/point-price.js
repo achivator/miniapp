@@ -24,7 +24,9 @@ const { parseRate, pointsToJettons } = require('./ton/amounts');
 //
 // Raising the price (or saving the same one) applies at once. Lowering it
 // takes points' value away from members, so it waits POINT_PRICE_NOTICE_DAYS
-// in chats.point_price_pending and the bot tells the chat to claim first:
+// (longer when the claim rules leave members no full claim window in that
+// time, see noticeEffectiveAt) in chats.point_price_pending and the bot tells
+// the chat to claim first:
 //   { price, to_default, from, symbol, effective_at, requested_at, by,
 //     maturation_days }
 // `price` is the target effective price; `to_default` means the bot must
@@ -57,6 +59,11 @@ const ANNOUNCE = {
     // announces the ones it applies itself)
     decreased: 'price_decreased',
 };
+
+// Scheduling a decrease while no claim window can ever come (see
+// noticeEffectiveAt).
+const CLAIMS_PAUSED_NO_END =
+    'claims are paused with no end date: members could not claim before the decrease; resume claims or set a resume date first';
 
 function httpError(status, message) {
     const error = new Error(message);
@@ -240,6 +247,103 @@ function decreaseEffectiveAt(now = new Date(), noticeDays = pointPriceNoticeDays
     return new Date(now.getTime() + noticeDays * DAY_MS);
 }
 
+// ---- Claim windows during the notice ----
+//
+// The notice is only worth something if members can claim during it, and the
+// claim rules (claim-rules.js) may keep claims closed for most of it: claims
+// open on some UTC weekdays only, or paused until a date. So a decrease never
+// takes effect before members had one full claim window in it: a UTC day of
+// open claims (MIN_CLAIM_WINDOW_MS in a row). Where the notice holds none it
+// is extended to the end of the first one. With claims open every day any
+// notice of a day or more already holds one, so it changes nothing. Claims
+// paused with no end date have no window at all: no decrease is scheduled
+// then (and the claim rules cannot pause claims while one is pending).
+//
+// `settings` are normalized claim settings (claimSettingsOf): plain data, so
+// this file does not import claim-rules.js (it is bundled for the browser).
+// Dates are epoch ms here, epoch seconds in API responses.
+
+const MIN_CLAIM_WINDOW_MS = DAY_MS;
+
+// When a pause set in the claim rules ends: -Infinity when there is none,
+// Infinity when it has no end date.
+function claimPauseEndMs(settings) {
+    if (!settings?.paused) return -Infinity;
+    const until = settings.paused_until;
+    return until === null || until === undefined ? Infinity : until * 1000;
+}
+
+function isClaimDay(settings, dayStartMs) {
+    const days = settings?.claim_days || [];
+    return days.length === 0 || days.includes(new Date(dayStartMs).getUTCDay());
+}
+
+// The stretches of open claims in [fromMs, toMs), in order, consecutive open
+// days merged: [{ start, end }] (epoch ms).
+function claimWindows(settings, fromMs, toMs) {
+    const windows = [];
+    const from = Math.max(fromMs, claimPauseEndMs(settings));
+    if (!(toMs > from)) return windows;
+    for (let day = Math.floor(from / DAY_MS) * DAY_MS; day < toMs; day += DAY_MS) {
+        if (!isClaimDay(settings, day)) continue;
+        const start = Math.max(day, from);
+        const end = Math.min(day + DAY_MS, toMs);
+        const last = windows[windows.length - 1];
+        if (last && last.end === start) last.end = end;
+        else windows.push({ start, end });
+    }
+    return windows;
+}
+
+// When a decrease whose notice ends at `effectiveAt` may take effect, so that
+// members get a full claim window between `now` and then: `effectiveAt` when
+// the notice already holds one, else the end of the first one (a later
+// Date), or null when claims are paused with no end date. No notice
+// (effectiveAt <= now) stays none: the operator turned it off.
+function noticeEffectiveAt(settings, now, effectiveAt) {
+    const nowMs = now.getTime();
+    const effMs = effectiveAt.getTime();
+    if (!(effMs > nowMs)) return effectiveAt;
+    const reopen = Math.max(nowMs, claimPauseEndMs(settings));
+    if (reopen === Infinity) return null;
+    // a claim day starts within a week of claims reopening, and ends a day
+    // after that
+    const horizon = Math.max(effMs, reopen + 8 * DAY_MS);
+    const first = claimWindows(settings, nowMs, horizon).find((w) => w.end - w.start >= MIN_CLAIM_WINDOW_MS);
+    if (!first) return null;
+    const covered = first.start + MIN_CLAIM_WINDOW_MS;
+    return covered <= effMs ? effectiveAt : new Date(covered);
+}
+
+// When members can claim before a decrease taking effect at `effectiveAt`,
+// for API responses: the open windows from `now` (epoch seconds) and whether
+// claims stay open the whole time.
+function serializeClaimWindows(settings, now, effectiveAt) {
+    const nowMs = now.getTime();
+    const effMs = effectiveAt.getTime();
+    const windows = claimWindows(settings, nowMs, effMs);
+    return {
+        claim_windows: windows.map((w) => ({ start: toEpochSec(w.start), end: toEpochSec(w.end) })),
+        claims_open_throughout: windows.length === 1 && windows[0].start === nowMs && windows[0].end === effMs,
+    };
+}
+
+// What a decrease requested at `now` would do, for the price card:
+// `effective_at` null means it cannot be scheduled (claims paused with no end
+// date); `extended` that the claim rules pushed it past the notice.
+function decreasePreview(settings, now = new Date(), noticeDays = pointPriceNoticeDays()) {
+    const noticeEnds = decreaseEffectiveAt(now, noticeDays);
+    const effectiveAt = noticeEffectiveAt(settings, now, noticeEnds);
+    return {
+        effective_at: effectiveAt ? toEpochSec(effectiveAt) : null,
+        notice_ends_at: toEpochSec(noticeEnds),
+        extended: effectiveAt !== null && effectiveAt.getTime() > noticeEnds.getTime(),
+        ...(effectiveAt
+            ? serializeClaimWindows(settings, now, effectiveAt)
+            : { claim_windows: [], claims_open_throughout: false }),
+    };
+}
+
 // Whether `price` can be paid exactly in a jetton with `decimals`: one point
 // must be worth a whole number of the jetton's smallest units.
 function priceFitsDecimals(price, decimals) {
@@ -345,6 +449,11 @@ function pendingFilter(chat) {
 // a price_decreased announcement, since the bot, finding its pending gone,
 // neither applies nor announces it).
 //
+// `claimSettings` (claimSettingsOf(chat), passed in by the route) extends a
+// new decrease's notice to hold a full claim window (noticeEffectiveAt), and
+// refuses it (409) while claims are paused with no end date; without it the
+// notice is exactly `noticeDays`.
+//
 // `maturationDays` is the chat's current maturation setting
 // (claimSettingsOf(chat).maturation_days, passed in by the route): it is
 // snapshotted into every history entry and into a new pending decrease; a due
@@ -359,6 +468,7 @@ function planPointPriceChange(
         by = null,
         symbol = null,
         maturationDays = null,
+        claimSettings = null,
     } = {},
 ) {
     const stored = chat?.point_price === undefined ? null : chat.point_price;
@@ -418,7 +528,11 @@ function planPointPriceChange(
         if (live !== null && (next === null ? live.to_default : !live.to_default && next === live.price)) return null;
         after = before;
         if (settled !== stored) setStored(settled);
-        const effectiveAt = decreaseEffectiveAt(now, noticeDays);
+        let effectiveAt = decreaseEffectiveAt(now, noticeDays);
+        if (claimSettings) {
+            effectiveAt = noticeEffectiveAt(claimSettings, now, effectiveAt);
+            if (effectiveAt === null) throw httpError(409, CLAIMS_PAUSED_NO_END);
+        }
         $set.point_price_pending = {
             price: target,
             to_default: next === null,
@@ -517,6 +631,8 @@ module.exports = {
     DEFAULT_NOTICE_DAYS,
     MAX_NOTICE_DAYS,
     ANNOUNCE,
+    MIN_CLAIM_WINDOW_MS,
+    CLAIMS_PAUSED_NO_END,
     canonicalDecimal,
     compareDecimal,
     normalizePointPrice,
@@ -531,6 +647,11 @@ module.exports = {
     hasCustomPointPrice,
     isPriceDecrease,
     decreaseEffectiveAt,
+    claimPauseEndMs,
+    claimWindows,
+    noticeEffectiveAt,
+    serializeClaimWindows,
+    decreasePreview,
     priceFitsDecimals,
     chatPointsToUnits,
     effectivePriceHistory,
@@ -539,5 +660,6 @@ module.exports = {
     serializePendingPrice,
     planPointPriceChange,
     planPointPriceCancel,
+    pendingFilter,
     announcementDoc,
 };

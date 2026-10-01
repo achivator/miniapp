@@ -42,7 +42,12 @@ itest('schedule, replace and cancel a decrease', async () => {
     assert.equal(scheduled.status, 200, JSON.stringify(scheduled.body));
     assert.equal(scheduled.body.price, '0.02');
     assert.equal(scheduled.body.announced, true);
-    assert.deepEqual({ ...scheduled.body.pending, effective_at: 0 }, {
+    // claims are open every day: the notice already covers a claim window
+    const { claim_windows: windows, claims_open_throughout: openThroughout, ...pending } = scheduled.body.pending;
+    assert.equal(openThroughout, true);
+    assert.equal(windows.length, 1);
+    assert.equal(windows[0].end, scheduled.body.pending.effective_at);
+    assert.deepEqual({ ...pending, effective_at: 0 }, {
         price: '0.01',
         to_default: false,
         from: '0.02',

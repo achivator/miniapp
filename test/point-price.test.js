@@ -561,3 +561,162 @@ test('planPointPriceChange snapshots the maturation into history entries and the
         }
     });
 });
+
+// ---- Claim windows during the notice (issue #14) ----
+
+const {
+    claimWindows,
+    noticeEffectiveAt,
+    decreasePreview,
+    serializeClaimWindows,
+    CLAIMS_PAUSED_NO_END,
+} = require('../src/lib/point-price');
+
+const HOUR_MS = 3600 * 1000;
+const DAY_MS = DAY * 1000;
+// Monday 5 Oct 2026, 00:00 UTC
+const MON = Date.UTC(2026, 9, 5);
+const utc = (days, hours = 0) => new Date(MON + days * DAY_MS + hours * HOUR_MS);
+const rules = (extra = {}) => ({ maturation_days: 3, claim_days: [], paused: false, paused_until: null, ...extra });
+
+test('claimWindows lists the open stretches in UTC, consecutive days merged', () => {
+    // Mon and Thu, from Tuesday noon over 9 days
+    const weekly = rules({ claim_days: [1, 4] });
+    assert.deepEqual(claimWindows(weekly, utc(1, 12).getTime(), utc(10, 12).getTime()), [
+        { start: utc(3).getTime(), end: utc(4).getTime() },
+        { start: utc(7).getTime(), end: utc(8).getTime() },
+        { start: utc(10).getTime(), end: utc(10, 12).getTime() },
+    ]);
+    // every day: one stretch, clipped at both ends
+    assert.deepEqual(claimWindows(rules(), utc(0, 5).getTime(), utc(3, 7).getTime()), [
+        { start: utc(0, 5).getTime(), end: utc(3, 7).getTime() },
+    ]);
+    // Mon + Tue merge into one window
+    assert.deepEqual(claimWindows(rules({ claim_days: [1, 2] }), utc(0).getTime(), utc(7).getTime()), [
+        { start: utc(0).getTime(), end: utc(2).getTime() },
+    ]);
+    // a pause until Wednesday noon removes everything before it
+    const paused = rules({ paused: true, paused_until: utc(2, 12).getTime() / 1000 });
+    assert.deepEqual(claimWindows(paused, utc(0).getTime(), utc(4).getTime()), [
+        { start: utc(2, 12).getTime(), end: utc(4).getTime() },
+    ]);
+    // paused with no end date: nothing
+    assert.deepEqual(claimWindows(rules({ paused: true }), utc(0).getTime(), utc(30).getTime()), []);
+    assert.deepEqual(claimWindows(rules(), utc(2).getTime(), utc(1).getTime()), []);
+});
+
+test('noticeEffectiveAt: claims open every day leave the notice unchanged', () => {
+    for (const settings of [rules(), rules({ claim_days: [0, 1, 2, 3, 4, 5, 6] })]) {
+        for (const days of [1, 3, 7]) {
+            const now = utc(0, 13.5);
+            const eff = new Date(now.getTime() + days * DAY_MS);
+            assert.equal(noticeEffectiveAt(settings, now, eff), eff);
+        }
+    }
+    // a pause that already ended counts for nothing
+    const ended = rules({ paused: true, paused_until: utc(-1).getTime() / 1000 });
+    const eff = utc(3, 13);
+    assert.equal(noticeEffectiveAt(ended, utc(0, 13), eff), eff);
+});
+
+test('noticeEffectiveAt: a weekly window and a 3-day notice: extended to the end of the next claim day', () => {
+    const mondays = rules({ claim_days: [1] });
+    // Tuesday 10:00, notice ends Friday 10:00: no Monday in it
+    assert.deepEqual(noticeEffectiveAt(mondays, utc(1, 10), utc(4, 10)), utc(8));
+    // requested on the Monday itself, mid-day: the rest of it is not a full
+    // claim day, so it waits for the next Monday
+    assert.deepEqual(noticeEffectiveAt(mondays, utc(0, 12), utc(3, 12)), utc(8));
+    // ...but from Monday 00:00 sharp the whole day is in the notice
+    const eff = utc(3);
+    assert.equal(noticeEffectiveAt(mondays, utc(0), eff), eff);
+    // a 7-day notice from Tuesday holds the next Monday: unchanged
+    const week = utc(8, 10);
+    assert.equal(noticeEffectiveAt(mondays, utc(1, 10), week), week);
+    // a notice ending inside the claim day is extended to its end
+    assert.deepEqual(noticeEffectiveAt(mondays, utc(1, 10), utc(7, 10)), utc(8));
+});
+
+test('noticeEffectiveAt counts UTC days, not the viewer\'s', () => {
+    // Sunday 23:30 UTC is already Monday in Moscow: not a claim day for a
+    // Monday-only chat until 00:00 UTC
+    const mondays = rules({ claim_days: [1] });
+    assert.deepEqual(noticeEffectiveAt(mondays, utc(-1, 23.5), utc(0, 23.5)), utc(1));
+    // a decrease landing exactly at the end of the claim day is covered
+    const exact = utc(1);
+    assert.equal(noticeEffectiveAt(mondays, utc(-1, 23.5), exact), exact);
+    // one millisecond short of the end is not
+    assert.deepEqual(noticeEffectiveAt(mondays, utc(-1, 23.5), new Date(exact.getTime() - 1)), exact);
+});
+
+test('noticeEffectiveAt waits for a full claim day after a pause; none when paused for good', () => {
+    // paused until Thursday 00:00, every day open: Thursday is the window
+    const untilThu = rules({ paused: true, paused_until: utc(3).getTime() / 1000 });
+    assert.deepEqual(noticeEffectiveAt(untilThu, utc(0, 9), utc(3, 9)), utc(4));
+    // a longer notice already holds it
+    assert.equal(noticeEffectiveAt(untilThu, utc(0, 9), utc(7, 9)).getTime(), utc(7, 9).getTime());
+    // paused until Thursday noon on a Monday/Thursday chat: the Thursday
+    // half-day is not enough, the next Monday is
+    const mixed = rules({ claim_days: [1, 4], paused: true, paused_until: utc(3, 12).getTime() / 1000 });
+    assert.deepEqual(noticeEffectiveAt(mixed, utc(0, 9), utc(3, 9)), utc(8));
+    // paused with no end date: no window ever
+    assert.equal(noticeEffectiveAt(rules({ paused: true }), utc(0), utc(7)), null);
+    // no notice (0 days) stays none
+    const now = utc(1, 10);
+    assert.equal(noticeEffectiveAt(rules({ claim_days: [1] }), now, now), now);
+});
+
+test('decreasePreview says when a decrease requested now applies and when members can claim', () => {
+    const now = utc(1, 10); // Tuesday
+    const weekly = decreasePreview(rules({ claim_days: [1, 4] }), now, 3);
+    // Thursday is inside the 3-day notice: not extended
+    assert.equal(weekly.extended, false);
+    assert.equal(weekly.effective_at, utc(4, 10).getTime() / 1000);
+    assert.equal(weekly.notice_ends_at, utc(4, 10).getTime() / 1000);
+    assert.deepEqual(weekly.claim_windows, [{ start: utc(3).getTime() / 1000, end: utc(4).getTime() / 1000 }]);
+    assert.equal(weekly.claims_open_throughout, false);
+
+    const mondays = decreasePreview(rules({ claim_days: [1] }), now, 3);
+    assert.equal(mondays.extended, true);
+    assert.equal(mondays.effective_at, utc(8).getTime() / 1000);
+    assert.deepEqual(mondays.claim_windows, [{ start: utc(7).getTime() / 1000, end: utc(8).getTime() / 1000 }]);
+
+    const daily = decreasePreview(rules(), now, 3);
+    assert.equal(daily.extended, false);
+    assert.equal(daily.claims_open_throughout, true);
+
+    const stuck = decreasePreview(rules({ paused: true }), now, 3);
+    assert.equal(stuck.effective_at, null);
+    assert.deepEqual(stuck.claim_windows, []);
+
+    assert.deepEqual(serializeClaimWindows(rules(), now, now), { claim_windows: [], claims_open_throughout: false });
+});
+
+test('planPointPriceChange fits a new decrease to the claim rules', () => {
+    withRate('0.01', () => {
+        const now = utc(1, 10); // Tuesday
+        const opts = { ...OPTS, now, noticeDays: 3 };
+        const chat = { id: 5, point_price: '0.02' };
+        // without claim settings: exactly the notice, as before
+        assert.deepEqual(planPointPriceChange(chat, '0.015', opts).update.$set.point_price_pending.effective_at, utc(4, 10));
+        // Monday-only claims: the next Monday must be in it
+        const plan = planPointPriceChange(chat, '0.015', { ...opts, claimSettings: rules({ claim_days: [1] }) });
+        assert.deepEqual(plan.update.$set.point_price_pending.effective_at, utc(8));
+        // and the bot announces that date
+        assert.deepEqual(plan.announcements[0].params.effective_at, utc(8));
+        // every day open: unchanged
+        assert.deepEqual(
+            planPointPriceChange(chat, '0.015', { ...opts, claimSettings: rules() }).update.$set.point_price_pending.effective_at,
+            utc(4, 10),
+        );
+        // paused with no end date: refused
+        assert.throws(
+            () => planPointPriceChange(chat, '0.015', { ...opts, claimSettings: rules({ paused: true }) }),
+            (e) => e.status === 409 && e.message === CLAIMS_PAUSED_NO_END,
+        );
+        // ...but an increase still applies
+        assert.equal(planPointPriceChange(chat, '0.05', { ...opts, claimSettings: rules({ paused: true }) }).after, '0.05');
+        // notice 0: right away whatever the rules
+        const zero = planPointPriceChange(chat, '0.015', { ...opts, noticeDays: 0, claimSettings: rules({ paused: true }) });
+        assert.deepEqual(zero.update.$set.point_price_pending.effective_at, now);
+    });
+});

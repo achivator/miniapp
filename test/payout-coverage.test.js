@@ -137,3 +137,77 @@ test('serializeCoverage turns amounts into unit strings', () => {
         decimals: 9,
     });
 });
+
+const { limitAbove, limitRaiseRecord, limitRestore } = require('../src/lib/payout-coverage');
+
+test('budgetDays counts only claim days when told which they are', () => {
+    const now = MIDNIGHT + 15 * 3600 * 1000; // Tue 1 Sep 2026, 15:00 UTC
+    const mondays = (dayMs) => new Date(dayMs).getUTCDay() === 1;
+    // Wed..Tue next week: one Monday
+    assert.equal(budgetDays(now, now + 7 * DAY_MS, mondays), 1);
+    assert.equal(budgetDays(now, now + 3 * DAY_MS, mondays), 0);
+    assert.equal(budgetDays(now, now + 7 * DAY_MS, () => true), 7);
+});
+
+test('limitAbove: 0 is the default share, not an amount', () => {
+    assert.equal(limitAbove(100n, 50n), true);
+    assert.equal(limitAbove(50n, 50n), false);
+    assert.equal(limitAbove(40n, 50n), false);
+    // from the default to any amount is a raise; back to the default restores
+    assert.equal(limitAbove(100n, 0n), true);
+    assert.equal(limitAbove(0n, 0n), false);
+    // from an amount to the default: not comparable, still raised
+    assert.equal(limitAbove(0n, 50n), true);
+});
+
+const JETTON = 'EQjetton';
+const EFF = new Date(MIDNIGHT + 7 * DAY_MS);
+const NOW = new Date(MIDNIGHT);
+
+test('limitRaiseRecord records the limit to go back to', () => {
+    const record = limitRaiseRecord(null, { jettonMaster: JETTON, currentLimit: 0n, target: 500n, effectiveAt: EFF, now: NOW, by: 42 });
+    assert.deepEqual(record, { jetton_master: JETTON, from: '0', to: '500', effective_at: EFF, requested_at: NOW, by: 42 });
+    // not a raise: nothing to remind about
+    assert.equal(limitRaiseRecord(null, { jettonMaster: JETTON, currentLimit: 500n, target: 300n, effectiveAt: EFF, now: NOW }), null);
+    // a second raise while the first is in force keeps the first baseline
+    const again = limitRaiseRecord(record, { jettonMaster: JETTON, currentLimit: 500n, target: 900n, effectiveAt: EFF, now: NOW });
+    assert.equal(again.from, '0');
+    assert.equal(again.to, '900');
+    // the first was set back meanwhile (or never landed): a fresh baseline
+    const old = { ...record, from: '100' };
+    assert.equal(limitRaiseRecord(old, { jettonMaster: JETTON, currentLimit: 80n, target: 900n, effectiveAt: EFF, now: NOW }).from, '80');
+    // another jetton's record is no baseline
+    const other = { ...record, jetton_master: 'EQother', from: '10' };
+    assert.equal(limitRaiseRecord(other, { jettonMaster: JETTON, currentLimit: 500n, target: 900n, effectiveAt: EFF, now: NOW }).from, '500');
+});
+
+test('limitRestore: the banner shows after the decrease while the limit is still raised', () => {
+    const record = { jetton_master: JETTON, from: '100', to: '500', effective_at: EFF, requested_at: NOW, by: 42 };
+    const after = new Date(EFF.getTime() + 1000);
+    const at = (now, limit, upcoming = false) => limitRestore(record, { jettonMaster: JETTON, limit, now, upcoming })?.state;
+    assert.equal(limitRestore(null, { jettonMaster: JETTON, limit: 500n }), null);
+    // before the decrease: the raise is still needed (and may be confirming)
+    assert.equal(at(NOW, 500n), 'waiting');
+    assert.equal(at(NOW, 100n), 'waiting');
+    // after it, still raised: remind
+    const due = limitRestore(record, { jettonMaster: JETTON, limit: 500n, now: after });
+    assert.deepEqual(due, { state: 'due', from: '100', to: '500', effective_at: Math.floor(EFF.getTime() / 1000) });
+    assert.equal(at(after, 101n), 'due');
+    // ...from an amount to the 10% default is not "back"
+    assert.equal(at(after, 0n), 'due');
+    // back at or below the original (or the raise never landed): done
+    assert.equal(at(after, 100n), 'clear');
+    assert.equal(at(after, 60n), 'clear');
+    // a later decrease replaced the one it was for: wait for that one
+    assert.equal(at(after, 500n, true), 'waiting');
+    // the limit cannot be read: decide nothing
+    assert.equal(at(after, null), 'waiting');
+    // raised from the default: only the default is back
+    const fromDefault = { ...record, from: '0' };
+    assert.equal(limitRestore(fromDefault, { jettonMaster: JETTON, limit: 0n, now: after }).state, 'clear');
+    assert.equal(limitRestore(fromDefault, { jettonMaster: JETTON, limit: 10n, now: after }).state, 'due');
+    // another jetton, or a broken record: drop it
+    assert.equal(limitRestore(record, { jettonMaster: 'EQother', limit: 500n, now: after }).state, 'clear');
+    assert.equal(limitRestore({ ...record, from: 'x' }, { jettonMaster: JETTON, limit: 500n, now: after }).state, 'clear');
+    assert.equal(limitRestore({ ...record, effective_at: 'soon' }, { jettonMaster: JETTON, limit: 500n, now: after }).state, 'clear');
+});

@@ -45,6 +45,51 @@ function AmountField({ value, onChange, symbol, onMax, disabled }) {
   );
 }
 
+// "Set the daily limit back": the limit was raised from the price card so
+// members could claim before a decrease, which is now in effect. Restoring
+// is the pool admin's own "limit" transaction, like "Set limit" below.
+function LimitRestoreBanner({ restore, symbol, decimals, poolAdmin, wallet, busy, onRestore, onDismiss }) {
+  const t = useI18n();
+  const { L } = t;
+  const limitText = (units) => (units === "0" ? L("10% пула", "10% of pool") : `${t.units(units, decimals)} ${symbol}`);
+  const isAdminWallet = sameAddress(poolAdmin, wallet);
+  return (
+    <Card className="space-y-3">
+      <p className="card-title">{L(`Верните дневной лимит: ${limitText(restore.from)}`, `Restore the daily limit to ${limitText(restore.from)}`)}</p>
+      <p className="text-[13px] leading-snug text-hint">
+        {L(
+          `Для снижения цены балла (${t.moment(restore.effective_at)}) дневной лимит выплат подняли до ${limitText(restore.to)}, чтобы все успели забрать баллы. Снижение уже действует, а лимит — защита на случай утечки ключа бота: верните прежний.`,
+          `The daily payout limit was raised to ${limitText(restore.to)} so everyone could claim before the point price decrease (${t.moment(restore.effective_at)}). The decrease is in effect now, and the limit is the safety cap for a leaked bot key: set it back.`,
+        )}
+      </p>
+      <div className="flex gap-2">
+        <Button
+          variant="secondary"
+          className="flex-1"
+          busy={busy === "limit"}
+          disabled={Boolean(busy) || (Boolean(wallet) && !isAdminWallet)}
+          onClick={onRestore}
+        >
+          {wallet
+            ? L(`Вернуть ${limitText(restore.from)}`, `Restore ${limitText(restore.from)}`)
+            : L("Подключить кошелёк администратора пула", "Connect the pool admin wallet")}
+        </Button>
+        <Button variant="ghost" busy={busy === "dismiss"} disabled={Boolean(busy)} onClick={onDismiss}>
+          {L("Оставить как есть", "Keep it")}
+        </Button>
+      </div>
+      {poolAdmin && wallet && !isAdminWallet && (
+        <p className="text-[12px] leading-snug text-danger">
+          {L(
+            `Лимит меняет только кошелёк администратора пула ${shortenAddress(poolAdmin, 5)}. Подключите его.`,
+            `Only the pool admin wallet ${shortenAddress(poolAdmin, 5)} can change the limit. Connect it.`,
+          )}
+        </p>
+      )}
+    </Card>
+  );
+}
+
 function PoolManager({ chatId }) {
   const initDataRaw = useInitDataRaw();
   const wallet = useTonAddress();
@@ -201,6 +246,24 @@ function PoolManager({ chatId }) {
       );
     });
 
+  // The daily limit raised from the price card for a decrease that is now
+  // behind (pool-status `limit_restore`): back to what it was, or keep it.
+  const restoreLimit = (restore) =>
+    saveLimit(restore.from === "0" ? "0" : formatExact(restore.from, info.jetton?.decimals ?? null));
+
+  const dismissRestore = async () => {
+    setBusy("dismiss");
+    try {
+      await apiFetch("/api/limit-restore", { method: "POST", initDataRaw, body: { chatId } });
+      await load();
+    } catch (e) {
+      haptic("error");
+      setNotice({ kind: "err", text: e.message });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const withdraw = () =>
     run("withdraw", async () => {
       const tx = await adminTx({ action: "withdraw", amount: withdrawAmount, to: wallet });
@@ -289,6 +352,19 @@ function PoolManager({ chatId }) {
           )}
         </div>
       </Card>
+
+      {info.is_creator && info.limit_restore && (
+        <LimitRestoreBanner
+          restore={info.limit_restore}
+          symbol={symbol}
+          decimals={decimals}
+          poolAdmin={info.pool_admin}
+          wallet={wallet}
+          busy={busy}
+          onRestore={() => restoreLimit(info.limit_restore)}
+          onDismiss={dismissRestore}
+        />
+      )}
 
       {info.is_creator && (
         <Link href={`/deposit/${chatId}/members`} className="block">

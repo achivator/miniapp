@@ -18,7 +18,9 @@ import {
   FALLBACK_DECIMALS,
   MAX_POINT_PRICE,
   announcementDoc,
+  claimWindows,
   decreaseEffectiveAt,
+  decreasePreview,
   hasCustomPointPrice,
   normalizePointPrice,
   planPointPriceCancel,
@@ -26,10 +28,14 @@ import {
   platformPointPrice,
   pointPriceFor,
   pointPriceNoticeDays,
+  noticeEffectiveAt,
+  serializeClaimWindows,
   serializePendingPrice,
   serializePriceHistory,
   upcomingPointPrice,
 } from "@/lib/point-price";
+
+const DAY_MS = 86400 * 1000;
 
 export const dynamic = "force-dynamic";
 
@@ -111,12 +117,19 @@ async function coverageOf(chat, jetton, now, force = false) {
     } catch {
       pending = null;
     }
-    const effectiveAt = pending ? pending.effective_at : decreaseEffectiveAt(now);
+    // a decrease requested now waits for a claim window too (and with claims
+    // paused for good there is none: its notice then gives 0 budget days)
+    const settings = claimSettingsOf(chat);
+    const noticeEnds = decreaseEffectiveAt(now);
+    const effectiveAt = pending ? pending.effective_at : noticeEffectiveAt(settings, now, noticeEnds) ?? noticeEnds;
+    const effMs = effectiveAt.getTime();
+    // only the budgets of days members can claim on are of use
+    const claimDay = (dayMs) => claimWindows(settings, dayMs, Math.min(dayMs + DAY_MS, effMs)).length > 0;
     const coverage = payoutCoverage({
       debt: debt.units + issued,
       poolBalance: ledger,
       limit: controls.limit,
-      days: budgetDays(now.getTime(), effectiveAt.getTime()),
+      days: budgetDays(now.getTime(), effMs, claimDay),
     });
     let admin = null;
     try {
@@ -155,9 +168,14 @@ function view(chat, jetton, extra = {}) {
   } catch {
     // a corrupted stored price: show none, the creator can save a new one
   }
+  const settings = claimSettingsOf(chat);
   let pending = null;
   try {
-    pending = serializePendingPrice(upcomingPointPrice(chat, now));
+    const upcoming = upcomingPointPrice(chat, now);
+    // when members can claim before it (the claim rules as they are now)
+    pending = upcoming
+      ? { ...serializePendingPrice(upcoming), ...serializeClaimWindows(settings, now, upcoming.effective_at) }
+      : null;
   } catch {
     // a malformed pending: the price above is null too, saving clears it
   }
@@ -171,9 +189,13 @@ function view(chat, jetton, extra = {}) {
     pending,
     // how long a decrease requested now would wait
     notice_days: pointPriceNoticeDays(),
+    // ...and exactly when it would apply, extended to hold a full claim
+    // window, with the windows members get before it (effective_at null:
+    // claims are paused with no end date, it cannot be scheduled)
+    next_decrease: decreasePreview(settings, now),
     // members cannot claim at the old price while claims are paused, which
     // defeats the notice: the card warns the creator
-    claim_gate: claimGate(claimSettingsOf(chat)),
+    claim_gate: claimGate(settings),
     jetton,
     // what the price is validated against
     decimals: jetton?.decimals ?? FALLBACK_DECIMALS,
@@ -234,6 +256,9 @@ export async function POST(request) {
         // snapshotted with the change: lots are valued by the maturation in
         // force when a decrease took effect (lib/lot-pricing.js)
         maturationDays: claimSettingsOf(chat).maturation_days,
+        // a decrease waits for a full claim window (409 while claims are
+        // paused with no end date)
+        claimSettings: claimSettingsOf(chat),
       });
     }
     if (!plan) return Response.json(view(chat, jetton, await coverageOf(chat, jetton, new Date(), body?.coverage === true)));
@@ -242,11 +267,20 @@ export async function POST(request) {
     // concurrent saves cannot both log a change from the same "old" price
     // (the history must chain), and a save cannot race the bot applying a
     // due decrease.
-    const res = await (await getCollection("chats")).findOneAndUpdate(plan.filter, plan.update, {
+    // A new decrease's date was fitted to the claim rules read here: not to
+    // rules saved meanwhile.
+    const schedules = Boolean(plan.update.$set?.point_price_pending);
+    const filter = schedules
+      ? { ...plan.filter, claim_settings_updated_at: chat.claim_settings_updated_at ?? null }
+      : plan.filter;
+    const res = await (await getCollection("chats")).findOneAndUpdate(filter, plan.update, {
       returnDocument: "after",
     });
     if (!res) {
-      return Response.json({ error: "the price was changed meanwhile; reload and try again" }, { status: 409 });
+      const error = schedules
+        ? "the claim rules or the price were changed meanwhile; reload and try again"
+        : "the price was changed meanwhile; reload and try again";
+      return Response.json({ error }, { status: 409 });
     }
 
     // Only after the chat write succeeded, so the bot never announces a

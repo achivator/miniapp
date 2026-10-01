@@ -149,6 +149,23 @@ const ERRORS = {
     "Цену тем временем изменили — обновите страницу и попробуйте снова.",
     "The price was changed meanwhile — reload and try again.",
   ],
+  // A price decrease is pending: members must be able to claim before it.
+  "claims cannot be paused while a price decrease is pending: members must be able to claim at the current price until it takes effect": [
+    "Пока запланировано снижение цены, приостановить вывод нельзя: до него участники должны успеть забрать баллы по текущей цене.",
+    "Claims can't be paused while a price decrease is pending: members must be able to claim at the current price until it takes effect.",
+  ],
+  "these claim days leave members no full claim day before the scheduled price decrease": [
+    "С такими днями вывода у участников не останется ни одного полного дня, чтобы забрать баллы до запланированного снижения цены.",
+    "These claim days leave members no full claim day before the scheduled price decrease.",
+  ],
+  "claims are paused with no end date: members could not claim before the decrease; resume claims or set a resume date first": [
+    "Вывод приостановлен без даты возобновления: участники не смогут забрать баллы до снижения. Сначала возобновите вывод или задайте дату.",
+    "Claims are paused with no end date: members couldn't claim before the decrease. Resume claims or set a resume date first.",
+  ],
+  "the claim rules or the price were changed meanwhile; reload and try again": [
+    "Правила вывода или цену тем временем изменили — обновите страницу и попробуйте снова.",
+    "The claim rules or the price were changed meanwhile — reload and try again.",
+  ],
   // Thrown in the browser by lib/client-api.js sendTonTransaction.
   "your wallet is on mainnet. switch it to testnet (or connect a testnet wallet) and try again.": [
     "Кошелёк в основной сети. Переключите его на тестнет (или подключите тестнет-кошелёк) и попробуйте снова.",

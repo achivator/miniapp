@@ -5,6 +5,7 @@ import { Address } from "@ton/core";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { apiFetch, sendTonTransaction, shortenAddress, sleep } from "@/lib/client-api";
 import { formatDate, formatExact } from "@/lib/format";
+import { intlLocale } from "@/lib/i18n";
 import { compareDecimal, normalizePointPrice, priceFitsDecimals } from "@/lib/point-price";
 import { formatUnits, pointsToJettons } from "@/lib/ton/amounts";
 import { useI18n, useL } from "@/lib/use-locale";
@@ -33,6 +34,49 @@ function daysText(L, n) {
   const ru =
     mod10 === 1 && mod100 !== 11 ? "день" : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? "дня" : "дней";
   return L(`${n} ${ru}`, `${n} ${n === 1 ? "day" : "days"}`);
+}
+
+// One stretch of open claims before a decrease, in UTC like the claim rules:
+// "Mon, Oct 5 00:00–23:59", "now – Wed, Oct 7 23:59". A window ending at a
+// midnight is open through the day before's 23:59.
+function windowText(t, w, nowSec) {
+  const day = (sec) =>
+    new Date(sec * 1000).toLocaleDateString(intlLocale(t.locale), {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    });
+  const hm = (sec) => new Date(sec * 1000).toISOString().slice(11, 16);
+  const last = w.end % 86400 === 0 ? w.end - 60 : w.end;
+  // the server clipped it at its "now": open already
+  const openNow = w.start % 86400 !== 0 && w.start <= nowSec + 60;
+  if (openNow) return `${t.L("сейчас", "now")} – ${day(last)} ${hm(last)}`;
+  if (Math.floor(w.start / 86400) === Math.floor(last / 86400)) return `${day(w.start)} ${hm(w.start)}–${hm(last)}`;
+  return `${day(w.start)} ${hm(w.start)} – ${day(last)} ${hm(last)}`;
+}
+
+const MAX_WINDOWS_SHOWN = 6;
+
+// "Claims open: Mon, Oct 5 00:00–23:59, Thu, Oct 8 00:00–23:59 UTC" - exactly
+// when members can claim at the current price (`windows` from the API, epoch
+// seconds).
+function ClaimWindows({ windows }) {
+  const t = useI18n();
+  const nowSec = Math.floor(Date.now() / 1000);
+  const more = windows.length - MAX_WINDOWS_SHOWN;
+  return (
+    <p className="text-[13px] leading-snug text-hint tabular">
+      {t.L("Вывод до снижения открыт:", "Claims open before then:")}{" "}
+      <span className="font-semibold text-fg">
+        {windows
+          .slice(0, MAX_WINDOWS_SHOWN)
+          .map((w) => windowText(t, w, nowSec))
+          .join(", ")}
+        {more > 0 ? t.L(` и ещё ${more}`, ` and ${more} more`) : ""} UTC
+      </span>
+    </p>
+  );
 }
 
 function sameAddress(a, b) {
@@ -124,7 +168,8 @@ function PayoutCoverage({ chatId, initDataRaw, symbol, state, setState }) {
       const tx = await apiFetch("/api/pool-admin-tx", {
         method: "POST",
         initDataRaw,
-        body: { chatId, action: "limit", amount: suggested },
+        // recorded, so the pool page reminds the admin to set it back
+        body: { chatId, action: "limit", amount: suggested, purpose: "price_notice" },
       });
       setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
       await sendTonTransaction(tonConnectUI, coverage.network, [
@@ -141,8 +186,8 @@ function PayoutCoverage({ chatId, initDataRaw, symbol, state, setState }) {
             kind: "ok",
             text: (t) =>
               t.L(
-                `Дневной лимит выплат: ${t.units(target, cDec)} ${symbol}. После снижения цены его можно вернуть на пульте пула.`,
-                `Daily payout limit is now ${t.units(target, cDec)} ${symbol}. You can set it back on the pool page after the decrease.`,
+                `Дневной лимит выплат: ${t.units(target, cDec)} ${symbol}. После снижения цены пульт пула напомнит вернуть прежний.`,
+                `Daily payout limit is now ${t.units(target, cDec)} ${symbol}. After the decrease the pool page reminds you to set it back.`,
               ),
           });
           return;
@@ -199,8 +244,14 @@ function PayoutCoverage({ chatId, initDataRaw, symbol, state, setState }) {
       </ul>
       <p className="text-[12px] leading-snug text-hint">
         {L(
-          "Считаем все невыплаченные баллы по текущей цене, в том числе ещё созревающие: их всё равно выплатят позже по цене до снижения. С лимитом 10% считаем, что пул каждый день выплачивает весь лимит и тает.",
-          "All unclaimed points at the current price, maturing ones included: they will be paid later at the pre-decrease price anyway. With the 10% default we assume the pool pays its full budget every day and shrinks.",
+          "Это оценка с запасом: пополнения пула за это время не учтены, а с лимитом 10% считаем, что пул каждый день выплачивает весь лимит и тает, — на деле обычно выйдет больше.",
+          "A cautious estimate: top-ups during the notice are not counted, and with the 10% default the pool is assumed to pay its full budget every day and shrink — in practice more usually gets out.",
+        )}
+      </p>
+      <p className="text-[12px] leading-snug text-hint">
+        {L(
+          "Считаем все невыплаченные баллы по текущей цене, в том числе ещё созревающие: их всё равно выплатят позже по цене до снижения. Учитываем только дни, когда вывод открыт.",
+          "All unclaimed points at the current price, maturing ones included: they will be paid later at the pre-decrease price anyway. Only days with claims open count.",
         )}
       </p>
 
@@ -274,8 +325,8 @@ function PayoutCoverage({ chatId, initDataRaw, symbol, state, setState }) {
               )}
               <p className="text-[12px] leading-snug text-hint">
                 {L(
-                  "Дневной лимит — защита на случай утечки ключа бота: чем он выше, тем больше можно вывести из пула за день. После снижения цены лимит можно вернуть на пульте пула.",
-                  "The daily limit is the safety cap for a leaked bot key: the higher it is, the more could be moved out of the pool per day. You can set it back on the pool page after the decrease.",
+                  "Дневной лимит — защита на случай утечки ключа бота: чем он выше, тем больше можно вывести из пула за день. После снижения цены пульт пула напомнит вернуть прежний лимит.",
+                  "The daily limit is the safety cap for a leaked bot key: the higher it is, the more could be moved out of the pool per day. After the decrease the pool page reminds you to set it back.",
                 )}
               </p>
             </>
@@ -360,25 +411,37 @@ export function PointPrice({ chatId, initDataRaw }) {
   const resetLowers = data.custom && data.price !== null && compareDecimal(data.platform_price, data.price) < 0;
   const example =
     price !== null ? formatUnits(pointsToJettons(EXAMPLE_POINTS, price, data.decimals), data.decimals) : null;
-  const gate = data.claim_gate;
-  const paused = gate && !gate.open && gate.reason === "paused";
-  const pausedText = paused
-    ? L(
-        `Выплаты в этом чате приостановлены${gate.until ? ` до ${momentText(gate.until * 1000)}` : ""}: пока они на паузе, участники не могут забрать баллы по текущей цене, и срок предупреждения им не поможет. Сначала возобновите выплаты в «Правилах выплат» ниже.`,
-        `Claims are paused in this chat${gate.until ? ` until ${momentText(gate.until * 1000)}` : ""}: members cannot claim at the current price while paused, so the notice does not help them. Resume claims in Claim rules below first.`,
-      )
-    : null;
-  // Client clock: an estimate for the explanation, the server sets the date.
-  const scheduledFor = momentText(Date.now() + noticeDays * DAY_MS);
+  // A decrease requested now (the server's preview): when it would apply,
+  // extended so members get a full claim day under the claim rules, and the
+  // windows they get; effective_at null: claims are paused with no end date.
+  const next = data.next_decrease ?? null;
+  const blocked = noticeDays > 0 && next !== null && next.effective_at === null;
+  const blockedText = L(
+    "Вывод в этом чате приостановлен без даты возобновления: до снижения участники не смогли бы забрать баллы по текущей цене, поэтому запланировать его нельзя. Возобновите вывод или задайте дату возобновления в «Правилах вывода» ниже.",
+    "Claims in this chat are paused with no end date: members could not claim at the current price before a decrease, so none can be scheduled. Resume claims or set a resume date in Claim rules below.",
+  );
+  // The server's date when known; else the client clock's estimate.
+  const scheduledFor = next?.effective_at
+    ? momentText(next.effective_at * 1000)
+    : momentText(Date.now() + noticeDays * DAY_MS);
   const replaces = pending
     ? L(" Оно заменит уже запланированное снижение.", " It replaces the decrease already scheduled.")
     : "";
+  const when = next?.extended
+    ? L(
+        `Более низкая цена вступит в силу ${scheduledFor}: срок предупреждения — ${daysText(L, noticeDays)}, но по правилам вывода (дни вывода по UTC или пауза) в этот срок не попадает ни одного полного дня вывода, поэтому снижение ждёт, пока он у участников будет.`,
+        `A lower price takes effect on ${scheduledFor}: the notice is ${daysText(L, noticeDays)}, but the claim rules (claim days in UTC, or a pause) leave no full claim day in it, so it waits until members have had one.`,
+      )
+    : L(
+        `Более низкая цена вступит в силу через ${daysText(L, noticeDays)}, примерно ${scheduledFor}.`,
+        `A lower price takes effect after ${daysText(L, noticeDays)}, on about ${scheduledFor}.`,
+      );
   const decreaseText =
     noticeDays > 0
-      ? L(
-          `Более низкая цена вступит в силу через ${daysText(L, noticeDays)}, примерно ${scheduledFor}. До тех пор участники могут забрать баллы по цене 1 балл = ${data.price} ${symbol}; бот объявит о снижении в чате сейчас и ещё раз, когда оно вступит в силу. Баллы, которые к тому моменту ещё не созреют, будут выплачены по текущей цене.${replaces}`,
-          `A lower price takes effect after ${daysText(L, noticeDays)}, on about ${scheduledFor}. Until then members can still claim at 1 point = ${data.price} ${symbol}; the bot announces the decrease in the chat now and again when it applies. Points still maturing by then will be paid at the current price.${replaces}`,
-        )
+      ? `${when} ${L(
+          `До тех пор участники могут забрать баллы по цене 1 балл = ${data.price} ${symbol}; бот объявит о снижении в чате сейчас и ещё раз, когда оно вступит в силу. Баллы, которые к тому моменту ещё не созреют, будут выплачены по текущей цене.${replaces}`,
+          `Until then members can still claim at 1 point = ${data.price} ${symbol}; the bot announces the decrease in the chat now and again when it applies. Points still maturing by then will be paid at the current price.${replaces}`,
+        )}`
       : L(
           "Более низкая цена уменьшит и стоимость баллов, которые у участников уже есть. Она вступит в силу сразу, бот объявит об этом в чате.",
           "A lower price also lowers the value of points members already hold. It applies right away and the bot announces it in the chat.",
@@ -514,6 +577,9 @@ export function PointPrice({ chatId, initDataRaw }) {
                 "Members see it on their dashboard and the bot announced it in the chat; until then they claim at the current price.",
               )}
             </p>
+            {!pending.claims_open_throughout && pending.claim_windows?.length > 0 && (
+              <ClaimWindows windows={pending.claim_windows} />
+            )}
             <Button variant="ghost" size="sm" busy={busy === "cancel"} disabled={Boolean(busy)} onClick={cancelPending}>
               {L("Отменить снижение", "Cancel decrease")}
             </Button>
@@ -532,7 +598,11 @@ export function PointPrice({ chatId, initDataRaw }) {
           />
         )}
 
-        {lowering && <Notice notice={{ kind: "info", text: decreaseText }} />}
+        {lowering && !blocked && <Notice notice={{ kind: "info", text: decreaseText }} />}
+        {lowering && !blocked && noticeDays > 0 && next && !next.claims_open_throughout && next.claim_windows.length > 0 && (
+          <ClaimWindows windows={next.claim_windows} />
+        )}
+        {lowering && blocked && <Notice notice={{ kind: "err", text: blockedText }} />}
         {pending && dirty && !lowering && (
           <p className="text-[13px] leading-snug text-hint">
             {L(
@@ -546,7 +616,17 @@ export function PointPrice({ chatId, initDataRaw }) {
             {L("Это снижение уже запланировано.", "This decrease is already scheduled.")}
           </p>
         )}
-        {(lowering || pending) && pausedText && <Notice notice={{ kind: "err", text: pausedText }} />}
+        {pending && pending.claim_windows?.length === 0 && (
+          <Notice
+            notice={{
+              kind: "err",
+              text: L(
+                "До снижения вывод в этом чате больше не откроется: участники не смогут забрать баллы по текущей цене. Откройте вывод в «Правилах вывода» ниже или отмените снижение.",
+                "Claims in this chat don't open again before the decrease: members can't claim at the current price. Open claims in Claim rules below or cancel the decrease.",
+              ),
+            }}
+          />
+        )}
 
         {showCoverage && (
           <PayoutCoverage
@@ -563,7 +643,7 @@ export function PointPrice({ chatId, initDataRaw }) {
             variant="secondary"
             className="flex-1"
             busy={busy === "save"}
-            disabled={Boolean(busy) || !dirty}
+            disabled={Boolean(busy) || !dirty || (lowering && blocked)}
             onClick={() => save(price, "save", lowering)}
           >
             {lowering && noticeDays > 0
@@ -574,7 +654,7 @@ export function PointPrice({ chatId, initDataRaw }) {
             <Button
               variant="ghost"
               busy={busy === "reset"}
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || (resetLowers && blocked)}
               onClick={() => save(null, "reset", resetLowers)}
             >
               {L("По умолчанию", "Use default")}
