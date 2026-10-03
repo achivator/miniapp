@@ -21,8 +21,9 @@ export const metadata = {
     locale: "ru_RU",
     alternateLocale: ["en_US"],
     type: "website",
-    images: [{ url: "/metadata/achivator-collection.jpg", width: 512, height: 512 }],
+    images: [{ url: "/og/achivator-cover.jpg", width: 1200, height: 630, alt: "Achivator" }],
   },
+  twitter: { card: "summary_large_image" },
 };
 
 // The Telegram Mini App entry: Telegram launches get the dashboard, browsers
