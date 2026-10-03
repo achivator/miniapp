@@ -130,7 +130,8 @@ export function localeMetadata({ locale, page, title, description }) {
       locale: locale === "en" ? "en_US" : "ru_RU",
       alternateLocale: locale === "en" ? ["ru_RU"] : ["en_US"],
       type: "website",
-      images: [{ url: "/metadata/achivator-collection.jpg", width: 512, height: 512 }],
+      images: [{ url: "/og/achivator-cover.jpg", width: 1200, height: 630, alt: "Achivator" }],
     },
+    twitter: { card: "summary_large_image" },
   };
 }
