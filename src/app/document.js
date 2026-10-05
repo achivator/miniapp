@@ -1,4 +1,5 @@
 import "./globals.css";
+import { Analytics } from "@/components/Analytics";
 import { LAUNCH_SCRIPT } from "@/lib/launch";
 import { LOCALE_SCRIPT } from "@/lib/locale";
 
@@ -32,7 +33,10 @@ export function Document({ lang, children, ...props }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: LAUNCH_SCRIPT + LOCALE_SCRIPT }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <Analytics />
+        {children}
+      </body>
     </html>
   );
 }

@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import { useInitDataRaw } from "@/components/TelegramSDK";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { achievementName } from "@/lib/achievements";
+import { failure, track } from "@/lib/analytics";
 import { apiFetch, sendTonTransaction, sleep } from "@/lib/client-api";
 import { formatDecimal, intlLocale } from "@/lib/i18n";
 import { useI18n } from "@/lib/use-locale";
@@ -69,6 +70,8 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
     }
     setBusy(true);
     setNotice({ kind: "info", text: bilingual("Готовим выпуск…", "Preparing the mint…") });
+    const props = { achievement_type: achievement.type, collection: achievement.collection };
+    track("nft_mint_started", props);
     try {
       const tx = await apiFetch("/api/mint-voucher", {
         method: "POST",
@@ -86,6 +89,7 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
           () => null,
         );
         if (fresh?.nft?.minted) {
+          track("nft_minted", props);
           haptic("success");
           setNotice(null);
           onMinted(fresh);
@@ -99,6 +103,7 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
     } catch (e) {
       haptic("error");
       setNotice({ kind: "err", text: e.message });
+      track("nft_mint_failed", { ...props, ...failure(e) });
     } finally {
       setBusy(false);
     }

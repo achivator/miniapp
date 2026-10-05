@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useInitDataRaw } from "@/components/TelegramSDK";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
+import { failure, track } from "@/lib/analytics";
 import { apiFetch, pollClaimStatus, sendTonTransaction, shortenAddress } from "@/lib/client-api";
 import { Screen, TopBar, useHaptic, useTelegramBack } from "@/components/AppShell";
 import {
@@ -120,6 +121,7 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
     }
     setBusy(true);
     setNotice({ kind: "info", text: bilingual("Готовим вывод…", "Preparing your claim…") });
+    track("claim_started", { chat_id: reward.chat_id, points: reward.available_points });
     try {
       const voucher = await apiFetch("/api/claim-voucher", {
         method: "POST",
@@ -139,6 +141,12 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
       ]);
       setNotice({ kind: "info", text: bilingual("Отправлено — ждём выплату из пула…", "Sent — waiting for the pool to pay out…") });
       const status = await pollClaimStatus(reward.chat_id, voucher.nonce, initDataRaw);
+      track("claim_sent", {
+        chat_id: reward.chat_id,
+        jettons: Number(voucher.jettons),
+        remaining_points: voucher.remaining_points || 0,
+        confirmed: status?.status === "claimed",
+      });
       if (status?.status === "claimed") {
         haptic("success");
         const rest = (t) =>
@@ -163,6 +171,7 @@ function RewardCard({ reward, network, initDataRaw, onRefresh }) {
     } catch (e) {
       haptic("error");
       setNotice({ kind: "err", text: e.message });
+      track("claim_failed", { chat_id: reward.chat_id, ...failure(e) });
     } finally {
       setBusy(false);
     }
