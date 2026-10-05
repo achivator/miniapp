@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { track } from "@/lib/analytics";
 import { apiFetch } from "@/lib/client-api";
 import { useI18n } from "@/lib/use-locale";
 import { Button, Card, Chip, Notice, SectionHeader, Segmented, bilingual, cx } from "./ui";
@@ -102,6 +103,7 @@ export function ClaimRules({ chatId, initDataRaw }) {
         initDataRaw,
         body: { chatId, settings: draft },
       });
+      track("claim_rules_saved", { chat_id: chatId });
       setSaved(res.settings);
       setDraft(res.settings);
       setDecrease(res.pending_decrease ?? null);

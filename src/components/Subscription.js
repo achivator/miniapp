@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useInvoice } from "@/components/TelegramSDK";
+import { failure, track } from "@/lib/analytics";
 import { apiFetch, sleep } from "@/lib/client-api";
 import { useI18n } from "@/lib/use-locale";
 import { Button, Card, Chip, Notice, Row, SectionHeader, bilingual } from "./ui";
@@ -48,7 +49,13 @@ export function Subscription({ chatId, initDataRaw }) {
     setNotice(null);
     try {
       const { link } = await apiFetch("/api/subscription", { method: "POST", initDataRaw, body: { chatId } });
+      track("subscription_checkout_opened", { chat_id: chatId, stars: data.price_stars, state: data.state });
       const status = await invoice.open(link, "url");
+      track(status === "paid" ? "subscription_paid" : "subscription_checkout_closed", {
+        chat_id: chatId,
+        stars: data.price_stars,
+        status,
+      });
       if (status !== "paid") {
         if (status === "failed") setNotice({ kind: "err", text: bilingual("Оплата не прошла.", "The payment failed.") });
         return;
@@ -66,6 +73,7 @@ export function Subscription({ chatId, initDataRaw }) {
     } catch (e) {
       haptic("error");
       setNotice({ kind: "err", text: e.message });
+      track("subscription_failed", { chat_id: chatId, ...failure(e) });
     } finally {
       setBusy(false);
     }

@@ -2,9 +2,11 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { retrieveLaunchParams } from "@tma.js/sdk";
 import { TonConnectButton, TonConnectUIProvider, useTonConnectUI } from "@tonconnect/ui-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { identifyTelegramUser, track } from "@/lib/analytics";
 import { LOCALES } from "@/lib/locale";
 import { applyTelegramLocale, setAppLocale, useI18n, useLocale } from "@/lib/use-locale";
 import { BrandMark } from "./brand";
@@ -91,6 +93,31 @@ function TonConnectLanguage() {
   return null;
 }
 
+// Wallet connections and disconnections, by wallet app (not by address);
+// the connection restored from an earlier visit does not count.
+function WalletAnalytics() {
+  const [tonConnectUI] = useTonConnectUI();
+  useEffect(() => {
+    let unsubscribe = null;
+    let cancelled = false;
+    tonConnectUI.connectionRestored.then(() => {
+      if (cancelled) return;
+      let connected = Boolean(tonConnectUI.wallet);
+      unsubscribe = tonConnectUI.onStatusChange((wallet) => {
+        if (Boolean(wallet) === connected) return;
+        connected = Boolean(wallet);
+        if (wallet) track("wallet_connected", { wallet_app: wallet.device?.appName, chain: wallet.account?.chain });
+        else track("wallet_disconnected");
+      });
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [tonConnectUI]);
+  return null;
+}
+
 // The brand paper behind Telegram's own header and overscroll, per theme
 // (the --bg values of globals.css).
 const BRAND_BG = { light: "#f7f5ef", dark: "#171c19" };
@@ -160,6 +187,9 @@ function Gate({ children }) {
   useLayoutEffect(() => {
     if (initResult) applyTelegramLocale(initResult.initData?.user?.languageCode);
   }, [initResult]);
+  useEffect(() => {
+    if (initResult) identifyTelegramUser(initResult.initData, launchParams());
+  }, [initResult]);
   if (initResult) {
     return (
       <>
@@ -189,10 +219,19 @@ export function AppShell({ children }) {
       <TonConnectUIProvider manifestUrl={MANIFEST_URL} language={locale}>
         <HtmlLang />
         <TonConnectLanguage />
+        <WalletAnalytics />
         <Gate>{children}</Gate>
       </TonConnectUIProvider>
     </SDKProvider>
   );
+}
+
+function launchParams() {
+  try {
+    return retrieveLaunchParams();
+  } catch {
+    return null;
+  }
 }
 
 // Runs a Telegram bridge call; outside Telegram (or on clients lacking the

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Address } from "@ton/core";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
+import { track } from "@/lib/analytics";
 import { apiFetch, sendTonTransaction, shortenAddress, sleep } from "@/lib/client-api";
 import { formatDate, formatExact } from "@/lib/format";
 import { intlLocale } from "@/lib/i18n";
@@ -488,6 +489,7 @@ export function PointPrice({ chatId, initDataRaw }) {
     setNotice(null);
     try {
       const res = await apiFetch("/api/point-price", { method: "POST", initDataRaw, body: { chatId, ...body } });
+      track("point_price_changed", { chat_id: chatId, action, scheduled: Boolean(res.pending) });
       apply(res);
       haptic("success");
       setNotice({ kind: "ok", text: onDone(res) });

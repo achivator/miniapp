@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Address } from "@ton/core";
 import { useInitDataRaw } from "@/components/TelegramSDK";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
+import { failure, track } from "@/lib/analytics";
 import { apiFetch, sendTonTransaction, shortenAddress, sleep } from "@/lib/client-api";
 import { formatExact } from "@/lib/format";
 import { useI18n } from "@/lib/use-locale";
@@ -140,11 +141,14 @@ function PoolManager({ chatId }) {
       return;
     }
     setBusy(action);
+    track("pool_action_started", { chat_id: chatId, action });
     try {
       await fn();
+      track("pool_action_sent", { chat_id: chatId, action });
     } catch (e) {
       haptic("error");
       setNotice({ kind: "err", text: e.message });
+      track("pool_action_failed", { chat_id: chatId, action, ...failure(e) });
     } finally {
       setBusy(null);
     }

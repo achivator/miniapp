@@ -37,7 +37,9 @@ Pull requests run step 1 only.
      Telegram sends the payment to the bot that created the invoice.
    - Tick **"Is Build Variable?"** for `NEXT_PUBLIC_MASTER_ADDRESS`,
      `NEXT_PUBLIC_TON_NETWORK`, `JETTONS_PER_POINT`,
-     `SUBSCRIPTIONS_ENABLED`, `TRIAL_DAYS` and `SUBSCRIPTION_TIERS`. The
+     `SUBSCRIPTIONS_ENABLED`, `TRIAL_DAYS`, `SUBSCRIPTION_TIERS` and, for
+     PostHog analytics, `NEXT_PUBLIC_POSTHOG_KEY` (and
+     `NEXT_PUBLIC_POSTHOG_HOST` if set). The
      `NEXT_PUBLIC_*` values are inlined into the browser bundle, and the
      landing page is prerendered at build time with the rate, network and
      subscription prices. Without the tick the landing page shows the defaults from the
