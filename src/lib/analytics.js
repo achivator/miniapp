@@ -1,5 +1,6 @@
 import posthog from "posthog-js";
 import { isTelegramLaunch } from "./launch";
+import { takeReferrer } from "./locale";
 
 // Product analytics (PostHog), in the browser only. Off unless
 // NEXT_PUBLIC_POSTHOG_KEY is set at build time: NEXT_PUBLIC_* values are
@@ -15,6 +16,7 @@ let started = false;
 export function initAnalytics() {
   if (started || !KEY || typeof window === "undefined") return;
   started = true;
+  safely(restoreReferrer);
   safely(() => {
     posthog.init(KEY, {
       api_host: HOST,
@@ -25,6 +27,15 @@ export function initAnalytics() {
     });
     posthog.register({ launch: isTelegramLaunch() ? "telegram" : "web" });
   });
+}
+
+// After the redirect of "/" or "/help", the visitor's real referrer instead of
+// our own "/" (see takeReferrer in lib/locale.js), where PostHog reads it:
+// $referrer, $initial_referrer and the session's entry referrer.
+function restoreReferrer() {
+  const referrer = takeReferrer(window.sessionStorage, window.location.pathname);
+  if (referrer === null) return;
+  Object.defineProperty(document, "referrer", { configurable: true, get: () => referrer });
 }
 
 // The Telegram user behind the app screens, by their Telegram id (the same id

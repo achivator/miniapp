@@ -12,6 +12,8 @@ const STORAGE_KEY = "achivator-lang";
 // the Telegram session (sessionStorage) once the app has read it from the
 // launch params (AppShell), so full page loads start in it too.
 const TELEGRAM_KEY = "achivator-tg-lang";
+// The referrer of "/" or "/help", kept across the redirect (see takeReferrer).
+const REFERRER_KEY = "achivator-referrer";
 
 // Web pages that exist in every locale, as the suffix after /ru or /en. The
 // bare path (without a locale) redirects to the visitor's language. Any other
@@ -50,8 +52,28 @@ if(l!=="ru"&&l!=="en"){try{l=sessionStorage.getItem("${TELEGRAM_KEY}")}catch(e){
 if(l!=="ru"&&l!=="en"){l=/^ru\\b/i.test(navigator.language||"")?"ru":"en"}}
 d.dataset.lang=l;
 var t=p==="/help"?"/help":p==="/"&&d.dataset.launch!=="telegram"?"":null;
-if(t!==null){s.delete("lang");s=s.toString();d.dataset.redirect="";location.replace("/"+l+t+(s?"?"+s:"")+location.hash.replace(${LEGACY_ANCHOR},"#"))}
+if(t!==null){s.delete("lang");s=s.toString();d.dataset.redirect="";
+try{sessionStorage.setItem("${REFERRER_KEY}",JSON.stringify({referrer:document.referrer,to:"/"+l+t}))}catch(e){}
+location.replace("/"+l+t+(s?"?"+s:"")+location.hash.replace(${LEGACY_ANCHOR},"#"))}
 }catch(e){}`;
+
+// The redirect of "/" and "/help" (LOCALE_SCRIPT) is a location.replace(), so
+// the localized page it loads has "/" (or "/help") as its document.referrer,
+// and the visitor's real referrer (a search engine, an ad, a link) would be
+// lost to analytics. The script keeps it for the page it goes to: this returns
+// it once, on that page (a string, "" for a direct visit), or null anywhere
+// else. Takes the storage and pathname to be testable.
+export function takeReferrer(storage, pathname) {
+  let saved = null;
+  try {
+    saved = JSON.parse(storage.getItem(REFERRER_KEY));
+    storage.removeItem(REFERRER_KEY);
+  } catch {
+    return null;
+  }
+  if (!saved || saved.to !== pathname || typeof saved.referrer !== "string") return null;
+  return saved.referrer;
+}
 
 // The language the visitor asked for: ?lang= in the URL or a saved pick.
 export function explicitLocale() {
