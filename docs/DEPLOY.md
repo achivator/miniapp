@@ -115,7 +115,14 @@ routes them to this application like any other request.
    `Server's ADNL address ADNL_address=…` and then `Starting server`. On
    dns.ton.org, connect the wallet that owns `achivator.ton`, open the domain,
    paste that address into **Site** and save (one transaction).
-5. **Check**: send `achivator.ton` in a Telegram chat and open it.
+5. **Check**: send `achivator.ton` in a Telegram chat and open it. Coolify
+   shows "DNS mismatch" for `http://achivator.ton`: it checks the ordinary
+   DNS, where `.ton` does not exist. Ignore it.
+
+Without requests in the log there is no telling whether any reached the
+proxy: set `PROXY_DEBUG=true` on the resource and restart it to log every
+RLDP-HTTP request and connection. A `502` page from `nginx` in Telegram is
+Telegram's TON gateway failing to reach the proxy.
 
 The compose file runs the proxy without its `-domain` flag on purpose. That
 check reads the record from public liteservers before the proxy starts
