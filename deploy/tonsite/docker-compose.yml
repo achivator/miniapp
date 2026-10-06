@@ -1,0 +1,36 @@
+# Coolify resource "Docker Compose" with base directory /deploy/tonsite
+# (docs/DEPLOY.md, "TON Site (achivator.ton)"). Locally:
+#   EXTERNAL_IP=<public ip> docker compose up -d --build
+services:
+  tonsite:
+    build: .
+    restart: unless-stopped
+    # -domain checks on every start that achivator.ton's "site" record holds
+    # this proxy's ADNL address. If it does not, the proxy prints a ton://
+    # transfer link in the log and waits until the domain owner's wallet sends
+    # it; once the record matches it just logs that and starts serving.
+    command: ["-tx-url", "-domain", "${TON_DOMAIN:-achivator.ton}"]
+    environment:
+      # The address announced to the TON network: the server's public IP and
+      # the UDP port published below (the same number inside and outside).
+      # The first start also asks api.ipify.org and saves the answer to
+      # config.json; EXTERNAL_IP, when set, wins over it.
+      - EXTERNAL_IP=${EXTERNAL_IP:-}
+      - LISTEN_PORT=${LISTEN_PORT:-13333}
+      # Coolify's Traefik on the coolify network. It routes by Host, and the
+      # proxy keeps the visitor's Host (achivator.ton), so the mini app's
+      # Coolify resource needs http://achivator.ton among its domains.
+      - PROXY_PASS=${PROXY_PASS:-http://coolify-proxy:80/}
+    ports:
+      - "${LISTEN_PORT:-13333}:${LISTEN_PORT:-13333}/udp"
+    volumes:
+      - tonsite-data:/data
+    networks:
+      - coolify
+
+volumes:
+  tonsite-data:
+
+networks:
+  coolify:
+    external: true

@@ -75,3 +75,52 @@ API to the internet.
 Coolify keeps the previous images: Deployments → pick an earlier one →
 Redeploy/Rollback. Reverting the commit on `master` also works: CI then
 deploys the revert like any other merge.
+
+## TON Site (achivator.ton)
+
+`achivator.ton` serves the same site as `https://achivator.cc` inside the TON
+network: Telegram opens `.ton` links in its in-app browser through its own
+TON proxy, Tonkeeper and TON Proxy users can open it too. It is the landing,
+not the Mini App: Telegram passes `tgWebAppData` only to a launch from the
+bot, so `/` shows the web start screen and its "Open in Telegram" button.
+
+`deploy/tonsite` runs
+[tonutils-reverse-proxy](https://github.com/tonutils/reverse-proxy), pinned
+to a release in its `Dockerfile`. It takes RLDP-HTTP requests on a UDP port
+and forwards them, with `Host: achivator.ton`, to Coolify's Traefik, which
+routes them to this application like any other request.
+
+1. **This application**: add `http://achivator.ton` to Domains, after
+   `https://achivator.cc` (comma-separated). `http://`, so Coolify does not
+   ask Let's Encrypt for a certificate it can never get. To check the route on
+   the server: `curl -H 'Host: achivator.ton' http://127.0.0.1/` returns the
+   start page.
+2. **Resource**: New Resource → Docker Compose → this repository, branch
+   `master`, base directory `/deploy/tonsite`, `docker-compose.yml`.
+   Variables:
+   - `EXTERNAL_IP`: the server's public IPv4. A TON Site needs a public
+     ("white") IP.
+   - `LISTEN_PORT` (optional, default `13333`): the UDP port, the same inside
+     the container and outside.
+   - `TON_DOMAIN` (optional, default `achivator.ton`).
+   The compose file joins the external `coolify` network to reach
+   `coolify-proxy` (Traefik); `PROXY_PASS` overrides the target.
+3. **Firewall**: allow inbound UDP on `LISTEN_PORT`, on the server and in the
+   cloud provider's firewall. Outbound TCP/UDP must be open (liteservers, DHT).
+4. **Link the domain** (once): deploy and open the logs. The proxy prints its
+   ADNL address and a `ton://transfer/…` link to the domain's NFT that sets the
+   "site" record (0.02 TON). Open it with the wallet that owns
+   `achivator.ton`; about 10 seconds after the transaction the log says
+   "Domain successfully configured" and the site starts serving. Every later
+   start only checks the record ("already configured"). Until the record
+   matches, the proxy waits and serves nothing.
+5. **Check**: send `achivator.ton` in a Telegram chat and open it.
+
+The site's identity is the ADNL key in `config.json` on the `tonsite-data`
+volume. Back it up: a lost key means a new ADNL address, the domain points
+at the old one, and step 4 has to be repeated (the proxy prints the link
+again by itself). The key can also live in Coolify as `PRIVATE_KEY` (the
+`private_key` value of `config.json`, base64), which then wins over the file.
+
+Renew `achivator.ton` at least once a year (Renew on dns.ton.org with the
+owner wallet): an expired domain resolves nothing and goes back to auction.
