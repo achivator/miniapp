@@ -10,7 +10,9 @@ services:
     # liteservers often lack the newest shard block ("code 651 ... not in
     # db"), so the proxy never got to serve. Serving needs only the DHT, and
     # the record is set once by hand (docs/DEPLOY.md).
-    command: ["-tx-url"]
+    # PROXY_DEBUG=true logs every RLDP-HTTP request and connection; the
+    # default log says nothing per request.
+    command: ["-tx-url", "-debug=${PROXY_DEBUG:-false}"]
     environment:
       # The address announced to the TON network: the server's public IP and
       # the UDP port published below (the same number inside and outside).
