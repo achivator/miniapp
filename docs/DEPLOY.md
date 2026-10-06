@@ -102,7 +102,6 @@ routes them to this application like any other request.
      ("white") IP.
    - `LISTEN_PORT` (optional, default `13333`): the UDP port, the same inside
      the container and outside.
-   - `TON_DOMAIN` (optional, default `achivator.ton`).
    The compose file joins the external `coolify` network to reach
    `coolify-proxy` (Traefik); `PROXY_PASS` overrides the target.
 3. **Firewall**: inbound UDP on `LISTEN_PORT` must reach the server. Coolify
@@ -111,26 +110,22 @@ routes them to this application like any other request.
    `ufw`, so what usually blocks it is the cloud provider's firewall (Hetzner
    Cloud Firewall, AWS security group, DigitalOcean Cloud Firewall…): add an
    inbound rule UDP 13333 from any address. Outbound TCP/UDP must be open
-   (liteservers, DHT).
-4. **Link the domain** (once): deploy and open the logs. The proxy prints its
-   ADNL address and a `ton://transfer/…` link to the domain's NFT that sets the
-   "site" record (0.02 TON). Open it with the wallet that owns
-   `achivator.ton`; about 10 seconds after the transaction the log says
-   "Domain successfully configured" and the site starts serving. Every later
-   start only checks the record ("already configured"). Until the record
-   matches, the proxy waits and serves nothing.
+   (DHT).
+4. **Link the domain** (once): deploy; the log shows
+   `Server's ADNL address ADNL_address=…` and then `Starting server`. On
+   dns.ton.org, connect the wallet that owns `achivator.ton`, open the domain,
+   paste that address into **Site** and save (one transaction).
 5. **Check**: send `achivator.ton` in a Telegram chat and open it.
 
-A domain check stuck on `code 651 … is not in db (possibly out of sync)`, or
-`Execute transaction from wallet: NONE` for a domain that has an owner, is a
-lagging liteserver: the proxy asks one liteserver for the whole check.
-`NETWORK_CONFIG_URL` (default: the tonutils liteserver config from the
-proxy's FAQ) chooses the list; a restart picks a liteserver again.
+The compose file runs the proxy without its `-domain` flag on purpose. That
+check reads the record from public liteservers before the proxy starts
+serving and retries until it gets an answer; on a busy network they often
+lack the newest shard block (`code 651 … is not in db (possibly out of
+sync)`), so the proxy never served. It also read the owner as `NONE`.
 
 The site's identity is the ADNL key in `config.json` on the `tonsite-data`
 volume. Back it up: a lost key means a new ADNL address, the domain points
-at the old one, and step 4 has to be repeated (the proxy prints the link
-again by itself). The key can also live in Coolify as `PRIVATE_KEY` (the
+at the old one, and step 4 has to be repeated with the new address. The key can also live in Coolify as `PRIVATE_KEY` (the
 `private_key` value of `config.json`, base64), which then wins over the file.
 
 Renew `achivator.ton` at least once a year (Renew on dns.ton.org with the
