@@ -5,11 +5,12 @@ services:
   tonsite:
     build: .
     restart: unless-stopped
-    # -domain checks on every start that achivator.ton's "site" record holds
-    # this proxy's ADNL address. If it does not, the proxy prints a ton://
-    # transfer link in the log and waits until the domain owner's wallet sends
-    # it; once the record matches it just logs that and starts serving.
-    command: ["-tx-url", "-domain", "${TON_DOMAIN:-achivator.ton}"]
+    # No -domain: that check asks liteservers for the domain's record before
+    # the proxy starts serving, and retries until it gets an answer. Public
+    # liteservers often lack the newest shard block ("code 651 ... not in
+    # db"), so the proxy never got to serve. Serving needs only the DHT, and
+    # the record is set once by hand (docs/DEPLOY.md).
+    command: ["-tx-url"]
     environment:
       # The address announced to the TON network: the server's public IP and
       # the UDP port published below (the same number inside and outside).
@@ -21,12 +22,8 @@ services:
       # proxy keeps the visitor's Host (achivator.ton), so the mini app's
       # Coolify resource needs http://achivator.ton among its domains.
       - PROXY_PASS=${PROXY_PASS:-http://coolify-proxy:80/}
-      # Liteservers for the domain check. The proxy asks one liteserver for
-      # the whole check, and the official global config lists some that lag
-      # months behind ("code 651 ... not in db"): the check then reads an old
-      # owner and never sees the new record. The proxy's FAQ suggests this
-      # config instead.
-      - NETWORK_CONFIG_URL=${NETWORK_CONFIG_URL:-https://tonutils.com/ls/free-mainnet-config.json}
+      # TON network config (DHT nodes); empty keeps the one in config.json.
+      - NETWORK_CONFIG_URL=${NETWORK_CONFIG_URL:-}
     ports:
       - "${LISTEN_PORT:-13333}:${LISTEN_PORT:-13333}/udp"
     volumes:
