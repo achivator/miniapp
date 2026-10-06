@@ -105,8 +105,13 @@ routes them to this application like any other request.
    - `TON_DOMAIN` (optional, default `achivator.ton`).
    The compose file joins the external `coolify` network to reach
    `coolify-proxy` (Traefik); `PROXY_PASS` overrides the target.
-3. **Firewall**: allow inbound UDP on `LISTEN_PORT`, on the server and in the
-   cloud provider's firewall. Outbound TCP/UDP must be open (liteservers, DHT).
+3. **Firewall**: inbound UDP on `LISTEN_PORT` must reach the server. Coolify
+   has no firewall setting: Docker publishes the port from `ports` itself
+   (`docker ps` shows `0.0.0.0:13333->13333/udp`) and its rules bypass
+   `ufw`, so what usually blocks it is the cloud provider's firewall (Hetzner
+   Cloud Firewall, AWS security group, DigitalOcean Cloud Firewall…): add an
+   inbound rule UDP 13333 from any address. Outbound TCP/UDP must be open
+   (liteservers, DHT).
 4. **Link the domain** (once): deploy and open the logs. The proxy prints its
    ADNL address and a `ton://transfer/…` link to the domain's NFT that sets the
    "site" record (0.02 TON). Open it with the wallet that owns
@@ -115,6 +120,12 @@ routes them to this application like any other request.
    start only checks the record ("already configured"). Until the record
    matches, the proxy waits and serves nothing.
 5. **Check**: send `achivator.ton` in a Telegram chat and open it.
+
+A domain check stuck on `code 651 … is not in db (possibly out of sync)`, or
+`Execute transaction from wallet: NONE` for a domain that has an owner, is a
+lagging liteserver: the proxy asks one liteserver for the whole check.
+`NETWORK_CONFIG_URL` (default: the tonutils liteserver config from the
+proxy's FAQ) chooses the list; a restart picks a liteserver again.
 
 The site's identity is the ADNL key in `config.json` on the `tonsite-data`
 volume. Back it up: a lost key means a new ADNL address, the domain points

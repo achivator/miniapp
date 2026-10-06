@@ -21,6 +21,12 @@ services:
       # proxy keeps the visitor's Host (achivator.ton), so the mini app's
       # Coolify resource needs http://achivator.ton among its domains.
       - PROXY_PASS=${PROXY_PASS:-http://coolify-proxy:80/}
+      # Liteservers for the domain check. The proxy asks one liteserver for
+      # the whole check, and the official global config lists some that lag
+      # months behind ("code 651 ... not in db"): the check then reads an old
+      # owner and never sees the new record. The proxy's FAQ suggests this
+      # config instead.
+      - NETWORK_CONFIG_URL=${NETWORK_CONFIG_URL:-https://tonutils.com/ls/free-mainnet-config.json}
     ports:
       - "${LISTEN_PORT:-13333}:${LISTEN_PORT:-13333}/udp"
     volumes:
