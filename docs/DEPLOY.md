@@ -78,13 +78,11 @@ deploys the revert like any other merge.
 
 ## TON Site (achivator.ton)
 
-`achivator.ton` is reachable inside the TON network: Telegram opens `.ton`
-links in its in-app browser through its own TON proxy, Tonkeeper and TON
-Proxy users can open it too. A page opened that way gets no `tgWebAppData`
-(Telegram passes it only to a launch from the bot), so `src/middleware.js`
-answers every request for that host with a 302 to
-`https://t.me/achivator_bot/app`, keeping a valid `?startapp=`
-(`src/lib/ton-site.js`).
+`achivator.ton` serves the same site as `https://achivator.cc` inside the TON
+network: Telegram opens `.ton` links in its in-app browser through its own
+TON proxy, Tonkeeper and TON Proxy users can open it too. It is the landing,
+not the Mini App: Telegram passes `tgWebAppData` only to a launch from the
+bot, so `/` shows the web start screen and its "Open in Telegram" button.
 
 `deploy/tonsite` runs
 [tonutils-reverse-proxy](https://github.com/tonutils/reverse-proxy), pinned
