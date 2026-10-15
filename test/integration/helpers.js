@@ -30,6 +30,8 @@ function address(tag) {
 
 const MASTER_ADDRESS = address('distributor-master');
 
+const hex256 = (value) => '0x' + BigInt(value).toString(16).padStart(64, '0');
+
 Object.assign(process.env, {
     TELEGRAM_BOT_TOKEN: BOT_TOKEN,
     BACKEND_SECRET: crypto.createHash('sha256').update('integration-backend-key').digest('hex'),
@@ -39,7 +41,16 @@ Object.assign(process.env, {
     POINT_PRICE_NOTICE_DAYS: '7',
     MATURATION_DAYS: '3',
 });
-for (const key of ['DEV_TELEGRAM_USER_ID', 'NEXT_PUBLIC_MASTER_ADDRESS', 'TONCENTER_URL', 'TONCENTER_API_KEY', 'SUBSCRIPTIONS_ENABLED']) {
+for (const key of [
+    'DEV_TELEGRAM_USER_ID',
+    'NEXT_PUBLIC_MASTER_ADDRESS',
+    'TONCENTER_URL',
+    'TONCENTER_API_KEY',
+    'SUBSCRIPTIONS_ENABLED',
+    'ACHIEVEMENT_REGISTRY',
+    'ACHIEVEMENT_TEMPLATES',
+    'ACHIEVEMENT_TAG_KEY',
+]) {
     delete process.env[key];
 }
 
@@ -68,6 +79,11 @@ const chain = {
     jettons: new Map(), // jetton master (as stored) -> { decimals, symbol }
     pools: new Map(), // chatId -> pool (see addPool)
     versions: new Map(), // raw address -> version() of another contract (master, registry); default CONTRACTS_VERSION
+    // the achievement registry: v3 templates registered ("0x<key>"), v3 SBTs
+    // that exist ("0x<key>:0x<userTag>"), v2 isMinted ("<templateId>:<tgUserId>")
+    achievementTemplates: new Set(),
+    achievementItems: new Set(),
+    achievementsV2: new Set(),
     hooks: {},
     calls: [],
 
@@ -75,6 +91,9 @@ const chain = {
         this.jettons.clear();
         this.pools.clear();
         this.versions.clear();
+        this.achievementTemplates.clear();
+        this.achievementItems.clear();
+        this.achievementsV2.clear();
         this.hooks = {};
         this.calls.length = 0;
     },
@@ -160,6 +179,17 @@ const ton = {
         const pool = chain.poolAt(poolAddress);
         return { paused: pool.paused, limit: pool.limit, claimableToday: pool.claimableToday };
     },
+    // v2 registry getter isMinted(templateId, tgUserId)
+    async fetchIsMinted(_registry, templateId, tgUserId) {
+        return chain.achievementsV2.has(`${templateId}:${tgUserId}`);
+    },
+    // v3 registry: whether the template / the SBT account exists
+    async fetchTemplateRegistered(_registry, templateKey) {
+        return chain.achievementTemplates.has(hex256(templateKey));
+    },
+    async fetchAchievementMinted(_registry, templateKey, userTag) {
+        return chain.achievementItems.has(`${hex256(templateKey)}:${hex256(userTag)}`);
+    },
     // Raw getters, in toncenter's stack format (the real stackItemTo* parse them).
     async runGetMethod(addr, method, stack = []) {
         const pool = chain.poolAt(addr);
@@ -188,6 +218,8 @@ stubExports(
         'fetchPoolLedgerBalance',
         'fetchPoolClaimControls',
         'fetchIsMinted',
+        'fetchTemplateRegistered',
+        'fetchAchievementMinted',
         'fetchContractVersion',
         'getPoolStatus',
     ],
