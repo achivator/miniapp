@@ -18,6 +18,7 @@ const { test, before, beforeEach, after } = require('node:test');
 const { Address, beginCell } = require('@ton/core');
 
 const SRC = path.join(__dirname, '..', '..', 'src');
+const { CONTRACTS_VERSION } = require(path.join(SRC, 'lib/ton/constants.js'));
 
 // ---- environment: set before any src module reads it ----
 
@@ -66,12 +67,14 @@ function stubExports(file, names, impl, hooks) {
 const chain = {
     jettons: new Map(), // jetton master (as stored) -> { decimals, symbol }
     pools: new Map(), // chatId -> pool (see addPool)
+    versions: new Map(), // raw address -> version() of another contract (master, registry); default CONTRACTS_VERSION
     hooks: {},
     calls: [],
 
     reset() {
         this.jettons.clear();
         this.pools.clear();
+        this.versions.clear();
         this.hooks = {};
         this.calls.length = 0;
     },
@@ -82,12 +85,24 @@ const chain = {
     },
 
     // A deployed ChatPool. Amounts are jetton units (BigInt); limit 0 means
-    // the default daily share.
-    addPool(chatId, { active = true, ledger = 10n ** 15n, claimableToday = 10n ** 15n, limit = 0n, paused = false, admin = null } = {}) {
+    // the default daily share; version is what its version() getter says.
+    addPool(
+        chatId,
+        {
+            active = true,
+            ledger = 10n ** 15n,
+            claimableToday = 10n ** 15n,
+            limit = 0n,
+            paused = false,
+            admin = null,
+            version = CONTRACTS_VERSION,
+        } = {},
+    ) {
         const pool = {
             chatId,
             address: Address.parse(address(`pool:${chatId}`)),
             active,
+            version,
             ledger,
             claimableToday,
             limit,
@@ -131,6 +146,13 @@ const ton = {
         if (!pool) return { poolAddress: null, active: false, balance: 0n };
         return { poolAddress: pool.address, active: pool.active, balance: 0n };
     },
+    // Pools answer with their own version; any other contract (the master,
+    // the registry) with chain.versions, or else the backend's.
+    async fetchContractVersion(addr) {
+        const parsed = Address.parse(String(addr));
+        for (const pool of chain.pools.values()) if (pool.address.equals(parsed)) return pool.version;
+        return chain.versions.get(parsed.toRawString()) ?? CONTRACTS_VERSION;
+    },
     async fetchPoolLedgerBalance(poolAddress) {
         return chain.poolAt(poolAddress).ledger;
     },
@@ -166,6 +188,7 @@ stubExports(
         'fetchPoolLedgerBalance',
         'fetchPoolClaimControls',
         'fetchIsMinted',
+        'fetchContractVersion',
         'getPoolStatus',
     ],
     ton,

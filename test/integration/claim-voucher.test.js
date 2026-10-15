@@ -4,6 +4,9 @@
 // stops concurrent claims from issuing two vouchers for the same points.
 const h = require('./helpers');
 const assert = require('node:assert/strict');
+const { Cell, beginCell } = require('@ton/core');
+const { keyPairFromSeed, signVerify } = require('@ton/crypto');
+const { GLOBAL_ID, VOUCHER_TAG } = require('../../src/lib/ton/constants');
 
 const { itest, seed, chain, callApi, getCollection, ago, address } = h;
 
@@ -246,6 +249,51 @@ itest('claims are refused while paused by the chat admin, and without an active 
     assert.equal(noPool.status, 409);
     assert.match(noPool.body.error, /not activated/);
 
+    assert.equal((await rewardsOf()).claimed_points, 0);
+    assert.equal((await claimDocs()).length, 0);
+});
+
+// ---- the envelope follows the pool's protocol version (X-2) ----
+
+// The claim body: opcode, ref(voucher), 512-bit signature.
+function signedClaim(res) {
+    const body = Cell.fromBase64(res.body.payload_b64).beginParse();
+    body.loadUint(32);
+    return { voucher: body.loadRef(), signature: body.loadBuffer(64) };
+}
+const backendPublicKey = () => keyPairFromSeed(Buffer.from(process.env.BACKEND_SECRET, 'hex')).publicKey;
+const envelope = (pool, voucher, globalId) => {
+    const b = beginCell().storeUint(VOUCHER_TAG.Claim, 32);
+    if (globalId !== undefined) b.storeInt(globalId, 32);
+    return b.storeAddress(pool.address).storeRef(voucher).endCell();
+};
+
+itest('a v3 pool gets a claim signed for the configured network (testnet), useless on mainnet', async () => {
+    const pool = await seedAfterDecrease();
+    const res = await claim();
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const { voucher, signature } = signedClaim(res);
+    assert.ok(signVerify(envelope(pool, voucher, GLOBAL_ID.testnet).hash(), signature, backendPublicKey()));
+    assert.ok(!signVerify(envelope(pool, voucher, GLOBAL_ID.mainnet).hash(), signature, backendPublicKey()));
+    assert.ok(!signVerify(envelope(pool, voucher).hash(), signature, backendPublicKey()));
+});
+
+itest('a legacy v2 pool still gets a claim, in the network-less v2 envelope', async () => {
+    const pool = await seedAfterDecrease();
+    pool.version = 2;
+    const res = await claim();
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const { voucher, signature } = signedClaim(res);
+    assert.ok(signVerify(envelope(pool, voucher).hash(), signature, backendPublicKey()));
+    assert.ok(!signVerify(envelope(pool, voucher, GLOBAL_ID.testnet).hash(), signature, backendPublicKey()));
+});
+
+itest('a pool of a version the backend cannot sign for gets no voucher and keeps the points', async () => {
+    const pool = await seedAfterDecrease();
+    pool.version = 1;
+    const res = await claim();
+    assert.equal(res.status, 409, JSON.stringify(res.body));
+    assert.match(res.body.error, /contract version/);
     assert.equal((await rewardsOf()).claimed_points, 0);
     assert.equal((await claimDocs()).length, 0);
 });

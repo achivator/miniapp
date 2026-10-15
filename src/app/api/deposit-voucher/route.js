@@ -5,7 +5,7 @@ import { getTonConfig } from "@/lib/ton/config";
 import { fetchContractVersion, fetchJettonMetadata, fetchJettonWalletAddress, getPoolStatus } from "@/lib/ton/rpc";
 import { buildDepositVoucherCell, buildDepositForwardPayload, buildJettonTransferBody, signVoucher, defaultExpiry } from "@/lib/ton/vouchers";
 import { parseUnits } from "@/lib/ton/amounts";
-import { CONTRACTS_VERSION, GAS, VOUCHER_TAG } from "@/lib/ton/constants";
+import { GAS, SIGNABLE_VERSIONS, VOUCHER_TAG } from "@/lib/ton/constants";
 import { runGetMethod, stackItemToAddress, stackItemToBigInt } from "@/lib/ton/rpc";
 import { Address } from "@ton/core";
 
@@ -67,16 +67,20 @@ export async function POST(request) {
   if (!pool.poolAddress || !pool.active) {
     return Response.json({ error: "pool is not activated yet; activate it first" }, { status: 409 });
   }
-  // A pool of another protocol version rejects this voucher and refunds the
-  // jettons, after the creator has paid the gas: refuse before the wallet opens.
+  // The voucher is signed in the envelope of the pool's own protocol version.
+  // A pool of a version the backend cannot sign for would reject it and
+  // refund the jettons after the creator has paid the gas: refuse before the
+  // wallet opens.
   let poolVersion;
   try {
     poolVersion = await fetchContractVersion(pool.poolAddress);
   } catch (e) {
     return Response.json({ error: `TON RPC failed: ${e.message}` }, { status: 502 });
   }
-  if (poolVersion !== CONTRACTS_VERSION) {
-    console.error(`chat ${chatId}: deposit refused, pool v${poolVersion} but backend v${CONTRACTS_VERSION}`);
+  if (!SIGNABLE_VERSIONS.includes(poolVersion)) {
+    console.error(
+      `chat ${chatId}: deposit refused, pool v${poolVersion} but backend signs v${SIGNABLE_VERSIONS.join("/")}`,
+    );
     return Response.json(
       { error: "this pool runs an outdated contract version and would refund the deposit", pool_version: poolVersion },
       { status: 409 },
@@ -133,6 +137,8 @@ export async function POST(request) {
     const signature = signVoucher(voucher, process.env.BACKEND_SECRET, {
       tag: VOUCHER_TAG.Deposit,
       target: pool.poolAddress,
+      version: poolVersion,
+      globalId: cfg.globalId,
     });
     const forwardPayload = buildDepositForwardPayload(voucher, signature);
     // Gas only, no fee: the jetton wallet and the pool send back what they

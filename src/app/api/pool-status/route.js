@@ -11,7 +11,7 @@ import {
   stackItemToAddress,
 } from "@/lib/ton/rpc";
 import { buildCreatePoolBody } from "@/lib/ton/vouchers";
-import { CONTRACTS_VERSION, GAS } from "@/lib/ton/constants";
+import { CONTRACTS_VERSION, GAS, SIGNABLE_VERSIONS } from "@/lib/ton/constants";
 import { getChatMemberCount } from "@/lib/telegram";
 import { limitRestore } from "@/lib/payout-coverage";
 import { upcomingPointPrice } from "@/lib/point-price";
@@ -63,10 +63,11 @@ export async function GET(request) {
     return Response.json({ error: `TON RPC failed: ${e.message}` }, { status: 502 });
   }
 
-  // Contracts are immutable: a master or pool of another protocol version
-  // rejects what this backend signs (a deposit comes back as a refund). The
-  // page warns instead of offering what would fail; the deposit route
-  // refuses on its own as well.
+  // Contracts are immutable: a master or pool of a protocol version the
+  // backend cannot sign for (SIGNABLE_VERSIONS) rejects every voucher (a
+  // deposit comes back as a refund). The page warns instead of offering what
+  // would fail; the voucher routes refuse on their own as well. Legacy v2
+  // contracts are still served, in their own (network-less) envelope.
   const contracts = { expected: CONTRACTS_VERSION, master: null, pool: null };
   try {
     contracts.master = await fetchContractVersion(cfg.masterAddress);
@@ -74,10 +75,10 @@ export async function GET(request) {
   } catch (e) {
     console.error(`contract version check failed for chat ${chatId}:`, e.message);
   }
-  contracts.outdated = [contracts.master, contracts.pool].some((v) => v !== null && v !== CONTRACTS_VERSION);
+  contracts.outdated = [contracts.master, contracts.pool].some((v) => v !== null && !SIGNABLE_VERSIONS.includes(v));
   if (contracts.outdated) {
     console.error(
-      `chat ${chatId}: contracts outdated (master v${contracts.master}, pool v${contracts.pool}, backend v${CONTRACTS_VERSION})`,
+      `chat ${chatId}: contracts outdated (master v${contracts.master}, pool v${contracts.pool}, backend signs v${SIGNABLE_VERSIONS.join("/")})`,
     );
   }
 
@@ -205,7 +206,7 @@ export async function GET(request) {
     contracts,
     // an outdated master would deploy a pool that refunds every deposit
     create_pool_body:
-      !status.active && isCreator && contracts.master === CONTRACTS_VERSION
+      !status.active && isCreator && SIGNABLE_VERSIONS.includes(contracts.master)
         ? buildCreatePoolBody(chatId).toBoc().toString("base64")
         : null,
     create_pool_ton: GAS.createPoolTon,
