@@ -3,14 +3,19 @@ import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { resolveEconomyChatId } from "@/lib/chat-ids";
 import { getTonConfig } from "@/lib/ton/config";
-import { fetchJettonMetadata, fetchPoolClaimControls, getPoolStatus } from "@/lib/ton/rpc";
+import { fetchContractVersion, fetchJettonMetadata, fetchPoolClaimControls, getPoolStatus } from "@/lib/ton/rpc";
 import { claimSettingsOf } from "@/lib/claim-rules";
 import { limitRaiseRecord } from "@/lib/payout-coverage";
 import { decreaseEffectiveAt, noticeEffectiveAt, upcomingPointPrice } from "@/lib/point-price";
 import {
+  buildCancelAdminProposalBody,
+  buildExecuteAdminProposalBody,
+  buildRegisterJettonBody,
   buildSetClaimLimitBody,
   buildSetClaimsPausedBody,
+  buildSweepUntrackedBody,
   buildWithdrawRemainderBody,
+  buildWithdrawTonBody,
 } from "@/lib/ton/vouchers";
 import { parseUnits } from "@/lib/ton/amounts";
 import { GAS } from "@/lib/ton/constants";
@@ -19,8 +24,14 @@ import { loadPlatformDefault } from "@/lib/platform-price";
 export const dynamic = "force-dynamic";
 
 // Builds the pool admin's own transactions: withdraw, pause/resume claims,
-// daily claim limit. Nothing is signed here - the pool only obeys its admin
-// wallet - this keeps the message layouts in one place (lib/ton/vouchers.js).
+// daily claim limit, and on protocol v3 pools: register the chat's jetton
+// (TEP-89, before its first deposit), sweep untracked jettons, withdraw the
+// pool's TON above its reserve, cancel or execute an admin recovery
+// proposal. Nothing is signed here - the pool only obeys its admin wallet
+// (anyone may execute a proposal whose timelock is over) - this keeps the
+// message layouts in one place (lib/ton/vouchers.js).
+const ACTIONS = ["withdraw", "pause", "resume", "limit"];
+const V3_ACTIONS = ["register", "sweep", "withdraw_ton", "cancel_proposal", "execute_proposal"];
 
 // The decrease a limit raised from the price card is for: the pending one,
 // else one requested now (the card offers the raise before it is scheduled).
@@ -77,7 +88,7 @@ export async function POST(request) {
   const body = await request.json().catch(() => null);
   const requestedChatId = Number(body?.chatId);
   const action = String(body?.action || "");
-  if (!Number.isSafeInteger(requestedChatId) || !["withdraw", "pause", "resume", "limit"].includes(action)) {
+  if (!Number.isSafeInteger(requestedChatId) || ![...ACTIONS, ...V3_ACTIONS].includes(action)) {
     return Response.json({ error: "chatId and a valid action are required" }, { status: 400 });
   }
 
@@ -103,6 +114,34 @@ export async function POST(request) {
     Response.json({ ok: true, to: pool.poolAddress.toString(), amount, payload_b64: payload.toBoc().toString("base64") });
 
   if (action === "pause" || action === "resume") return tx(buildSetClaimsPausedBody(action === "pause"));
+
+  if (V3_ACTIONS.includes(action)) {
+    let version;
+    try {
+      version = await fetchContractVersion(pool.poolAddress);
+    } catch (e) {
+      return Response.json({ error: `TON RPC failed: ${e.message}` }, { status: 502 });
+    }
+    if (version < 3) {
+      return Response.json({ error: "this pool's contract version does not support this action" }, { status: 409 });
+    }
+    if (action === "cancel_proposal") return tx(buildCancelAdminProposalBody());
+    if (action === "execute_proposal") return tx(buildExecuteAdminProposalBody(), GAS.proposeAdminTon);
+    if (action === "withdraw_ton") {
+      let tonAmount;
+      let tonTo;
+      try {
+        tonAmount = parseUnits(String(body?.amount ?? ""), 9);
+        tonTo = Address.parse(String(body?.to || ""));
+      } catch {
+        return Response.json({ error: "a TON amount and a valid destination wallet are required" }, { status: 400 });
+      }
+      if (tonAmount <= 0n) return Response.json({ error: "amount must be positive" }, { status: 400 });
+      return tx(buildWithdrawTonBody({ to: tonTo, amount: tonAmount }));
+    }
+    if (!chat.jetton_master) return Response.json({ error: "this chat has no jetton" }, { status: 400 });
+    if (action === "register") return tx(buildRegisterJettonBody(chat.jetton_master), GAS.registerJettonTon);
+  }
 
   // withdraw / limit need the jetton and its decimals
   if (!chat.jetton_master) return Response.json({ error: "this chat has no jetton" }, { status: 400 });
@@ -141,6 +180,10 @@ export async function POST(request) {
     to = Address.parse(String(body?.to || ""));
   } catch {
     return Response.json({ error: "a valid destination wallet is required" }, { status: 400 });
+  }
+  if (action === "sweep") {
+    // jettons outside the ledger (strays, kept underfunded deposits)
+    return tx(buildSweepUntrackedBody({ jettonMaster: chat.jetton_master, amount, to }), GAS.withdrawTon);
   }
   return tx(buildWithdrawRemainderBody({ jettonMaster: chat.jetton_master, amount, to }), GAS.withdrawTon);
 }

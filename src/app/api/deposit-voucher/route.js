@@ -2,11 +2,25 @@ import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { resolveEconomyChatId } from "@/lib/chat-ids";
 import { getTonConfig } from "@/lib/ton/config";
-import { fetchContractVersion, fetchJettonMetadata, fetchJettonWalletAddress, getPoolStatus } from "@/lib/ton/rpc";
-import { buildDepositVoucherCell, buildDepositForwardPayload, buildJettonTransferBody, signVoucher, defaultExpiry } from "@/lib/ton/vouchers";
+import {
+  fetchContractVersion,
+  fetchJettonMetadata,
+  fetchJettonWalletAddress,
+  fetchPoolAdmin,
+  fetchPoolJettonWallet,
+  getPoolStatus,
+} from "@/lib/ton/rpc";
+import {
+  buildDepositVoucherCell,
+  buildDepositForwardPayload,
+  buildJettonTransferBody,
+  buildRegisterJettonBody,
+  signVoucher,
+  defaultExpiry,
+} from "@/lib/ton/vouchers";
 import { parseUnits } from "@/lib/ton/amounts";
 import { GAS, SIGNABLE_VERSIONS, VOUCHER_TAG } from "@/lib/ton/constants";
-import { runGetMethod, stackItemToAddress, stackItemToBigInt } from "@/lib/ton/rpc";
+import { runGetMethod, stackItemToBigInt } from "@/lib/ton/rpc";
 import { Address } from "@ton/core";
 
 export const dynamic = "force-dynamic";
@@ -90,15 +104,27 @@ export async function POST(request) {
   if (metadata.decimals === null) {
     return Response.json({ error: "cannot read this jetton's decimals right now, try again later" }, { status: 502 });
   }
-  // The pool refunds deposits until it has an admin (so a leaked backend key
-  // can never seize a funded pool); do not let the creator pay for a refund.
+  // Deposits are for the pool admin's wallet only (CP-9): a v3 pool refunds
+  // anyone else's, and in a v2 pool they would land in a ledger only the
+  // admin wallet can withdraw. The pool refunds deposits until it has an
+  // admin, too; do not let the creator pay for a refund.
+  let admin;
   try {
-    const admin = stackItemToAddress((await runGetMethod(pool.poolAddress, "poolAdmin", []))[0]);
-    if (!admin) {
-      return Response.json({ error: "register the pool admin wallet first" }, { status: 409 });
-    }
+    admin = await fetchPoolAdmin(pool.poolAddress);
   } catch (e) {
     return Response.json({ error: `TON RPC failed: ${e.message}` }, { status: 502 });
+  }
+  if (!admin) {
+    return Response.json({ error: "register the pool admin wallet first" }, { status: 409 });
+  }
+  if (!admin.equals(walletAddress)) {
+    return Response.json(
+      {
+        error: "only the pool admin wallet can deposit; connect it",
+        admin: admin.toString(),
+      },
+      { status: 409 },
+    );
   }
 
   let amount;
@@ -112,6 +138,32 @@ export async function POST(request) {
   try {
     const poolJettonWallet = await fetchJettonWalletAddress(jettonMaster, pool.poolAddress);
     const userJettonWallet = await fetchJettonWalletAddress(jettonMaster, walletAddress);
+
+    // A v3 pool credits only jettons from the wallet it registered by asking
+    // the jetton master itself (TEP-89): the admin registers the jetton once,
+    // before the first deposit. Hand that transaction out instead.
+    if (poolVersion >= 3) {
+      const registered = await fetchPoolJettonWallet(pool.poolAddress, jettonMaster);
+      if (!registered) {
+        return Response.json(
+          {
+            error: "register this jetton with the pool first",
+            register_jetton: {
+              to: pool.poolAddress.toString(),
+              amount: GAS.registerJettonTon,
+              payload_b64: buildRegisterJettonBody(jettonMaster).toBoc().toString("base64"),
+            },
+          },
+          { status: 409 },
+        );
+      }
+      if (!registered.equals(poolJettonWallet)) {
+        console.error(
+          `chat ${chatId}: pool registered ${registered.toString()} for ${jettonMaster}, master says ${poolJettonWallet.toString()}`,
+        );
+        return Response.json({ error: "the pool's registered jetton wallet does not match the jetton master" }, { status: 409 });
+      }
+    }
 
     // best-effort balance check, the wallet may not be deployed yet
     try {
@@ -128,11 +180,13 @@ export async function POST(request) {
     }
 
     const expiry = defaultExpiry();
+    // v3 names no wallet; v2 pools check the one they are told
     const voucher = buildDepositVoucherCell({
       chatId,
       jettonMaster,
       expectedJettonWallet: poolJettonWallet,
       expiry,
+      version: poolVersion,
     });
     const signature = signVoucher(voucher, process.env.BACKEND_SECRET, {
       tag: VOUCHER_TAG.Deposit,

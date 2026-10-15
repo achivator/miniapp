@@ -74,7 +74,7 @@ export async function POST(request) {
       {
         error: currentAdmin.equals(wallet)
           ? "this wallet is already the pool admin"
-          : "the pool already has an admin wallet; hand over from that wallet",
+          : "the pool already has an admin wallet; hand over from that wallet, or start an admin recovery if it is lost",
         admin: currentAdmin.toString(),
       },
       { status: 409 },

@@ -231,6 +231,62 @@ function PoolManager({ chatId }) {
 
   const adminTx = (body) => apiFetch("/api/pool-admin-tx", { method: "POST", initDataRaw, body: { chatId, ...body } });
 
+  // v3 pools credit deposits only through the wallet they registered by
+  // asking the jetton master (TEP-89): the admin registers the jetton once.
+  const registerJetton = () =>
+    run("register", async () => {
+      const tx = await adminTx({ action: "register" });
+      setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
+      await send(tx);
+      await waitFor(
+        (s) => Boolean(s.jetton_registration?.wallet),
+        bilingual("Пул узнаёт свой кошелёк жетона у его мастер-контракта…", "The pool is asking the jetton master for its wallet…"),
+        bilingual("Жетон подключён. Теперь пул можно пополнять.", "Jetton registered. The pool can be topped up now."),
+      );
+    });
+
+  // Admin recovery (v3 pools): a chat administrator's wallet takes over the
+  // admin slot 7 days after proposing it, unless the current admin cancels.
+  const proposeAdmin = () =>
+    run("recover", async () => {
+      const tx = await apiFetch("/api/admin-recovery", { method: "POST", initDataRaw, body: { chatId, wallet, action: "propose" } });
+      setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
+      await send(tx);
+      await waitFor(
+        (s) => sameAddress(s.admin_proposal?.pending_admin, wallet),
+        bilingual("Отправляем заявку на смену админа…", "Submitting the admin recovery…"),
+        bilingual(
+          "Заявка принята. Через 7 дней этот кошелёк сможет стать админом, если текущий админ её не отменит.",
+          "Recovery started. In 7 days this wallet can take over, unless the current admin cancels it.",
+        ),
+      );
+    });
+
+  const executeAdmin = () =>
+    run("execute", async () => {
+      const tx = await apiFetch("/api/admin-recovery", { method: "POST", initDataRaw, body: { chatId, action: "execute" } });
+      setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
+      await send(tx);
+      const next = info.admin_proposal?.pending_admin;
+      await waitFor(
+        (s) => sameAddress(s.pool_admin, next),
+        bilingual("Передаём роль админа…", "Handing the admin role over…"),
+        bilingual("Админ пула сменён.", "The pool admin has changed."),
+      );
+    });
+
+  const cancelProposal = () =>
+    run("cancel", async () => {
+      const tx = await adminTx({ action: "cancel_proposal" });
+      setNotice({ kind: "info", text: bilingual("Подтвердите в кошельке.", "Confirm in your wallet.") });
+      await send(tx);
+      await waitFor(
+        (s) => !s.admin_proposal?.pending_admin,
+        bilingual("Отменяем заявку…", "Cancelling the recovery…"),
+        bilingual("Заявка на смену админа отменена.", "The admin recovery is cancelled."),
+      );
+    });
+
   const setPaused = (paused) =>
     run("pause", async () => {
       const tx = await adminTx({ action: paused ? "pause" : "resume" });
@@ -317,6 +373,10 @@ function PoolManager({ chatId }) {
   const symbol = info.jetton?.symbol || L("жетонов", "jetton");
   const decimals = info.jetton?.decimals ?? null;
   const isAdminWallet = sameAddress(info.pool_admin, wallet);
+  // v3 pools: null for v2 pools (they take any jetton wallet the backend names)
+  const needsJettonRegistration = Boolean(info.jetton_registration && !info.jetton_registration.wallet);
+  const proposal = info.admin_proposal?.pending_admin ? info.admin_proposal : null;
+  const proposalReady = proposal && proposal.executable_at * 1000 <= Date.now();
 
   return (
     <Screen>
@@ -503,7 +563,27 @@ function PoolManager({ chatId }) {
         </section>
       )}
 
-      {info.is_creator && info.active && info.jetton_master && info.pool_admin && !info.contracts?.outdated && (
+      {info.is_creator && info.active && info.jetton_master && info.pool_admin && isAdminWallet && needsJettonRegistration && (
+        <section className="space-y-2.5">
+          <SectionHeader
+            title={L("Шаг 2 · Жетон пула", "Step 2 · Pool jetton")}
+            hint={L("Нужен до первого пополнения.", "Needed before the first top-up.")}
+          />
+          <Card className="space-y-3">
+            <p className="text-[14px] leading-snug text-hint">
+              {L(
+                `Пул спросит у мастер-контракта ${symbol}, какой кошелёк жетона принадлежит ему, и будет принимать пополнения только с него. Разово: кошелёк отправит ${formatTon(info.register_jetton_ton)} TON, неизрасходованное вернётся.`,
+                `The pool asks the ${symbol} master contract which jetton wallet is its own and accepts top-ups only through it. One-time: your wallet sends ${formatTon(info.register_jetton_ton)} TON; what is not spent comes back.`,
+              )}
+            </p>
+            <Button className="w-full" busy={busy === "register"} disabled={Boolean(busy) || info.jetton_registration.pending} onClick={registerJetton}>
+              {info.jetton_registration.pending ? L("Ждём ответа мастер-контракта…", "Waiting for the jetton master…") : L("Подключить жетон", "Register the jetton")}
+            </Button>
+          </Card>
+        </section>
+      )}
+
+      {info.is_creator && info.active && info.jetton_master && info.pool_admin && isAdminWallet && !needsJettonRegistration && !info.contracts?.outdated && (
         <section className="space-y-2.5">
           <SectionHeader
             title={L("Пополнение", "Top up")}
@@ -535,8 +615,8 @@ function PoolManager({ chatId }) {
           notice={{
             kind: "info",
             text: L(
-              `Вывод и защита пула доступны кошельку ${shortenAddress(info.pool_admin, 5)}. Подключите его, чтобы ими пользоваться.`,
-              `Withdrawals and safety controls belong to ${shortenAddress(info.pool_admin, 5)}. Connect that wallet to use them.`,
+              `Пополнение, вывод и защита пула доступны кошельку ${shortenAddress(info.pool_admin, 5)}. Подключите его, чтобы ими пользоваться.`,
+              `Top-ups, withdrawals and safety controls belong to ${shortenAddress(info.pool_admin, 5)}. Connect that wallet to use them.`,
             ),
           }}
         />
@@ -628,6 +708,52 @@ function PoolManager({ chatId }) {
               <ArrowUp className="h-4 w-4" />
               {L("Вывести на мой кошелёк", "Withdraw to my wallet")}
             </Button>
+          </Card>
+        </section>
+      )}
+
+      {info.active && info.pool_admin && info.admin_proposal && (proposal || (wallet && !isAdminWallet)) && (
+        <section className="space-y-2.5">
+          <SectionHeader
+            title={L("Восстановление админа", "Admin recovery")}
+            hint={L(
+              "Если кошелёк админа потерян: администратор чата назначает свой, через 7 дней.",
+              "If the admin wallet is lost: a chat administrator takes over with their own, after 7 days.",
+            )}
+          />
+          <Card className="space-y-3">
+            {proposal ? (
+              <>
+                <p className="text-[14px] leading-snug text-hint">
+                  {L(
+                    `Кошелёк ${shortenAddress(proposal.pending_admin, 5)} станет админом пула ${t.moment(proposal.executable_at)}, если текущий админ не отменит заявку.`,
+                    `${shortenAddress(proposal.pending_admin, 5)} becomes the pool admin ${t.moment(proposal.executable_at)}, unless the current admin cancels.`,
+                  )}
+                </p>
+                {isAdminWallet && (
+                  <Button variant="danger" className="w-full" busy={busy === "cancel"} disabled={Boolean(busy)} onClick={cancelProposal}>
+                    {L("Отменить заявку", "Cancel the recovery")}
+                  </Button>
+                )}
+                {proposalReady && (
+                  <Button className="w-full" busy={busy === "execute"} disabled={Boolean(busy)} onClick={executeAdmin}>
+                    {L("Завершить смену админа", "Complete the handover")}
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-[14px] leading-snug text-hint">
+                  {L(
+                    `Админ пула — ${shortenAddress(info.pool_admin, 5)}. Если доступа к нему нет, предложите подключённый кошелёк: бот проверит в Telegram, что вы администратор чата. Текущий админ сможет отменить заявку в течение 7 дней.`,
+                    `The pool admin is ${shortenAddress(info.pool_admin, 5)}. If that wallet is lost, propose the connected one: the bot checks with Telegram that you administer the chat. The current admin can cancel within 7 days.`,
+                  )}
+                </p>
+                <Button variant="secondary" className="w-full" busy={busy === "recover"} disabled={Boolean(busy)} onClick={proposeAdmin}>
+                  {L("Предложить этот кошелёк", "Propose this wallet")}
+                </Button>
+              </>
+            )}
           </Card>
         </section>
       )}
