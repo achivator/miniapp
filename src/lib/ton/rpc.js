@@ -162,6 +162,53 @@ async function fetchPoolClaimControls(poolAddress, jettonMaster) {
     };
 }
 
+// ---- protocol v3 pool getters ----
+// They go through module.exports.runGetMethod, so that a stub of it (the
+// integration tests' fake chain) is what they reach.
+
+// The pool's registered wallet of a jetton (RegisterJetton, TEP-89), or null.
+async function fetchPoolJettonWallet(poolAddress, jettonMaster) {
+    const stack = await module.exports.runGetMethod(poolAddress, 'jettonWallet', [
+        addressToStack(Address.parse(jettonMaster.toString())),
+    ]);
+    return stackItemToAddress(stack[0]);
+}
+
+// queryId of an unanswered RegisterJetton, 0n when none.
+async function fetchPendingJettonRegistration(poolAddress, jettonMaster) {
+    const stack = await module.exports.runGetMethod(poolAddress, 'pendingJettonRegistration', [
+        addressToStack(Address.parse(jettonMaster.toString())),
+    ]);
+    return stackItemToBigInt(stack[0]);
+}
+
+// Claim nonce state: 0 unused, 1 used, 2 used but its transfer bounced (the
+// jettons stayed), 3 retired (pruned, outcome no longer known on-chain).
+async function fetchNonceState(poolAddress, nonce) {
+    const stack = await module.exports.runGetMethod(poolAddress, 'nonceState', [['num', String(nonce)]]);
+    return Number(stackItemToBigInt(stack[0]));
+}
+
+// Admin recovery state: { pendingAdmin (Address|null), executableAt (unix
+// seconds, 0 without a proposal), seq (what the next voucher must carry) }.
+async function fetchAdminProposal(poolAddress) {
+    const [pending, at, seq] = await Promise.all([
+        module.exports.runGetMethod(poolAddress, 'pendingAdmin', []),
+        module.exports.runGetMethod(poolAddress, 'pendingAdminExecutableAt', []),
+        module.exports.runGetMethod(poolAddress, 'adminProposalSeq', []),
+    ]);
+    return {
+        pendingAdmin: stackItemToAddress(pending[0]),
+        executableAt: Number(stackItemToBigInt(at[0])),
+        seq: stackItemToBigInt(seq[0]),
+    };
+}
+
+// The pool admin wallet, or null while the slot is empty.
+async function fetchPoolAdmin(poolAddress) {
+    return stackItemToAddress((await module.exports.runGetMethod(poolAddress, 'poolAdmin', []))[0]);
+}
+
 async function fetchIsMinted(registryAddress, templateId, tgUserId) {
     const stack = await runGetMethod(registryAddress, 'isMinted', [
         ['num', String(templateId)],
@@ -334,6 +381,11 @@ module.exports = {
     fetchPoolClaimControls,
     fetchIsMinted,
     fetchContractVersion,
+    fetchPoolJettonWallet,
+    fetchPendingJettonRegistration,
+    fetchNonceState,
+    fetchAdminProposal,
+    fetchPoolAdmin,
     resolveMetadataUrl,
     getPoolStatus,
     stackItemToAddress,
