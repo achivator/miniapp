@@ -170,6 +170,43 @@ async function fetchIsMinted(registryAddress, templateId, tgUserId) {
     return stackItemToBigInt(stack[0]) !== 0n;
 }
 
+// ---- AchievementRegistry v3 (soulbound items) ----
+// uint256 arguments travel as unsigned 0x hex (see addressToStack above).
+const uint256ToStack = (value) => ['num', '0x' + BigInt(value).toString(16)];
+
+// Deterministic addresses: cached for good.
+const registryAddressCache = new Map(); // "registry|getter|args" -> Address
+
+async function registryAddress(registryAddress, getter, args) {
+    const key = `${Address.parse(registryAddress.toString()).toRawString()}|${getter}|${args.join(',')}`;
+    if (!registryAddressCache.has(key)) {
+        const stack = await runGetMethod(registryAddress, getter, args.map(uint256ToStack));
+        registryAddressCache.set(key, stackItemToAddress(stack[0]));
+    }
+    return registryAddressCache.get(key);
+}
+
+// Whether the template of `templateKey` is registered: its contract exists
+// and is initialised. A mint for any other key would bounce.
+async function fetchTemplateRegistered(registryAddress_, templateKey) {
+    const template = await registryAddress(registryAddress_, 'templateAddress', [templateKey]);
+    const info = await getAddressInformation(template);
+    if (info.state !== 'active') return false;
+    const stack = await runGetMethod(template, 'get_template_data', []);
+    return stackItemToBigInt(stack[0]) !== 0n;
+}
+
+// Whether the SBT of (templateKey, userTag) exists: the registry refuses a
+// second one because its address is taken (a frozen item still takes it).
+async function fetchAchievementMinted(registryAddress_, templateKey, userTag) {
+    const item = await registryAddress(registryAddress_, 'itemAddress', [templateKey, userTag]);
+    const info = await getAddressInformation(item);
+    if (info.state === 'frozen') return true;
+    if (info.state !== 'active') return false;
+    const stack = await runGetMethod(item, 'get_nft_data', []);
+    return stackItemToBigInt(stack[0]) !== 0n;
+}
+
 async function getPoolStatus(masterAddress, chatId) {
     const poolAddress = await fetchPoolAddress(masterAddress, chatId);
     if (!poolAddress) return { poolAddress: null, active: false, balance: 0n };
@@ -333,6 +370,8 @@ module.exports = {
     fetchPoolLedgerBalance,
     fetchPoolClaimControls,
     fetchIsMinted,
+    fetchTemplateRegistered,
+    fetchAchievementMinted,
     fetchContractVersion,
     resolveMetadataUrl,
     getPoolStatus,
