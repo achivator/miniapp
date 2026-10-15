@@ -1,3 +1,5 @@
+const { GLOBAL_ID } = require('./constants');
+
 // "v1/programmer" -> templateId in the AchievementRegistry, printed by
 // ton-contracts/scripts/registerTemplates.ts.
 function parseTemplates(raw) {
@@ -17,6 +19,9 @@ function getTonConfig() {
         (network === 'mainnet' ? 'https://toncenter.com' : 'https://testnet.toncenter.com');
     return {
         network,
+        // the network's global id (config param 19), which every voucher is
+        // signed for; null for an unknown network (signing then fails)
+        globalId: Object.hasOwn(GLOBAL_ID, network) ? GLOBAL_ID[network] : null,
         toncenterBase: base.replace(/\/+$/, ''),
         toncenterApiKey: process.env.TONCENTER_API_KEY || '',
         masterAddress: process.env.NEXT_PUBLIC_MASTER_ADDRESS || process.env.MASTER_ADDRESS || '',

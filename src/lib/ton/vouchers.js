@@ -58,18 +58,34 @@ function backendKeyPair(secretHex) {
     return keyPairFromSeed(seed);
 }
 
-// SignedVoucher envelope, byte-equal to storeSignedVoucher from the compiled
-// bindings: uint32 tag, address target, ref(voucher).
-function signedVoucherCell(voucherCell, { tag, target }) {
+// SignedVoucher envelope of the target contract's protocol `version`,
+// byte-equal to storeSignedVoucher from the compiled bindings:
+//   v3: uint32 tag, int32 globalId, address target, ref(voucher)
+//   v2: uint32 tag, address target, ref(voucher)   (legacy, names no network)
+// globalId is the network's config param 19 (GLOBAL_ID), which a v3 contract
+// reads on-chain: a voucher signed for testnet is rejected on mainnet.
+function signedVoucherCell(voucherCell, { tag, target, version, globalId }) {
     if (!Number.isInteger(tag)) throw new Error('voucher tag is required');
     if (!target) throw new Error('voucher target contract is required');
-    return beginCell().storeUint(tag, 32).storeAddress(toAddress(target)).storeRef(voucherCell).endCell();
+    const envelope = beginCell().storeUint(tag, 32);
+    if (version === 3) {
+        if (!Number.isInteger(globalId) || globalId < -(2 ** 31) || globalId >= 2 ** 31) {
+            throw new Error('voucher network globalId is required (NEXT_PUBLIC_TON_NETWORK)');
+        }
+        envelope.storeInt(globalId, 32);
+    } else if (version !== 2) {
+        throw new Error(`cannot sign vouchers for contract version ${version}`);
+    }
+    return envelope.storeAddress(toAddress(target)).storeRef(voucherCell).endCell();
 }
 
 // Signs `voucherCell` as a voucher of kind `tag` for the contract `target`
-// (the pool for deposit/claim/admin vouchers, the registry for achievements).
-function signVoucher(voucherCell, secretHex, { tag, target }) {
-    return sign(signedVoucherCell(voucherCell, { tag, target }).hash(), backendKeyPair(secretHex).secretKey);
+// (the pool for deposit/claim/admin vouchers, the registry for achievements),
+// in the envelope of the target's protocol `version` (its version() getter)
+// for the network `globalId` (getTonConfig().globalId).
+function signVoucher(voucherCell, secretHex, { tag, target, version, globalId }) {
+    const envelope = signedVoucherCell(voucherCell, { tag, target, version, globalId });
+    return sign(envelope.hash(), backendKeyPair(secretHex).secretKey);
 }
 
 // The 513-bit payload (voucher ref + 512-bit signature) cannot ride inline in

@@ -17,13 +17,29 @@ const OP = {
 // Protocol version the backend signs for: what ChatPool, DistributorMaster
 // and AchievementRegistry return from their version() getter
 // (ton-contracts/contracts/voucher.tact ProtocolVersion). Contracts without
-// the getter speak version 1 (the DEP1 deposit voucher with a fee).
-const CONTRACTS_VERSION = 2;
+// the getter speak version 1 (the DEP1 deposit voucher with a fee); 2 dropped
+// every TON fee; 3 binds every voucher to the network (globalId below).
+const CONTRACTS_VERSION = 3;
+
+// Versions the backend still signs for: contracts are immutable, so pools
+// deployed by a v2 master keep verifying the v2 envelope (no network id) for
+// good. Every signature picks its envelope by the target's version().
+const SIGNABLE_VERSIONS = [2, 3];
+
+// Network global ids (config param 19). A v3 contract reads its network's id
+// on-chain and only accepts vouchers signed for it, so a testnet voucher is
+// worthless on mainnet even where the addresses coincide.
+const GLOBAL_ID = {
+    mainnet: -239,
+    testnet: -3,
+};
 
 // Voucher kinds. The backend never signs a bare voucher cell: it signs
-// SignedVoucher{tag, target, ^voucher} (ton-contracts/contracts/voucher.tact),
-// where target is the contract that verifies it. A voucher can therefore not
-// be replayed as another kind or against another pool/registry.
+// SignedVoucher{tag, globalId, target, ^voucher}
+// (ton-contracts/contracts/voucher.tact), where target is the contract that
+// verifies it and globalId the network it runs on. A voucher can therefore
+// not be replayed as another kind, against another pool/registry, or on
+// another network.
 const VOUCHER_TAG = {
     Deposit: 0x44455032, // "DEP2", target = chat pool
     Claim: 0x434c4d31, // "CLM1", target = chat pool
@@ -54,4 +70,4 @@ const SECONDS = {
     mintVoucherTtl: 900,
 };
 
-module.exports = { OP, VOUCHER_TAG, GAS, SECONDS, CONTRACTS_VERSION };
+module.exports = { OP, VOUCHER_TAG, GAS, SECONDS, CONTRACTS_VERSION, SIGNABLE_VERSIONS, GLOBAL_ID };
