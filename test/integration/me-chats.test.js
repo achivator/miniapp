@@ -97,7 +97,9 @@ itest('expired vouchers are settled against the chain: released if unused, confi
     await seed.chat({ id: CHAT, creator: CREATOR, jetton_master: JETTON, claim_settings: { maturation_days: 0 } });
     await seed.grant(CHAT, ALICE, 100, ago(10));
     await seed.rewards(CHAT, ALICE, 100, 100);
-    const expired = nowSec() - 60;
+    // past expiry and the settling margin (a claim sent at the last second
+    // may still be in flight: test/integration/reconcile.test.js)
+    const expired = nowSec() - 900;
     const claims = await getCollection('claims');
     const voucher = (nonce, points) => ({
         chat_id: CHAT,

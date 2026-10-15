@@ -260,7 +260,7 @@ test('fetchContractVersion lets network failures through instead of guessing', a
 
 const { isClaimPaid } = require('../src/lib/rewards');
 
-// A toy chain: masters map chat pools, pools list their used nonces.
+// A toy chain: masters map chat pools, (v2) pools list their used nonces.
 function chainStub({ masters, pools }) {
     const slice = (address) => ['slice', { bytes: beginCell().storeAddress(address).endCell().toBoc().toString('base64') }];
     const key = (address) => Address.parse(address).toRawString();
@@ -273,6 +273,11 @@ function chainStub({ masters, pools }) {
         }
         if (body.method === 'poolAddress') {
             return jsonResponse({ ok: true, result: { exit_code: 0, stack: [slice(masters.get(key(body.address)))] } });
+        }
+        // these pools speak protocol v2 (isNonceUsed); v3 nonceState is
+        // covered by test/reconcile-chain.test.js
+        if (body.method === 'version') {
+            return jsonResponse({ ok: true, result: { exit_code: 0, stack: [['num', '0x2']] } });
         }
         if (body.method === 'isNonceUsed') {
             const used = pools.get(key(body.address))?.has(BigInt(body.stack[0][1]));

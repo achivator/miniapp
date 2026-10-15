@@ -1,6 +1,9 @@
 const { getCollection } = require('./mongo');
 const { getTonConfig } = require('./ton/config');
-const { TonRpcError, runGetMethod, fetchPoolAddress, getAddressInformation, stackItemToBigInt } = require('./ton/rpc');
+const rpc = require('./ton/rpc');
+const { SECONDS } = require('./ton/constants');
+
+const { TonRpcError, runGetMethod, fetchPoolAddress, getAddressInformation, stackItemToBigInt } = rpc;
 
 function nowSeconds() {
     return Math.floor(Date.now() / 1000);
@@ -27,42 +30,82 @@ async function claimPools(claim) {
     return pools;
 }
 
-// Whether the claim's nonce was used on any pool it can have been paid
-// from. A pool that was never deployed has used none, but the claim was
-// issued by a deployed one: with none to ask, nothing can be settled. Throws
-// then, and when the chain cannot be read: the caller keeps the claim issued
-// and retries later.
-async function isClaimPaid(claim) {
+// What one pool says about a claim nonce: 'paid', 'unpaid' or 'unknown'.
+// Protocol v3 pools keep a nonce burnt for good (nonceState): 1 paid; 0
+// never used and 2 bounced (the jettons never left) are unpaid; 3 is retired,
+// its record pruned a week after the claim, so whether it was paid is no
+// longer known on-chain. v2 pools only have isNonceUsed, which a bounce
+// turns back to false (unpaid as well: the jettons stayed).
+async function poolClaimState(pool, nonce) {
+    const version = await rpc.fetchContractVersion(pool);
+    if (version >= 3) {
+        const state = await rpc.fetchNonceState(pool, nonce);
+        if (state === 1) return 'paid';
+        if (state === 3) return 'unknown';
+        return 'unpaid';
+    }
+    return (await isNonceUsedOnChain(pool, nonce)) ? 'paid' : 'unpaid';
+}
+
+// What the chain says about the claim across every pool it can have been
+// paid from: 'paid' when any pool paid it, else 'unknown' when a pool no
+// longer knows, else 'unpaid'. A pool that was never deployed has used none,
+// but the claim was issued by a deployed one: with none to ask, nothing can
+// be settled. Throws then, and when the chain cannot be read: the caller
+// keeps the claim issued and retries later.
+async function claimChainState(claim) {
     let asked = 0;
+    let unknown = false;
     for (const pool of await claimPools(claim)) {
         if ((await getAddressInformation(pool)).state !== 'active') continue;
         asked += 1;
-        if (await isNonceUsedOnChain(pool, claim.nonce)) return true;
+        const state = await poolClaimState(pool, claim.nonce);
+        if (state === 'paid') return 'paid';
+        if (state === 'unknown') unknown = true;
     }
     if (asked === 0) throw new TonRpcError(`no deployed pool to settle claim ${claim.nonce} against`);
-    return false;
+    return unknown ? 'unknown' : 'unpaid';
+}
+
+// Whether the claim's nonce was used on any pool it can have been paid from.
+async function isClaimPaid(claim) {
+    return (await claimChainState(claim)) === 'paid';
 }
 
 // Expired vouchers either got confirmed on-chain before expiry (nonce used ->
-// mark claimed) or were never sent (release the deducted points). The chain is
-// the source of truth, so a released voucher can never be double-claimed.
+// mark claimed) or were never sent or bounced (release the deducted points;
+// a v3 pool never accepts the nonce again, so the member claims anew under a
+// new one). The chain is the source of truth, so a released voucher can never
+// be double-claimed: a voucher is only settled claimReconcileMargin after its
+// expiry, when a claim sent just before it can no longer be in flight (CP-10).
+// A nonce a v3 pool has retired (pruned a week after a claim; the backend
+// normally settles long before) cannot be told apart: its points stay
+// deducted and the claim is marked 'unknown' for a manual look.
 async function reconcileExpiredClaims(chatId, userId) {
     const claims = await getCollection('claims');
     const rewards = await getCollection('rewards');
     const now = nowSeconds();
     const expired = await claims
-        .find({ chat_id: chatId, user_id: userId, status: 'issued', expiry: { $lt: now } })
+        .find({
+            chat_id: chatId,
+            user_id: userId,
+            status: 'issued',
+            expiry: { $lt: now - SECONDS.claimReconcileMargin },
+        })
         .toArray();
 
     for (const claim of expired) {
-        let used = null;
+        let state;
         try {
-            used = await isClaimPaid(claim);
+            state = await claimChainState(claim);
         } catch {
             continue; // chain unreadable: keep the claim issued, retry later
         }
-        if (used) {
+        if (state === 'paid') {
             await claims.updateOne({ _id: claim._id, status: 'issued' }, { $set: { status: 'claimed', resolved_at: now } });
+        } else if (state === 'unknown') {
+            console.error(`claim ${claim.chat_id}/${claim.nonce}: nonce retired on-chain before settling; points kept`);
+            await claims.updateOne({ _id: claim._id, status: 'issued' }, { $set: { status: 'unknown', resolved_at: now } });
         } else {
             // The status flip is the lock: exactly one concurrent reconcile
             // may credit the released points back.
@@ -103,4 +146,12 @@ async function claimPoints(chatId, userId, points, ceiling = Infinity, expectedC
     return res.modifiedCount === 1;
 }
 
-module.exports = { reconcileExpiredClaims, claimPoints, isNonceUsedOnChain, isClaimPaid, claimPools, nowSeconds };
+module.exports = {
+    reconcileExpiredClaims,
+    claimPoints,
+    isNonceUsedOnChain,
+    isClaimPaid,
+    claimChainState,
+    claimPools,
+    nowSeconds,
+};
