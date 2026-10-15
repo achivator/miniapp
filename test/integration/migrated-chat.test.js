@@ -11,7 +11,8 @@ const { Cell } = require('@ton/core');
 const { signVerify } = require('@ton/crypto');
 
 const { itest, seed, chain, telegram, callApi, getCollection, ago, address } = h;
-const { VOUCHER_TAG } = require(path.join(h.SRC, 'lib/ton/constants.js'));
+const { VOUCHER_TAG, CONTRACTS_VERSION } = require(path.join(h.SRC, 'lib/ton/constants.js'));
+const { getTonConfig } = require(path.join(h.SRC, 'lib/ton/config.js'));
 const { signedVoucherCell, backendKeyPair } = require(path.join(h.SRC, 'lib/ton/vouchers.js'));
 
 h.setupIntegration();
@@ -64,13 +65,14 @@ async function rating(chatId, user) {
 // chat ids the stubbed Telegram was asked about
 const telegramChatIds = () => telegram.calls.filter((c) => c.name !== 'botApi').map((c) => c.args[0]);
 
-// the voucher a payload carries: {chatId, signature valid for `target`}
+// the voucher a payload carries: {chatId, signature valid for `target`}; the
+// seeded pools speak the backend's version, on the configured network
 function openVoucher(payloadB64, tag, target) {
     const body = Cell.fromBoc(Buffer.from(payloadB64, 'base64'))[0].beginParse();
     body.loadUint(32); // opcode
     const voucher = body.loadRef();
     const signature = body.loadBuffer(64);
-    const signed = signedVoucherCell(voucher, { tag, target });
+    const signed = signedVoucherCell(voucher, { tag, target, version: CONTRACTS_VERSION, globalId: getTonConfig().globalId });
     return {
         chatId: Number(voucher.beginParse().loadIntBig(64)),
         valid: signVerify(signed.hash(), signature, backendKeyPair(process.env.BACKEND_SECRET).publicKey),
