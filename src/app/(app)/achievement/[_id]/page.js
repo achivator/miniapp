@@ -19,9 +19,11 @@ function formatTon(nanotons, locale) {
   return formatDecimal(`${v / 1000000000n}${frac ? `.${frac}` : ""}`, locale);
 }
 
-// Mints the medal as an NFT through the AchievementRegistry: the backend
-// signs a MintVoucher bound to this Telegram user, the registry allows one
-// NFT per (achievement, user) and refunds whatever the mint did not use.
+// Mints the medal as a soulbound NFT (TEP-85 SBT) through the
+// AchievementRegistry: the backend signs a MintVoucher bound to this
+// Telegram user, one SBT per (achievement, user) can exist, and whatever the
+// mint did not use comes back. The SBT stays in the wallet it is minted to:
+// it cannot be transferred or sold, only destroyed by its owner.
 function MintCard({ achievement, initDataRaw, onMinted }) {
   const wallet = useTonAddress();
   const [tonConnectUI] = useTonConnectUI();
@@ -56,7 +58,10 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
         <div>
           <p className="card-title">{L("Выпущено", "Minted")}</p>
           <p className="mt-0.5 text-[14px] leading-snug text-hint">
-            {L("Эта медаль — NFT в вашем TON-кошельке.", "This medal is an NFT in your TON wallet.")}
+            {L(
+              "Эта медаль — NFT в вашем TON-кошельке, привязанный к нему навсегда.",
+              "This medal is an NFT bound to your TON wallet for good.",
+            )}
           </p>
         </div>
       </Card>
@@ -119,8 +124,8 @@ function MintCard({ achievement, initDataRaw, onMinted }) {
           <p className="card-title">{L("Выпустить как NFT", "Mint as NFT")}</p>
           <p className="mt-0.5 text-[14px] leading-snug text-hint">
             {L(
-              `Храните медаль в TON-кошельке как коллекционный предмет. До ${formatTon(nft.price_ton, locale)} TON, неизрасходованные TON вернутся.`,
-              `Keep this medal in your TON wallet as a collectible. Up to ${formatTon(nft.price_ton, locale)} TON, unused TON comes back.`,
+              `Медаль навсегда привяжется к кошельку, с которого вы её выпустите: передать или продать её нельзя. До ${formatTon(nft.price_ton, locale)} TON, неизрасходованные TON вернутся.`,
+              `The medal is bound for good to the wallet that mints it: it can't be transferred or sold. Up to ${formatTon(nft.price_ton, locale)} TON, unused TON comes back.`,
             )}
           </p>
         </div>

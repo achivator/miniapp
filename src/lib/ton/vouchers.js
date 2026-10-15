@@ -1,6 +1,7 @@
 const { Address, beginCell } = require('@ton/core');
 const { keyPairFromSeed, sign } = require('@ton/crypto');
 const { OP, SECONDS } = require('./constants');
+const { contentUrlCell } = require('./achievement-tags');
 
 function toAddress(value) {
     return value instanceof Address ? value : Address.parse(value);
@@ -56,8 +57,8 @@ function buildAdminProposalVoucherCell({ chatId, newAdmin, seq, expiry }) {
         .endCell();
 }
 
-// MintVoucher (AchievementRegistry): uint32 templateId, address recipient,
-// int64 tgUserId, uint64 nonce, uint64 expiry.
+// MintVoucher of a v2 (legacy) AchievementRegistry: uint32 templateId,
+// address recipient, int64 tgUserId, uint64 nonce, uint64 expiry.
 function buildMintVoucherCell({ templateId, recipient, tgUserId, nonce, expiry }) {
     return beginCell()
         .storeUint(BigInt(templateId), 32)
@@ -65,6 +66,31 @@ function buildMintVoucherCell({ templateId, recipient, tgUserId, nonce, expiry }
         .storeInt(BigInt(tgUserId), 64)
         .storeUint(BigInt(nonce), 64)
         .storeUint(BigInt(expiry), 64)
+        .endCell();
+}
+
+// MintVoucher of a v3 AchievementRegistry (soulbound items, no raw ids):
+// uint256 templateKey, address recipient, uint256 userTag, uint64 expiry.
+// The recipient must send the mint itself. See lib/ton/achievement-tags.js.
+function buildMintVoucherV3Cell({ templateKey, recipient, userTag, expiry }) {
+    return beginCell()
+        .storeUint(BigInt(templateKey), 256)
+        .storeAddress(toAddress(recipient))
+        .storeUint(BigInt(userTag), 256)
+        .storeUint(BigInt(expiry), 64)
+        .endCell();
+}
+
+// RegisterVoucher of a v3 AchievementRegistry: uint256 chatTag, address
+// registrant, uint256 contentHash, uint64 expiry, ref(contentUrl), the URL
+// cell being its bytes (contentUrlCell, which enforces the URL policy).
+function buildRegisterVoucherCell({ chatTag, registrant, contentHash, expiry, contentUrl }) {
+    return beginCell()
+        .storeUint(BigInt(chatTag), 256)
+        .storeAddress(toAddress(registrant))
+        .storeUint(BigInt(contentHash), 256)
+        .storeUint(BigInt(expiry), 64)
+        .storeRef(contentUrlCell(contentUrl))
         .endCell();
 }
 
@@ -180,6 +206,10 @@ function buildMintBody({ voucherCell, signature }) {
     return beginCell().storeUint(OP.MintAchievement, 32).storeRef(voucherCell).storeBuffer(signature).endCell();
 }
 
+function buildRegisterBody({ voucherCell, signature }) {
+    return beginCell().storeUint(OP.RegisterTemplate, 32).storeRef(voucherCell).storeBuffer(signature).endCell();
+}
+
 function buildSetClaimsPausedBody(paused) {
     return beginCell().storeUint(OP.SetClaimsPaused, 32).storeBit(Boolean(paused)).endCell();
 }
@@ -219,7 +249,10 @@ module.exports = {
     buildCancelAdminProposalBody,
     buildExecuteAdminProposalBody,
     buildMintVoucherCell,
+    buildMintVoucherV3Cell,
+    buildRegisterVoucherCell,
     buildMintBody,
+    buildRegisterBody,
     backendKeyPair,
     signedVoucherCell,
     signVoucher,

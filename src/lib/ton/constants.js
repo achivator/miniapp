@@ -18,7 +18,8 @@ const OP = {
     ProposeAdmin: 3538641322, // 0xd2eb61aa: admin recovery, 7-day timelock
     CancelAdminProposal: 4050456648, // 0xf16d1048
     ExecuteAdminProposal: 1944391457, // 0x73e50f21
-    MintAchievement: 4155708920, // AchievementRegistry
+    MintAchievement: 4155708920, // AchievementRegistry (0xf7b315f8)
+    RegisterTemplate: 0xac4e0001, // AchievementRegistry v3
 };
 
 // Protocol version the backend signs for: what ChatPool, DistributorMaster
@@ -70,7 +71,7 @@ const GAS = {
     proposeAdminTon: '50000000', // 0.05, admin recovery proposal / execution; the pool returns the rest
     setAdminTon: '50000000', // 0.05; the pool returns the rest
     adminControlTon: '50000000', // 0.05, pause / limit / key; the rest comes back
-    mintTon: '150000000', // 0.15: 0.004 storage rent + 0.05 to the NFT + gas; the registry refunds the rest
+    mintTon: '150000000', // 0.15 (v3 registry minimum: 0.1): 0.04 stays on the SBT as its storage reserve, about 0.007 is gas; the SBT refunds the rest
 };
 
 const SECONDS = {
