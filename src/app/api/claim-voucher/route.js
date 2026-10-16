@@ -14,7 +14,7 @@ import { formatUnits } from "@/lib/ton/amounts";
 import { priceFitsDecimals } from "@/lib/point-price";
 import { serializeBreakdown } from "@/lib/lot-pricing";
 import { chatLots } from "@/lib/lots";
-import { GAS, SIGNABLE_VERSIONS, VOUCHER_TAG } from "@/lib/ton/constants";
+import { GAS, SECONDS, SIGNABLE_VERSIONS, VOUCHER_TAG } from "@/lib/ton/constants";
 import { reconcileExpiredClaims, claimPoints, nowSeconds } from "@/lib/rewards";
 import { claimGate, claimSettingsOf, claimablePoints } from "@/lib/claim-rules";
 import { loadPlatformDefault } from "@/lib/platform-price";
@@ -215,13 +215,19 @@ export async function POST(request) {
   }
 
   try {
+    // Nonces are allocated in order, per economy (so per pool), by one atomic
+    // $inc: a v3 pool retires every nonce below the oldest one it prunes, a
+    // week after its claim, which is only safe when lower nonces were issued
+    // earlier and have long expired. Never reuse or lower this counter; a
+    // bounced or expired voucher is reissued under a new nonce.
     const counter = await countersCol.findOneAndUpdate(
       { _id: `nonce_${chatId}` },
       { $inc: { seq: 1 } },
       { upsert: true, returnDocument: "after" },
     );
     const nonce = counter.seq;
-    const expiry = defaultExpiry();
+    // a v3 pool refuses vouchers expiring more than a day ahead
+    const expiry = defaultExpiry(Math.min(SECONDS.claimVoucherTtl, SECONDS.maxClaimVoucherTtl));
 
     const voucher = buildClaimVoucherCell({
       chatId,

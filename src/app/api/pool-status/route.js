@@ -2,8 +2,11 @@ import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { getTonConfig } from "@/lib/ton/config";
 import {
+  fetchAdminProposal,
   fetchContractVersion,
   fetchJettonMetadata,
+  fetchPendingJettonRegistration,
+  fetchPoolJettonWallet,
   fetchPoolClaimControls,
   fetchPoolLedgerBalance,
   getPoolStatus,
@@ -101,6 +104,34 @@ export async function GET(request) {
     }
   }
 
+  // Protocol v3 pools: whether the chat's jetton is registered (TEP-89; the
+  // pool credits deposits only through its registered wallet, so the admin
+  // registers it before the first deposit) and the admin recovery state.
+  let jettonRegistration = null;
+  let adminProposal = null;
+  if (status.active && contracts.pool !== null && contracts.pool >= 3) {
+    if (chat.jetton_master) {
+      try {
+        const [wallet, pendingQuery] = await Promise.all([
+          fetchPoolJettonWallet(status.poolAddress, chat.jetton_master),
+          fetchPendingJettonRegistration(status.poolAddress, chat.jetton_master),
+        ]);
+        jettonRegistration = { wallet: wallet ? wallet.toString() : null, pending: pendingQuery !== 0n };
+      } catch {
+        jettonRegistration = null;
+      }
+    }
+    try {
+      const p = await fetchAdminProposal(status.poolAddress);
+      adminProposal = {
+        pending_admin: p.pendingAdmin ? p.pendingAdmin.toString() : null,
+        executable_at: p.pendingAdmin ? p.executableAt : null,
+      };
+    } catch {
+      adminProposal = null;
+    }
+  }
+
   // Jetton ledger of the pool (what members can claim), not its TON balance.
   let ledger = null;
   let controls = null;
@@ -194,6 +225,11 @@ export async function GET(request) {
     ton_balance: status.balance.toString(),
     ledger,
     pool_admin: poolAdmin ? poolAdmin.toString() : null,
+    // v3 pools, null otherwise: { wallet (null until registered), pending }
+    jetton_registration: jettonRegistration,
+    // v3 pools, null otherwise: { pending_admin, executable_at } (both null
+    // without a proposal)
+    admin_proposal: adminProposal,
     controls,
     // { from, to, effective_at }: set the daily limit back to `from`, or null
     limit_restore: limitRestoreView,
@@ -210,6 +246,7 @@ export async function GET(request) {
         ? buildCreatePoolBody(chatId).toBoc().toString("base64")
         : null,
     create_pool_ton: GAS.createPoolTon,
+    register_jetton_ton: GAS.registerJettonTon,
     pool_reserve_ton: GAS.poolReserveTon,
   });
 }

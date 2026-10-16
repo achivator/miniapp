@@ -7,17 +7,22 @@ function toAddress(value) {
     return value instanceof Address ? value : Address.parse(value);
 }
 
-// DepositVoucher layout MUST match storeDepositVoucher in the compiled
-// ChatPool bindings and the manual parse in contracts/chat_pool.tact:
-// int64 chatId, address jettonMaster, address expectedJettonWallet,
-// uint64 expiry.
-function buildDepositVoucherCell({ chatId, jettonMaster, expectedJettonWallet, expiry }) {
-    return beginCell()
-        .storeInt(BigInt(chatId), 64)
-        .storeAddress(toAddress(jettonMaster))
-        .storeAddress(toAddress(expectedJettonWallet))
-        .storeUint(BigInt(expiry), 64)
-        .endCell();
+// DepositVoucher in the layout of the pool's protocol `version` (its
+// version() getter); MUST match storeDepositVoucher in the compiled ChatPool
+// bindings and the manual parse in contracts/chat_pool.tact:
+//   v3: int64 chatId, address jettonMaster, uint64 expiry
+//       (the pool credits only its TEP-89-registered wallet, from its admin)
+//   v2: int64 chatId, address jettonMaster, address expectedJettonWallet,
+//       uint64 expiry
+function buildDepositVoucherCell({ chatId, jettonMaster, expectedJettonWallet, expiry, version }) {
+    const b = beginCell().storeInt(BigInt(chatId), 64).storeAddress(toAddress(jettonMaster));
+    if (version === 2) {
+        if (!expectedJettonWallet) throw new Error('a v2 deposit voucher names the pool jetton wallet');
+        b.storeAddress(toAddress(expectedJettonWallet));
+    } else if (version !== 3) {
+        throw new Error(`no deposit voucher layout for contract version ${version}`);
+    }
+    return b.storeUint(BigInt(expiry), 64).endCell();
 }
 
 function buildClaimVoucherCell({ chatId, recipient, jettonMaster, amount, nonce, expiry }) {
@@ -37,6 +42,17 @@ function buildAdminVoucherCell({ chatId, master, admin, expiry }) {
         .storeInt(BigInt(chatId), 64)
         .storeAddress(toAddress(master))
         .storeAddress(toAddress(admin))
+        .storeUint(BigInt(expiry), 64)
+        .endCell();
+}
+
+// AdminProposalVoucher (v3 admin recovery): int64 chatId, address newAdmin,
+// uint32 seq (the pool's adminProposalSeq()), uint64 expiry.
+function buildAdminProposalVoucherCell({ chatId, newAdmin, seq, expiry }) {
+    return beginCell()
+        .storeInt(BigInt(chatId), 64)
+        .storeAddress(toAddress(newAdmin))
+        .storeUint(BigInt(seq), 32)
         .storeUint(BigInt(expiry), 64)
         .endCell();
 }
@@ -155,6 +171,37 @@ function buildWithdrawRemainderBody({ jettonMaster, amount, to }) {
         .endCell();
 }
 
+// ---- v3 pools only ----
+
+function buildRegisterJettonBody(jettonMaster) {
+    return beginCell().storeUint(OP.RegisterJetton, 32).storeAddress(toAddress(jettonMaster)).endCell();
+}
+
+function buildSweepUntrackedBody({ jettonMaster, amount, to }) {
+    return beginCell()
+        .storeUint(OP.SweepUntracked, 32)
+        .storeAddress(toAddress(jettonMaster))
+        .storeCoins(BigInt(amount))
+        .storeAddress(toAddress(to))
+        .endCell();
+}
+
+function buildWithdrawTonBody({ to, amount }) {
+    return beginCell().storeUint(OP.WithdrawTon, 32).storeAddress(toAddress(to)).storeCoins(BigInt(amount)).endCell();
+}
+
+function buildProposeAdminBody({ voucherCell, signature }) {
+    return beginCell().storeUint(OP.ProposeAdmin, 32).storeRef(voucherCell).storeBuffer(signature).endCell();
+}
+
+function buildCancelAdminProposalBody() {
+    return beginCell().storeUint(OP.CancelAdminProposal, 32).endCell();
+}
+
+function buildExecuteAdminProposalBody() {
+    return beginCell().storeUint(OP.ExecuteAdminProposal, 32).endCell();
+}
+
 function buildMintBody({ voucherCell, signature }) {
     return beginCell().storeUint(OP.MintAchievement, 32).storeRef(voucherCell).storeBuffer(signature).endCell();
 }
@@ -194,6 +241,13 @@ module.exports = {
     buildDepositVoucherCell,
     buildClaimVoucherCell,
     buildAdminVoucherCell,
+    buildAdminProposalVoucherCell,
+    buildRegisterJettonBody,
+    buildSweepUntrackedBody,
+    buildWithdrawTonBody,
+    buildProposeAdminBody,
+    buildCancelAdminProposalBody,
+    buildExecuteAdminProposalBody,
     buildMintVoucherCell,
     buildMintVoucherV3Cell,
     buildRegisterVoucherCell,

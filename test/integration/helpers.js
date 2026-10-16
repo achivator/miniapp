@@ -115,6 +115,7 @@ const chain = {
             paused = false,
             admin = null,
             version = CONTRACTS_VERSION,
+            jettonWallet = null,
         } = {},
     ) {
         const pool = {
@@ -127,7 +128,16 @@ const chain = {
             limit,
             paused,
             admin: admin ? Address.parse(admin) : null,
+            // v2 pools: isNonceUsed; v3 pools: nonceState, which reads
+            // nonceStates (2 bounced, 3 retired) first, then usedNonces (1)
             usedNonces: new Set(),
+            nonceStates: new Map(),
+            // v3: the jetton wallet registered through TEP-89 (one jetton)
+            jettonWallet: jettonWallet ? Address.parse(jettonWallet) : null,
+            pendingRegistration: 0n,
+            // v3 admin recovery: { admin, executableAt } or null, and the seq
+            proposal: null,
+            proposalSeq: 0n,
         };
         this.pools.set(chatId, pool);
         return pool;
@@ -159,6 +169,10 @@ const ton = {
             if (pool.address.equals(parsed)) return { state: pool.active ? 'active' : 'uninitialized', balance: 0n };
         }
         return { state: 'uninitialized', balance: 0n };
+    },
+    // The jetton wallet of `owner`, as the jetton master's getter says.
+    async fetchJettonWalletAddress(master, owner) {
+        return Address.parse(address(`jetton-wallet:${Address.parse(String(master)).toRawString()}:${Address.parse(String(owner)).toRawString()}`));
     },
     async getPoolStatus(_master, chatId) {
         const pool = chain.pools.get(Number(chatId));
@@ -197,9 +211,21 @@ const ton = {
             const nonce = Number(BigInt(stack[0][1]));
             return [['num', pool.usedNonces.has(nonce) ? '-0x1' : '0x0']];
         }
-        if (method === 'poolAdmin') {
-            if (!pool.admin) return [['list', { '@type': 'tvm.list', elements: [] }]];
-            return [['slice', { bytes: beginCell().storeAddress(pool.admin).endCell().toBoc().toString('base64') }]];
+        const none = [['list', { '@type': 'tvm.list', elements: [] }]];
+        const slice = (a) => [['slice', { bytes: beginCell().storeAddress(a).endCell().toBoc().toString('base64') }]];
+        const num = (n) => [['num', BigInt(n) < 0n ? `-0x${(-BigInt(n)).toString(16)}` : `0x${BigInt(n).toString(16)}`]];
+        if (method === 'poolAdmin') return pool.admin ? slice(pool.admin) : none;
+        // protocol v3 getters
+        if (pool.version >= 3) {
+            if (method === 'nonceState') {
+                const nonce = Number(BigInt(stack[0][1]));
+                return num(pool.nonceStates.get(nonce) ?? (pool.usedNonces.has(nonce) ? 1 : 0));
+            }
+            if (method === 'jettonWallet') return pool.jettonWallet ? slice(pool.jettonWallet) : none;
+            if (method === 'pendingJettonRegistration') return num(pool.pendingRegistration);
+            if (method === 'pendingAdmin') return pool.proposal ? slice(pool.proposal.admin) : none;
+            if (method === 'pendingAdminExecutableAt') return num(pool.proposal ? pool.proposal.executableAt : 0);
+            if (method === 'adminProposalSeq') return num(pool.proposalSeq);
         }
         throw new Error(`fake toncenter: unexpected getter ${method}`);
     },

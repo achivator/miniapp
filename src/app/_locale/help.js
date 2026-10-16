@@ -235,8 +235,8 @@ function Guide({ locale }) {
         </Steps>
         <p className="text-hint">
           {L(
-            "На что уйдут TON: выпуск жетона, активация пула (кошелёк отправит 0,3 TON, 0,1 TON останутся на контракте пула, остальное вернётся), назначение админ-кошелька (0,05 TON) и газ каждого пополнения пула (кошелёк отправит 0,25 TON, неизрасходованное вернётся). Комиссии Achivator в TON нет. 2 TON хватит с запасом, а если закончатся — просто запросите ещё.",
-            "What the TON is for: issuing the jetton, activating the pool (your wallet sends 0.3 TON, 0.1 TON stays on the pool contract, the rest comes back), setting the admin wallet (0.05 TON) and the gas of each pool top-up (your wallet sends 0.25 TON, what is not spent comes back). Achivator takes no fee in TON. 2 TON is plenty, and if you run out, just ask for more.",
+            "На что уйдут TON: выпуск жетона, активация пула (кошелёк отправит 0,3 TON, 0,15 TON останутся на контракте пула, остальное вернётся), назначение админ-кошелька (0,05 TON), подключение жетона к пулу (0,1 TON, неизрасходованное вернётся) и газ каждого пополнения пула (кошелёк отправит 0,25 TON, неизрасходованное вернётся). Комиссии Achivator в TON нет. 2 TON хватит с запасом, а если закончатся — просто запросите ещё.",
+            "What the TON is for: issuing the jetton, activating the pool (your wallet sends 0.3 TON, 0.15 TON stays on the pool contract, the rest comes back), setting the admin wallet (0.05 TON), registering the jetton with the pool (0.1 TON, what is not spent comes back) and the gas of each pool top-up (your wallet sends 0.25 TON, what is not spent comes back). Achivator takes no fee in TON. 2 TON is plenty, and if you run out, just ask for more.",
           )}
         </p>
         <Done label={done}>
@@ -398,8 +398,8 @@ function Guide({ locale }) {
           <li>
             {L("Нажмите", "Tap")} <Ui>{L("Активировать пул", "Activate pool")}</Ui>{" "}
             {L(
-              "и подтвердите в кошельке 0,3 TON. Это разовая операция: 0,1 TON останутся на контракте пула на оплату его хранения в сети, остальное за вычетом газа вернётся.",
-              "and confirm 0.3 TON in your wallet. It's a one-off: 0.1 TON stays on the pool contract to pay its network storage, the rest comes back minus gas.",
+              "и подтвердите в кошельке 0,3 TON. Это разовая операция: 0,15 TON останутся на контракте пула на оплату его хранения в сети, остальное за вычетом газа вернётся.",
+              "and confirm 0.3 TON in your wallet. It's a one-off: 0.15 TON stays on the pool contract to pay its network storage, the rest comes back minus gas.",
             )}
           </li>
         </Steps>
@@ -418,11 +418,19 @@ function Guide({ locale }) {
             {L("нажмите", "block tap")} <Ui>{L("Сделать этот кошелёк админом", "Make this wallet the admin")}</Ui>.
           </li>
           <li>{L("Подтвердите транзакцию (0,05 TON).", "Confirm the transaction (0.05 TON).")}</li>
+          <li>
+            {L("Затем в блоке", "Then in the")} <Ui>{L("Шаг 2 · Жетон пула", "Step 2 · Pool jetton")}</Ui>{" "}
+            {L("нажмите", "block tap")} <Ui>{L("Подключить жетон", "Register the jetton")}</Ui>{" "}
+            {L(
+              "и подтвердите 0,1 TON: пул сам спросит у мастер-контракта жетона, какой кошелёк его, и будет принимать пополнения только через него.",
+              "and confirm 0.1 TON: the pool asks the jetton's master contract which wallet is its own and accepts top-ups only through it.",
+            )}
+          </li>
         </Steps>
         <p className="text-hint">
           {L(
-            "Только этот кошелёк сможет выводить жетоны из пула, ставить дневной лимит выплат и паузу. Шаг обязателен: пока у пула нет админа, он возвращает пополнения обратно.",
-            "Only this wallet can withdraw jettons from the pool, set the daily payout limit and pause payouts. The step is required: until the pool has an admin, it sends deposits back.",
+            "Только этот кошелёк сможет пополнять пул, выводить из него жетоны, ставить дневной лимит выплат и паузу. Шаг обязателен: пополнения с других кошельков и до подключения жетона пул возвращает обратно.",
+            "Only this wallet can top up the pool, withdraw jettons from it, set the daily payout limit and pause payouts. The step is required: the pool sends back deposits from other wallets and before the jetton is registered.",
           )}
         </p>
         <Done label={done}>
