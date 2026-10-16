@@ -2,13 +2,19 @@ import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { getTonConfig } from "@/lib/ton/config";
 import { Address } from "@ton/core";
-import { fetchJettonMetadata, fetchPoolClaimControls, fetchPoolLedgerBalance, getPoolStatus } from "@/lib/ton/rpc";
+import {
+  fetchContractVersion,
+  fetchJettonMetadata,
+  fetchPoolClaimControls,
+  fetchPoolLedgerBalance,
+  getPoolStatus,
+} from "@/lib/ton/rpc";
 import { buildClaimVoucherCell, buildClaimBody, signVoucher, defaultExpiry } from "@/lib/ton/vouchers";
 import { formatUnits } from "@/lib/ton/amounts";
 import { priceFitsDecimals } from "@/lib/point-price";
 import { serializeBreakdown } from "@/lib/lot-pricing";
 import { chatLots } from "@/lib/lots";
-import { GAS, VOUCHER_TAG } from "@/lib/ton/constants";
+import { GAS, SIGNABLE_VERSIONS, VOUCHER_TAG } from "@/lib/ton/constants";
 import { reconcileExpiredClaims, claimPoints, nowSeconds } from "@/lib/rewards";
 import { claimGate, claimSettingsOf, claimablePoints } from "@/lib/claim-rules";
 import { loadPlatformDefault } from "@/lib/platform-price";
@@ -112,6 +118,20 @@ export async function POST(request) {
   if (!pool.poolAddress || !pool.active) {
     return Response.json({ error: "pool is not activated yet; ask the chat creator to activate it" }, { status: 409 });
   }
+  // The voucher is signed in the envelope of the pool's own protocol version
+  // (pools of a v2 master keep the network-less one for good).
+  let poolVersion;
+  try {
+    poolVersion = await fetchContractVersion(pool.poolAddress);
+  } catch (e) {
+    return Response.json({ error: `TON RPC failed: ${e.message}` }, { status: 502 });
+  }
+  if (!SIGNABLE_VERSIONS.includes(poolVersion)) {
+    console.error(
+      `chat ${chatId}: claim refused, pool v${poolVersion} but backend signs v${SIGNABLE_VERSIONS.join("/")}`,
+    );
+    return Response.json({ error: "this pool runs a contract version the backend cannot sign for" }, { status: 409 });
+  }
   if (metadata.decimals === null) {
     // never guess: a wrong decimals value scales the payout by 10^difference
     return Response.json({ error: "cannot read this jetton's decimals right now, try again later" }, { status: 502 });
@@ -214,6 +234,8 @@ export async function POST(request) {
     const signature = signVoucher(voucher, process.env.BACKEND_SECRET, {
       tag: VOUCHER_TAG.Claim,
       target: pool.poolAddress,
+      version: poolVersion,
+      globalId: cfg.globalId,
     });
     const claimBody = buildClaimBody({ voucherCell: voucher, signature });
 

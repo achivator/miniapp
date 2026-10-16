@@ -3,9 +3,9 @@ import { ObjectId } from "mongodb";
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { getTonConfig, templateIdFor } from "@/lib/ton/config";
-import { fetchIsMinted } from "@/lib/ton/rpc";
+import { fetchContractVersion, fetchIsMinted } from "@/lib/ton/rpc";
 import { buildMintBody, buildMintVoucherCell, defaultExpiry, signVoucher } from "@/lib/ton/vouchers";
-import { GAS, SECONDS, VOUCHER_TAG } from "@/lib/ton/constants";
+import { GAS, SECONDS, SIGNABLE_VERSIONS, VOUCHER_TAG } from "@/lib/ton/constants";
 import { nowSeconds } from "@/lib/rewards";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +56,18 @@ export async function POST(request) {
     // RPC hiccup: the registry still refuses a second mint
   }
 
+  // The voucher is signed in the envelope of the registry's protocol version.
+  let registryVersion;
+  try {
+    registryVersion = await fetchContractVersion(cfg.registryAddress);
+  } catch (e) {
+    return Response.json({ error: `TON RPC failed: ${e.message}` }, { status: 502 });
+  }
+  if (!SIGNABLE_VERSIONS.includes(registryVersion)) {
+    console.error(`mint refused: registry v${registryVersion} but backend signs v${SIGNABLE_VERSIONS.join("/")}`);
+    return Response.json({ error: "NFT minting is not available right now" }, { status: 503 });
+  }
+
   const counter = await (await getCollection("counters")).findOneAndUpdate(
     { _id: "mint_nonce" },
     { $inc: { seq: 1 } },
@@ -67,6 +79,8 @@ export async function POST(request) {
   const signature = signVoucher(voucher, process.env.BACKEND_SECRET, {
     tag: VOUCHER_TAG.Mint,
     target: cfg.registryAddress,
+    version: registryVersion,
+    globalId: cfg.globalId,
   });
 
   await (await getCollection("mints")).insertOne({

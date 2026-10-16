@@ -2,9 +2,9 @@ import { Address } from "@ton/core";
 import { authenticate } from "@/lib/auth";
 import { getCollection } from "@/lib/mongo";
 import { getTonConfig } from "@/lib/ton/config";
-import { getPoolStatus, runGetMethod, stackItemToAddress } from "@/lib/ton/rpc";
+import { fetchContractVersion, getPoolStatus, runGetMethod, stackItemToAddress } from "@/lib/ton/rpc";
 import { buildAdminVoucherCell, buildSetAdminBody, signVoucher, defaultExpiry } from "@/lib/ton/vouchers";
-import { GAS, SECONDS, VOUCHER_TAG } from "@/lib/ton/constants";
+import { GAS, SECONDS, SIGNABLE_VERSIONS, VOUCHER_TAG } from "@/lib/ton/constants";
 import { getChatMemberStatus } from "@/lib/telegram";
 import { resolveEconomyChatId, telegramChatId } from "@/lib/chat-ids";
 
@@ -55,9 +55,14 @@ export async function POST(request) {
 
   let pool;
   let currentAdmin = null;
+  let poolVersion = null;
   try {
     pool = await getPoolStatus(cfg.masterAddress, chatId);
-    if (pool.active) currentAdmin = stackItemToAddress((await runGetMethod(pool.poolAddress, "poolAdmin", []))[0]);
+    if (pool.active) {
+      currentAdmin = stackItemToAddress((await runGetMethod(pool.poolAddress, "poolAdmin", []))[0]);
+      // the voucher is signed in the envelope of the pool's protocol version
+      poolVersion = await fetchContractVersion(pool.poolAddress);
+    }
   } catch (e) {
     return Response.json({ error: `TON RPC failed: ${e.message}` }, { status: 502 });
   }
@@ -76,11 +81,17 @@ export async function POST(request) {
     );
   }
 
+  if (!SIGNABLE_VERSIONS.includes(poolVersion)) {
+    return Response.json({ error: "this pool runs a contract version the backend cannot sign for" }, { status: 409 });
+  }
+
   const expiry = defaultExpiry(SECONDS.adminVoucherTtl);
   const voucher = buildAdminVoucherCell({ chatId, master: cfg.masterAddress, admin: wallet, expiry });
   const signature = signVoucher(voucher, process.env.BACKEND_SECRET, {
     tag: VOUCHER_TAG.Admin,
     target: pool.poolAddress,
+    version: poolVersion,
+    globalId: cfg.globalId,
   });
 
   return Response.json({
