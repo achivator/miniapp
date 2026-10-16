@@ -1,7 +1,9 @@
 const { GLOBAL_ID } = require('./constants');
 
-// "v1/programmer" -> templateId in the AchievementRegistry, printed by
-// ton-contracts/scripts/registerTemplates.ts.
+// "v1/programmer" -> the achievement's template in the AchievementRegistry,
+// printed by ton-contracts/scripts/registerTemplates.ts: a template id
+// (integer) for a v2 registry, a template key ("0x" + 64 hex digits) for a
+// v3 one.
 function parseTemplates(raw) {
     if (!raw) return {};
     try {
@@ -37,10 +39,13 @@ function getTonConfig() {
     };
 }
 
-// Template id for an off-chain achievement, or null when it has no NFT.
-function templateIdFor(collection, type) {
-    const id = getTonConfig().achievementTemplates[`${collection || 'v1'}/${String(type || '').toLowerCase()}`];
-    return Number.isInteger(id) ? id : null;
+// The registry template of an off-chain achievement: { id } (v2 registry),
+// { key } (v3 registry, a BigInt), or null when it has no NFT.
+function templateFor(collection, type) {
+    const value = getTonConfig().achievementTemplates[`${collection || 'v1'}/${String(type || '').toLowerCase()}`];
+    if (Number.isInteger(value) && value >= 0 && value < 2 ** 32) return { id: value };
+    if (typeof value === 'string' && /^0x[0-9a-f]{1,64}$/i.test(value)) return { key: BigInt(value) };
+    return null;
 }
 
-module.exports = { getTonConfig, templateIdFor };
+module.exports = { getTonConfig, templateFor };

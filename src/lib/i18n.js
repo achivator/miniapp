@@ -149,6 +149,7 @@ const ERRORS = {
   "this achievement cannot be minted yet": ["Эту ачивку пока нельзя выпустить как NFT.", "This achievement can't be minted yet."],
   "you already own this nft": ["Этот NFT уже у вас.", "You already own this NFT."],
   "nft minting is not configured": ["Выпуск NFT пока не настроен.", "NFT minting isn't set up yet."],
+  "nft minting is not available right now": ["Выпуск NFT сейчас недоступен.", "NFT minting isn't available right now."],
   "the price was changed meanwhile; reload and try again": [
     "Цену тем временем изменили — обновите страницу и попробуйте снова.",
     "The price was changed meanwhile — reload and try again.",

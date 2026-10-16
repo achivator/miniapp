@@ -30,7 +30,8 @@ Pull requests run step 1 only.
      `MASTER_ADDRESS`, `LEGACY_MASTER_ADDRESSES` (after a master redeploy, the
      replaced ones), `TONCENTER_URL`, `TONCENTER_API_KEY`,
      `MATURATION_DAYS`, `ACHIEVEMENT_REGISTRY`, `ACHIEVEMENT_TEMPLATES`,
-     `IPFS_GATEWAY`.
+     `ACHIEVEMENT_TAG_KEY` (set once, never change it: see `.env.example`),
+     `ACHIEVEMENT_CONTENT_PREFIXES`, `IPFS_GATEWAY`.
    - Subscriptions in Telegram Stars: `SUBSCRIPTIONS_ENABLED`,
      `TRIAL_DAYS`, `GRACE_DAYS` (the same values as the bot) and
      `SUBSCRIPTION_TIERS`. `TELEGRAM_BOT_TOKEN` must be the bot's own token:
