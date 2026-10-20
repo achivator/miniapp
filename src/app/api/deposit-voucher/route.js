@@ -213,6 +213,9 @@ export async function POST(request) {
       to: userJettonWallet.toString(),
       amount: totalTon.toString(),
       payload_b64: transferBody.toBoc().toString("base64"),
+      // the jettons sent, in smallest units: what /api/deposit-status looks
+      // for in the pool's trace
+      jetton_amount: amount.toString(),
       pool_address: pool.poolAddress.toString(),
       pool_jetton_wallet: poolJettonWallet.toString(),
       user_jetton_wallet: userJettonWallet.toString(),

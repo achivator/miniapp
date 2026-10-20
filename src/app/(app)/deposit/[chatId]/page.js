@@ -154,8 +154,10 @@ function PoolManager({ chatId }) {
     }
   }
 
+  // Resolves to the wallet's { boc }: the submitted message, which is what
+  // a deposit's outcome is looked up by (waitForDeposit).
   async function send(tx) {
-    await sendTonTransaction(tonConnectUI, info.network, [
+    return sendTonTransaction(tonConnectUI, info.network, [
       { address: tx.to, amount: tx.amount, payload: tx.payload_b64 },
     ]);
   }
@@ -176,6 +178,62 @@ function PoolManager({ chatId }) {
     setNotice({
       kind: "info",
       text: bilingual("Транзакция ещё подтверждается в сети — нажмите «Обновить» через минуту.", "Still confirming on-chain — pull Refresh in a minute."),
+    });
+  }
+
+  // A deposit is confirmed by the trace of the message the wallet submitted
+  // (/api/deposit-status), never by the pool's ledger growing: a member's
+  // claim or another top-up moves the ledger as well, so growth does not
+  // prove this transfer was credited and no growth does not prove it was not.
+  // Credited, refunded and failed are told apart; anything not settled by the
+  // end is "sent, not verified", and the creator is never asked to resend.
+  async function waitForDeposit(boc, jettonAmount) {
+    setNotice({ kind: "info", text: bilingual("Отправлено — ждём зачисления в пул…", "Sent — waiting for the pool to credit it…") });
+    for (let i = 0; i < 24; i++) {
+      await sleep(5000);
+      let result = null;
+      try {
+        result = await apiFetch("/api/deposit-status", { method: "POST", initDataRaw, body: { chatId, boc, amount: jettonAmount } });
+      } catch {
+        continue; // RPC hiccup: the next poll asks again
+      }
+      if (result.outcome === "credited") {
+        haptic("success");
+        setNotice({ kind: "ok", text: bilingual("Пул пополнен: перевод зачислен.", "Pool topped up: the transfer was credited.") });
+        await load();
+        return;
+      }
+      if (result.outcome === "refunded") {
+        haptic("error");
+        setNotice({
+          kind: "err",
+          text: bilingual(
+            "Пул не принял перевод и вернул жетоны на кошелёк. Пул не пополнен.",
+            "The pool did not accept the transfer and sent the jettons back. The pool was not topped up.",
+          ),
+        });
+        await load();
+        return;
+      }
+      if (result.outcome === "failed") {
+        haptic("error");
+        setNotice({
+          kind: "err",
+          text: bilingual(
+            "Перевод не дошёл до пула. Не отправляйте его повторно, пока не проверите баланс жетонов в кошельке.",
+            "The transfer did not reach the pool. Do not send it again until you have checked your wallet's jetton balance.",
+          ),
+        });
+        await load();
+        return;
+      }
+    }
+    setNotice({
+      kind: "info",
+      text: bilingual(
+        "Перевод отправлен, но зачисление в пул пока не подтверждено. Не отправляйте его повторно — нажмите «Обновить» через минуту и сверьте баланс пула.",
+        "Transfer sent, but the pool credit is not verified yet. Do not send it again — pull Refresh in a minute and check the pool balance.",
+      ),
     });
   }
 
@@ -206,14 +264,9 @@ function PoolManager({ chatId }) {
             `Confirm in your wallet. The ${t.units(tx.amount, 9)} TON is network gas; what is not spent comes back.`,
           ),
       });
-      await send(tx);
-      const before = BigInt(info.ledger ?? 0);
+      const sent = await send(tx);
       setAmount("");
-      await waitFor(
-        (s) => s.ledger !== null && BigInt(s.ledger) > before,
-        bilingual("Отправлено — ждём зачисления в пул…", "Sent — waiting for the pool to credit it…"),
-        bilingual("Пул пополнен.", "Pool topped up."),
-      );
+      await waitForDeposit(sent.boc, tx.jetton_amount);
     });
 
   const claimAdmin = () =>
